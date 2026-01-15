@@ -1,6 +1,6 @@
 // test789c : USAG-Lib bencode
 
-package bencode
+package Bencode
 
 import (
 	"bytes"
