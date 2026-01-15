@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bencode JS Test</title>
+    <script src="../Bencode.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
+        #console { 
+            background-color: #1e1e1e; 
+            color: #d4d4d4; 
+            padding: 15px; 
+            border-radius: 5px; 
+            white-space: pre-wrap; 
+            min-height: 300px;
+            overflow-y: auto;
+        }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        .success { color: #4caf50; }
+        .info { color: #569cd6; }
+    </style>
+</head>
+<body>
+
+    <h1>Basio.js Library Test</h1>
+    <p>test will be executed on your browser</p>
+    <button onclick="runTest()">(Run Test)</button>
+    <br><br>
+    <div id="console">Ready...</div>
+
+    <script>
+        // printer
+        const consoleDiv = document.getElementById('console');
+        function log(message, color = '') {
+            const span = document.createElement('span');
+            span.textContent = message + "\n";
+            if (color) span.style.color = color;
+            consoleDiv.appendChild(span);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Uint8Array to hex string
+        function formatBytes(u8) {
+            if (u8.length > 20) return `[Uint8Array length=${u8.length}]`;
+            return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
+        }
+
+        async function runTest() {
+            consoleDiv.innerHTML = "";
+            log("--- Start Test ---", "#569cd6");
+
+            try {
+                const m = new Bencode();
+                const textStr = "안녕하세요, 카투사 프로그래밍 클럽 라이브러리 테스트입니다. Hello, world!";
+                const text = new TextEncoder().encode(textStr);
+                const data = [
+                    new Uint8Array([]),
+                    new Uint8Array([0x00]),
+                    new Uint8Array([0x12, 0x34]),
+                    new Uint8Array([0x3f, 0xff]),
+                    new Uint8Array([0xff, 0xee, 0xff, 0xff, 0xff, 0xdc, 0xff, 0xff]),
+                    new Uint8Array([0xff, 0x00, 0x00, 0x01, 0xff, 0x00, 0x00, 0x01, 0x10])
+                ];
+
+                // Encode Base64
+                let test = m.encode(text, true);
+                let decoded = m.decode(test);
+                log(`${test} : ${new TextDecoder().decode(decoded)}`);
+
+                // Encode Base32k
+                test = m.encode(text, false);
+                decoded = m.decode(test);
+                log(`${test} : ${new TextDecoder().decode(decoded)}`);
+
+                // Binary Data Loop
+                for (let i = 0; i < data.length; i++) {
+                    test = m.encode(data[i], false);
+                    decoded = m.decode(test);
+                    log(`${test} : ${formatBytes(decoded)}`);
+                }
+
+            } catch (e) {
+                console.error(e);
+                log(`ERROR: ${e.message}`, "red");
+            }
+        }
+    </script>
+</body>
+</html>
