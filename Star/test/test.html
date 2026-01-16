@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star JS Test (USAG-Lib)</title>
+    <script src="../Star.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
+        #console { 
+            background-color: #1e1e1e; 
+            color: #d4d4d4; 
+            padding: 15px; 
+            border-radius: 5px; 
+            white-space: pre-wrap; 
+            min-height: 300px;
+            overflow-y: auto;
+        }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        .success { color: #4caf50; }
+        .info { color: #569cd6; }
+        .warn { color: #cca700; }
+        .error { color: #f44336; }
+    </style>
+</head>
+<body>
+
+    <h1>Star.js Library Test</h1>
+    <p>Tests USAG-Lib Star (Tar) implementation matching Python logic.</p>
+    <button onclick="runTest()">(Run Test)</button>
+    <br><br>
+    <div id="console">Ready...</div>
+
+    <script>
+        // printer
+        const consoleDiv = document.getElementById('console');
+        function log(message, color = '') {
+            const span = document.createElement('span');
+            span.textContent = message + "\n";
+            if (color) span.style.color = color;
+            consoleDiv.appendChild(span);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Uint8Array to hex string (helper)
+        function formatBytes(u8) {
+            if (u8.length > 20) return `[Uint8Array length=${u8.length}]`;
+            try {
+                return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
+            } catch (e) {
+                return "[Error formatting bytes]";
+            }
+        }
+
+        async function runTest() {
+            consoleDiv.innerHTML = "";
+            log("--- Start Star.js Test (Browser) ---", "#569cd6");
+
+            try {
+                // Prepare Dummy Data
+                const dummySize = 1024 * 1024 * 10; 
+                const dummyData = new Uint8Array(dummySize); 
+                const dummyBlob = new Blob([dummyData]);
+                log(`[Setup] Created dummy data (${dummySize} bytes)`, "#569cd6");
+
+                // test TarWriter
+                const tw = new TarWriter("");
+                await tw.write("test/", null, true); // write "test/"
+                const longName = "test/" + "_".repeat(100) + "small.bin";
+                await tw.write(longName, dummyBlob, false); // write long name
+                await tw.write("이진 데이터", new TextEncoder().encode("Hello, world!"), false); // write binary
+
+                // Close and Get Data
+                const tarResult = await tw.close();
+                log(`[Success] Tar generated. Total size: ${tarResult.length} bytes`, "#4caf50");
+
+                // test TarReader
+                const tr = new TarReader(tarResult);
+                await tr.init();
+                for (let i = 0; i < tr.files.length; i++) {
+                    const f = tr.files[i];
+                    log(` [File ${i}] Name: ${f.name}, Size: ${f.size}, Offset: ${f.offset}, IsDir: ${f.isDir}`, "#569cd6");
+                }
+                log(`binary: ${formatBytes(tr.read(2))}`, "#569cd6"); // read binary
+                tr.close();
+
+                // DOWNLOAD
+                log("\nDownloading result as 'test.tar'...", "#4caf50");
+                tw._browserDownload(tarResult, "test.tar");
+
+            } catch (e) {
+                console.error(e);
+                log(`ERROR: ${e.message}`, "#f44336");
+                log(e.stack, "gray");
+            }
+        }
+    </script>
+</body>
+</html>
