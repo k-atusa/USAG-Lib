@@ -74,5 +74,9 @@ class Szip {
     void openReader(byte[] data)
     byte[] read(int idx)
     InputStream open(int idx)
+
+    // Common
+    byte[] closeZip()
+    void close()
 }
 ```
