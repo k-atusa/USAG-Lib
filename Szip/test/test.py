@@ -7,7 +7,7 @@ if not os.path.exists("big.bin"):
         for i in range(5):
             f.write(test)
 
-m = Szip.ZipWriter("test.zip", False)
+m = Szip.ZipWriter("test.zip", True)
 m.writebin("이진 데이터", b"Hello, world!")
 m.writefile("file", "big.bin")
 m.close()

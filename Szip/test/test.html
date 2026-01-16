@@ -57,7 +57,7 @@
                 const blob = new Blob([dummyData]);
 
                 // Write Zip
-                const zw = new ZipWriter("", false);
+                const zw = new ZipWriter("", true);
                 zw.writebin("이진 데이터", new TextEncoder().encode("Hello, world!"));
                 zw.writefile("file", blob);
                 const zipResult = await zw.close();

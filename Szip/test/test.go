@@ -33,7 +33,7 @@ func main() {
 
 	// ZipWriter
 	m := &Szip.ZipWriter{}
-	if err := m.Init("test.zip", false); err != nil {
+	if err := m.Init("test.zip", true); err != nil {
 		log.Fatal(err)
 	}
 	if err := m.WriteBin("이진 데이터", []byte("Hello, world!")); err != nil {

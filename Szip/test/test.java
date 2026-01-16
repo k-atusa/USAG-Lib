@@ -23,7 +23,7 @@ public class test {
 
             // ZipWriter
             Szip writer = new Szip();
-            writer.openWriter(new File("test.zip"), false);
+            writer.openWriter(new File("test.zip"), true);
 
             // write data
             writer.write("이진 데이터", "Hello, world!".getBytes());
