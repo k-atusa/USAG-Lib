@@ -1,4 +1,4 @@
-# test 791 : piczip
+# test791 : piczip
 
 import sys
 import os
@@ -29,10 +29,16 @@ def create_zip(image_path, input_paths, output_path):
                     abs_target = os.path.abspath(target)
                     parent_dir = os.path.dirname(abs_target)
                     for root, dirs, files in os.walk(target):
-                        for file in files:
+                        # add root dir
+                        rel_path = os.path.relpath(root, parent_dir).replace("\\", "/")
+                        if rel_path[-1] != '/':
+                            rel_path += '/'
+                        zf.writestr(rel_path, '')
+                        print(f"added dir {rel_path}")
+                        for file in files: # add files
                             full_path = os.path.join(root, file)
-                            rel_path = os.path.relpath(full_path, parent_dir) # get relative path
-                            zf.write(full_path, rel_path)
+                            rel_path = os.path.relpath(full_path, parent_dir)
+                            zf.write(full_path.replace("\\", "/"), rel_path)
                             print(f"added file {full_path} as {rel_path}")
 
         print(f"completed zip to {output_path}")

@@ -1,0 +1,1 @@
+// test792d : USAG-Lib star
