@@ -6,10 +6,8 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
 
-	bencode "github.com/k-atusa/USAG-Lib/Bencode"
+	Bencode "github.com/k-atusa/USAG-Lib/Bencode"
 )
 
 func main() {

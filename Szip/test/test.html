@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Szip JS Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="../Szip.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
+        #console { 
+            background-color: #1e1e1e; 
+            color: #d4d4d4; 
+            padding: 15px; 
+            border-radius: 5px; 
+            white-space: pre-wrap; 
+            min-height: 300px;
+            overflow-y: auto;
+        }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        .success { color: #4caf50; }
+        .info { color: #569cd6; }
+    </style>
+</head>
+<body>
+
+    <h1>Szip.js Library Test</h1>
+    <p>test will be executed on your browser</p>
+    <button onclick="runTest()">(Run Test)</button>
+    <br><br>
+    <div id="console">Ready...</div>
+
+    <script>
+        // printer
+        const consoleDiv = document.getElementById('console');
+        function log(message, color = '') {
+            const span = document.createElement('span');
+            span.textContent = message + "\n";
+            if (color) span.style.color = color;
+            consoleDiv.appendChild(span);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(message);
+        }
+
+        // Uint8Array to hex string
+        function formatBytes(u8) {
+            if (u8.length > 20) return `[Uint8Array length=${u8.length}]`;
+            return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
+        }
+
+        async function runTest() {
+            consoleDiv.innerHTML = "";
+            log("--- Start Test ---", "#569cd6");
+
+            try {
+                const dummyData = new Uint8Array(5 * 1048576);
+                const blob = new Blob([dummyData]);
+
+                // Write Zip
+                const zw = new ZipWriter("", false);
+                zw.writebin("이진 데이터", new TextEncoder().encode("Hello, world!"));
+                zw.writefile("file", blob);
+                const zipResult = await zw.close();
+                log(`Zip generated. Total size: ${zipResult.length} bytes`);
+
+                // Read Zip
+                const zr = new ZipReader(zipResult);
+                await zr.init();
+                
+                // print files list
+                for (let i = 0; i < zr.names.length; i++) {
+                    log(`zip: ${zr.names[i]} ${zr.sizes[i]}`);
+                }
+
+                // read first file
+                const binContent = await zr.read(0);
+                log(`Read "binary": ${formatBytes(binContent)}`);
+                zr.close();
+
+                // download result
+                log("Downloading result as 'test.zip'...", "#4caf50");
+                zw._browserDownload(zipResult, "test.zip");
+
+            } catch (e) {
+                console.error(e);
+                log(`ERROR: ${e.message}`, "red");
+            }
+        }
+    </script>
+</body>
+</html>
