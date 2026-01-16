@@ -31,10 +31,10 @@ class ZipWriter { // Zip64 Writer
      * @param {string} name file name in zip
      * @param {string|Blob|File} src file path (Node) or Blob/File object (Browser)
      */
-    writefile(name, src) {
+    async writefile(name, src) {
         if (isNode) {
             if (typeof src === 'string') {
-                const data = fs.readFileSync(src);
+                const data = await fs.readFile(src);
                 this.writebin(name, data);
             } else {
                 this.writebin(name, src); // write Blob
@@ -135,13 +135,6 @@ class ZipReader { // Zip64 Reader
         if (!this.zip) await this.init();
         if (idx < 0 || idx >= this._files.length) throw new Error("Index out of bounds");
         return await this._files[idx].async("uint8array");
-    }
-
-    async open(idx) {
-        const data = await this.read(idx);
-        const memFile = new AFile();
-        await memFile.open(data, true);
-        return memFile;
     }
 
     close() {

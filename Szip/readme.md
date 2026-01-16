@@ -23,7 +23,7 @@ class ZipReader:
 ```js
 class ZipWriter {
     constructor(output: string, compress: boolean)
-    function writefile(name: string, src: string | Blob | File)
+    async function writefile(name: string, src: string | Blob | File)
     function writebin(name: string, data: Uint8Array | string | Blob)
     async function close(): Uint8Array | null
 }
