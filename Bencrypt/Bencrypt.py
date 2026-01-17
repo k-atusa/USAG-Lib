@@ -1,3 +1,4 @@
+# test793a : USAG-Lib bencrypt
 from typing import Optional, Tuple
 
 import io
@@ -172,7 +173,7 @@ class ECC1:
     def encrypt(self, data: bytes, receiver: ECC.EccKey) -> bytes: # encrypt with receiver's public key
         tempKey = ECC.generate(curve='P-521') # ephemeral key
         sharedPtr = receiver.pointQ * tempKey.d # shared secret (ECDH)
-        sharedValue = sharedPtr.x.to_bytes(32, 'little', False) # x coordinate as secret
+        sharedValue = sharedPtr.x.to_bytes(128, 'little') # x coordinate 128B as secret
         gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
         enc = enAESGCM(gcmKey, data)
         pubBytes = tempKey.public_key().export_key(format='DER') # ephemeral public key
@@ -185,7 +186,7 @@ class ECC1:
         tempPub = ECC.import_key(data[1 : 1 + keyLen]) # ephemeral public key
         enc = data[1 + keyLen :]
         sharedPtr = tempPub.pointQ * self.private.d # shared secret (ECDH)
-        sharedValue = sharedPtr.x.to_bytes(32, 'little', False) # x coordinate as secret
+        sharedValue = sharedPtr.x.to_bytes(128, 'little') # x coordinate 128B as secret
         gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
         return deAESGCM(gcmKey, enc)
 
