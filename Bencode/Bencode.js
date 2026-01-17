@@ -115,6 +115,15 @@ class Bencode { // Base-N encoder
         let i = 0;
         const n = data.length;
 
+        const deBit = () => { // bit decoder lambda
+            while (bits >= 8) {
+                bits -= 8;
+                const byteVal = (acc >> bits) & 0xFF;
+                acc = (bits === 0) ? 0 : acc & ((1 << bits) - 1);
+                ba.push(byteVal);
+            }
+        }
+
         while (i < n) {
             const char = data[i];
             i++;
@@ -131,13 +140,7 @@ class Bencode { // Base-N encoder
 
             acc = (acc << 15) | val;
             bits += 15;
-
-            while (i < n && bits >= 8) {
-                bits -= 8;
-                const byteVal = (acc >> bits) & 0xFF;
-                acc = (bits === 0) ? 0 : acc & ((1 << bits) - 1);
-                ba.push(byteVal);
-            }
+            if (i < n) deBit();
         }
 
         // Cut until last 1 is found
@@ -149,13 +152,7 @@ class Bencode { // Base-N encoder
             acc >>= 1;
             bits -= 1;
         }
-        while (bits >= 8) {
-            bits -= 8;
-            const byteVal = (acc >> bits) & 0xFF;
-            acc = (bits === 0) ? 0 : acc & ((1 << bits) - 1);
-            ba.push(byteVal);
-        }
-
+        deBit();
         return new Uint8Array(ba);
     }
 }
