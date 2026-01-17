@@ -21,7 +21,9 @@ print(Bencrypt.argon2Verify(t, b"0000"))
 p(Bencrypt.genkey(b"0000000000000000", "test", 16))
 
 plain, key = b"Hello, world!" * 4, b"0123" * 11
-print( Bencrypt.deAESGCM(key, Bencrypt.enAESGCM(key, plain)).decode() )
+enc = Bencrypt.enAESGCM(key, plain)
+p(enc)
+print( Bencrypt.deAESGCM(key, enc).decode() )
 plain = b"\x00" * 100000000 # 100MB
 r = io.BytesIO(plain)
 w = io.BytesIO()
