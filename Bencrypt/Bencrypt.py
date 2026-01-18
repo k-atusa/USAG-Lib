@@ -41,7 +41,7 @@ def pbkdf2(pw: bytes, salt: bytes, iter: int = 1000000, outsize: int = 64) -> by
 def argon2Hash(pw: bytes, salt: bytes = None) -> str:
     if not HAS_ARGON2:
         raise ImportError("Argon2 library is not installed.")
-    p = PasswordHasher()
+    p = PasswordHasher(time_cost=3, memory_cost=262144, parallelism=4, hash_len=32, salt_len=16) # fix parameters
     return p.hash(pw) if salt == None else p.hash(pw, salt=salt)
 
 def argon2Verify(hashed: str, pw: bytes) -> bool:
@@ -206,12 +206,12 @@ class ECC1:
         gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
         return self.em.deAESGCM(gcmKey, enc)
 
-    def sign(self, data: bytes) -> bytes:
+    def sign(self, data: bytes) -> bytes: # DSA-SHA-256
         h = SHA256.new(data)
         signer = DSS.new(self.private, 'fips-186-3', encoding='der')
         return signer.sign(h)
 
-    def verify(self, data: bytes, signature: bytes) -> bool:
+    def verify(self, data: bytes, signature: bytes) -> bool: # DSA-SHA-256
         try:
             h = SHA256.new(data)
             verifier = DSS.new(self.public, 'fips-186-3', encoding='der')

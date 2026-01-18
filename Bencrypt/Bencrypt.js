@@ -326,7 +326,7 @@ async function argon2Hash(pw, salt = null) {
         const options = {
             type: type || 2,
             timeCost: 3,
-            memoryCost: 65536,
+            memoryCost: 262144,
             parallelism: 4,
             hashLength: 32,
             raw: false // Return encoded string
@@ -339,7 +339,7 @@ async function argon2Hash(pw, salt = null) {
             pass: pwBuf,
             type: type || 2,
             time: 3,
-            mem: 65536,
+            mem: 262144,
             parallelism: 4,
             hashLen: 32
         };
@@ -989,7 +989,7 @@ class ECC1 {
     }
 
     /** 
-     * sign with private key
+     * sign with private key, DER-SHA-256
      * @param {Uint8Array} data
      * @returns {Promise<Uint8Array>}
      */
@@ -1012,7 +1012,7 @@ class ECC1 {
     }
 
     /** 
-     * verify with public key
+     * verify with public key, DER-SHA-256
      * @param {Uint8Array} data
      * @param {Uint8Array} signature
      * @returns {Promise<boolean>}
