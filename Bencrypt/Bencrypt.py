@@ -61,58 +61,73 @@ def genkey(data: bytes, lbl: str, size: int) -> bytes: # HMAC-SHA3-512
     return key[:size]
 
 # ========== Encrypting Functions ==========
-def enAESGCM(key: bytes, data: bytes) -> bytes: # AES-GCM
-    if len(key) != 44:
-        raise ValueError("key size must be 44 bytes")
-    cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
-    ciphertext, tag = cipher.encrypt_and_digest(data)
-    return ciphertext + tag
+class AES1:
+    def __init__(self):
+        self.processed: int = 0
 
-def deAESGCM(key: bytes, data: bytes) -> bytes: # AES-GCM
-    if len(key) != 44:
-        raise ValueError("key size must be 44 bytes")
-    cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
-    return cipher.decrypt_and_verify(data[:-16], data[-16:])
+    def enAESGCM(self, key: bytes, data: bytes) -> bytes: # AES-GCM
+        self.processed = 0
+        if len(key) != 44:
+            raise ValueError("key size must be 44 bytes")
+        cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
+        ciphertext, tag = cipher.encrypt_and_digest(data)
+        self.processed = len(data)
+        return ciphertext + tag # [encdata][tag 16B]
 
-def enAESGCMx(key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
-    if len(key) != 44:
-        raise ValueError("key size must be 44 bytes")
-    globalIV, globalKey, count = key[:12], key[12:], 0
-    for i in range(0, size // chunkSize):
-        iv = mkiv(globalIV, count)
-        count += 1
-        cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
-        chunk = src.read(chunkSize)
-        ciphertext, tag = cipher.encrypt_and_digest(chunk)
-        dst.write(ciphertext)
-        dst.write(tag)
-    if size % chunkSize != 0:
-        iv = mkiv(globalIV, count)
-        cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
-        chunk = src.read(size % chunkSize)
-        ciphertext, tag = cipher.encrypt_and_digest(chunk)
-        dst.write(ciphertext)
-        dst.write(tag)
+    def deAESGCM(self, key: bytes, data: bytes) -> bytes: # AES-GCM
+        self.processed = 0
+        if len(key) != 44:
+            raise ValueError("key size must be 44 bytes")
+        cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
+        plaintext = cipher.decrypt_and_verify(data[:-16], data[-16:])
+        self.processed = len(data)
+        return plaintext
 
-def deAESGCMx(key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
-    if len(key) != 44:
-        raise ValueError("key size must be 44 bytes")
-    globalIV, globalKey, count = key[:12], key[12:], 0
-    for i in range(0, size // (chunkSize + 16)):
-        iv = mkiv(globalIV, count)
-        count += 1
-        cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
-        chunk = src.read(chunkSize)
-        tag = src.read(16)
-        plaintext = cipher.decrypt_and_verify(chunk, tag)
-        dst.write(plaintext)
-    if size % (chunkSize + 16) != 0:
-        iv = mkiv(globalIV, count)
-        cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
-        chunk = src.read(size % (chunkSize + 16) - 16)
-        tag = src.read(16)
-        plaintext = cipher.decrypt_and_verify(chunk, tag)
-        dst.write(plaintext)
+    def enAESGCMx(self, key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
+        self.processed = 0
+        if len(key) != 44:
+            raise ValueError("key size must be 44 bytes")
+        globalIV, globalKey, count = key[:12], key[12:], 0
+        for i in range(0, size // chunkSize):
+            iv = mkiv(globalIV, count)
+            count += 1
+            cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
+            chunk = src.read(chunkSize)
+            ciphertext, tag = cipher.encrypt_and_digest(chunk)
+            dst.write(ciphertext)
+            dst.write(tag)
+            self.processed += chunkSize
+        if size == 0 or size % chunkSize != 0:
+            iv = mkiv(globalIV, count)
+            cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
+            chunk = src.read(size % chunkSize)
+            ciphertext, tag = cipher.encrypt_and_digest(chunk)
+            dst.write(ciphertext)
+            dst.write(tag)
+            self.processed += size % chunkSize
+
+    def deAESGCMx(self, key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
+        self.processed = 0
+        if len(key) != 44:
+            raise ValueError("key size must be 44 bytes")
+        globalIV, globalKey, count = key[:12], key[12:], 0
+        for i in range(0, size // (chunkSize + 16)):
+            iv = mkiv(globalIV, count)
+            count += 1
+            cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
+            chunk = src.read(chunkSize)
+            tag = src.read(16)
+            plaintext = cipher.decrypt_and_verify(chunk, tag)
+            dst.write(plaintext)
+            self.processed += chunkSize + 16
+        if size == 0 or size % (chunkSize + 16) != 0:
+            iv = mkiv(globalIV, count)
+            cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
+            chunk = src.read(size % (chunkSize + 16) - 16)
+            tag = src.read(16)
+            plaintext = cipher.decrypt_and_verify(chunk, tag)
+            dst.write(plaintext)
+            self.processed += size % (chunkSize + 16)
 
 # ========== Signing Functions ==========
 class RSA1:
@@ -120,13 +135,13 @@ class RSA1:
         self.public: Optional[RSA.RsaKey] = None
         self.private: Optional[RSA.RsaKey] = None
 
-    def genkey(self, bits: int = 2048) -> Tuple[bytes, bytes]: # DER format, (public, private)
+    def genkey(self, bits: int = 2048) -> Tuple[bytes, bytes]: # DER(PKIX, PKCS8) format, (public, private)
         key = RSA.generate(bits) # 2048, 3072, 4096
         self.private = key
         self.public = key.publickey()
-        return (self.public.export_key(format='DER'), self.private.export_key(format='DER'))
+        return (self.public.export_key(format='DER'), self.private.export_key(format='DER', pkcs=8))
 
-    def loadkey(self, public: bytes|None, private: bytes|None): # DER format, load if not None
+    def loadkey(self, public: bytes|None, private: bytes|None): # DER(PKIX, PKCS8) format, load if not None
         if public != None:
             self.public = RSA.import_key(public)
         if private != None:
@@ -156,15 +171,16 @@ class ECC1:
     def __init__(self):
         self.public: Optional[ECC.EccKey] = None
         self.private: Optional[ECC.EccKey] = None
+        self.em = AES1()
         # encryption format: [1B PubLen][PubKey][encdata][tag]
 
-    def genkey(self) -> Tuple[bytes, bytes]: # DER format, (public, private)
+    def genkey(self) -> Tuple[bytes, bytes]: # DER(PKIX, PKCS8) format, (public, private)
         key = ECC.generate(curve='P-521')
         self.private = key
         self.public = key.public_key()
-        return (self.public.export_key(format='DER'), self.private.export_key(format='DER'))
+        return (self.public.export_key(format='DER'), self.private.export_key(format='DER', use_pkcs8=True))
 
-    def loadkey(self, public: bytes|None, private: bytes|None): # DER format, load if not None
+    def loadkey(self, public: bytes|None, private: bytes|None): # DER(PKIX, PKCS8) format, load if not None
         if public is not None:
             self.public = ECC.import_key(public)
         if private is not None:
@@ -175,7 +191,7 @@ class ECC1:
         sharedPtr = receiver.pointQ * tempKey.d # shared secret (ECDH)
         sharedValue = sharedPtr.x.to_bytes(128, 'little') # x coordinate 128B as secret
         gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
-        enc = enAESGCM(gcmKey, data)
+        enc = self.em.enAESGCM(gcmKey, data)
         pubBytes = tempKey.public_key().export_key(format='DER') # ephemeral public key
         if len(pubBytes) > 255:
             raise ValueError("key too long")
@@ -188,7 +204,7 @@ class ECC1:
         sharedPtr = tempPub.pointQ * self.private.d # shared secret (ECDH)
         sharedValue = sharedPtr.x.to_bytes(128, 'little') # x coordinate 128B as secret
         gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
-        return deAESGCM(gcmKey, enc)
+        return self.em.deAESGCM(gcmKey, enc)
 
     def sign(self, data: bytes) -> bytes:
         h = SHA256.new(data)

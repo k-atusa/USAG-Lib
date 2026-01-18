@@ -2,15 +2,20 @@ import io
 import base64
 import Bencrypt
 
-pub0 = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA36kLQ7+w1kCw1S1b6T1ikSZ5S/m/QX5tPQkiasibLWyKKr113TUIGEn6hjY0mmy8w5WLgiP144ib8/D07OXSyxwv5NYMW8B3BJCgYcj2c5Zr7b3yjwLAI/dWOWof9ZoJpqF/0BrEyYDtdcnV6p5qTYS37EV6SsCCAIa1DT3pnDrT/vn5VbXLFYVqJAdxePvDKkAfAEwKvKDo4Etd7WSN8oXsDOgFCTrW7L5iWwfrlr21tX5FqIG1uKjlrb5kY0omfc2RqZo5a/3LfUEwrRrw/Bj3T7iIg43mmfdeRxEH9KJzEjjeNwzvjBBBd/cg63bpz7KyxnNp3jXGZQ9QAYp6vwIDAQAB'
-pri0 = 'MIIEpQIBAAKCAQEA36kLQ7+w1kCw1S1b6T1ikSZ5S/m/QX5tPQkiasibLWyKKr113TUIGEn6hjY0mmy8w5WLgiP144ib8/D07OXSyxwv5NYMW8B3BJCgYcj2c5Zr7b3yjwLAI/dWOWof9ZoJpqF/0BrEyYDtdcnV6p5qTYS37EV6SsCCAIa1DT3pnDrT/vn5VbXLFYVqJAdxePvDKkAfAEwKvKDo4Etd7WSN8oXsDOgFCTrW7L5iWwfrlr21tX5FqIG1uKjlrb5kY0omfc2RqZo5a/3LfUEwrRrw/Bj3T7iIg43mmfdeRxEH9KJzEjjeNwzvjBBBd/cg63bpz7KyxnNp3jXGZQ9QAYp6vwIDAQABAoIBAG3GlCtT/jEivkhbg4WmpebVSeqy8Z7tNSOkhJqBzLxOTkBtDlkc6tS1FrviBg6XeUzL7RXanZjol5bzONu/b6dWNeGs95LfE+uPKtDj6KbR+TZOqSttL65XeyAiCP6sdLkvAkM7qEO4vpQ2FQMbbtSOZBGZBk2DUCt+8oVF0o/lWsRu3mvhm5sh38s3OEVw2XI/+lARF5g0jyzn9uAu0DS3m9E9L9IIOaN6R//l47sKnRM4PynRx+XlcbdksLTvkRJMIJpiovoaV1IzSNBBuSwsu8Sd25T0jQRIkJRAGsUfqqk03ZkM/jFAyugJyeJAFQbmPQvqBXyT2ifj247QXTUCgYEA5Sh4kZrVjEiBzeBM/F0BgGiw/TCxJ7c4WzfdYOXZZhV4fkqE/Qa6WjBPJNAhtXZVtPe2rgKmwAEpVxHCnghnLkNLHj0B5IBP8V7BXmm1hPqwFo5TcBAqgUYuI/ZLDlLQJp2f1G76aIu9IzVxRoSd4LJz/28PDL9Os8gROP6vVGUCgYEA+du3n87mSDGsrOKnQORGQhxT0vwYJEyRpP4njHQ7h+lXjQGGuqR/p3rkZykc6e138m7gKVZZdLbvOSCcNAsVaT/kWKfG9lKqKvVL/axOV7En77HmBeml27RmEZ7oySym0ZBbbqxaFML+82uMP5xfohAFBWa0LmYmMsm0K8D8xlMCgYEAq4bakKpj0+hl+NM+7Ns1B4fViv8Ka57yOR0cwK3rR0Uk9usSlk6V6HImm3iK8sgLqTSN8bwcUrXL2td5ZE8H5JIMRSsHIqGEtTfm56OaclouugN4ovYGytLcMKDnV2ZXVcBAZYNYPi7yuMsE6fLUNd99giIAEtuTrnA/q/i/Bh0CgYEA9+rvtH4TOScw8wqicl0O6aI5+mtxePMQwOn+S/s45o699IfDK4b1szTZVRMSQXsDPWaOvfWUJZ8ulzyoQWuN/zUKWn1/igJUHvPuRvKleZWqzsdyOgOwMuQ5Mtq+mH7Zt67JSnNxnpAtcVMRgjyjF6dVlBpoRnHNDS/eultvdUkCgYEAgykFWG76/DqZSL01/O6cw/6Mvqor0HdrMtOFr8MZnDBxyZpVApQob8k+Y8LSg2xaZCC1Y4GcP6CrlhAaI1jSKJKsHdGmjEFDUTte3zGsq3YKNmbh15VsK2KCBxD9Kd8oIqNweY9Z+WfTytnU4RFKzkxFT5dRsQlx2kDLNP8lbaY='
-pub1 = 'MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQBsdsVMpCNOhURl5ZcvIL6tUUtuqljCIvk0w/d0Qoqq4DylyUViCi/nEobWQg/MJRPIiQ8matncdaWNAoxE4XTPF8Bn1Om4HY8fqQvuLChLVF5AzWW7wsLr0tvkN+nz7338HK7uWd3diJMzjXZbjF1nvlwCHZ3BHAiarnygHE33Oj/xFs='
-pri1 = 'MIHuAgEAMBAGByqGSM49AgEGBSuBBAAjBIHWMIHTAgEBBEIAhiTp7VQaVK20gTMsJDimzcY9SswWOdJJK/AObOdyOkckomcGM+Mx+Af57bv+5hvmO05kFloPDLxTWNVwwY0AqCihgYkDgYYABAGx2xUykI06FRGXlly8gvq1RS26qWMIi+TTD93RCiqrgPKXJRWIKL+cShtZCD8wlE8iJDyZq2dx1pY0CjEThdM8XwGfU6bgdjx+pC+4sKEtUXkDNZbvCwuvS2+Q36fPvffwcru5Z3d2IkzONdluMXWe+XAIdncEcCJqufKAcTfc6P/EWw=='
+pub0 = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApCITGWNQcB8GdwWFpKW02VVYdtir1/IAbUstmwhBugo2rbdi1a/7n/hafglvwV+kxQ4jJychYjl921OhPwqlaFv/+iP8sDemmjXKW5G9QtSGFx34FVLYGewrF1ApoyvI5Zi3m7KBhrAFQyZ+6VYojnx0NJPjnCOGwSx8rb73Csi+gBoxSse5EUUwywWJ9tQkQfayFY7bVAORje7y58rrk4ASwpGNnaXgsNQffCgtBf6J4XhXm/neZP7wpDJqx6j4c5JY0OnYnCIkU66RMgEn4jHc+hg9Hfr99AWBnxjuMrAUbsaDrHrAcl5Sxhi0xzlxFvT+/PFx0BzPSt/noM0C1wIDAQAB'
+pri0 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCkIhMZY1BwHwZ3BYWkpbTZVVh22KvX8gBtSy2bCEG6Cjatt2LVr/uf+Fp+CW/BX6TFDiMnJyFiOX3bU6E/CqVoW//6I/ywN6aaNcpbkb1C1IYXHfgVUtgZ7CsXUCmjK8jlmLebsoGGsAVDJn7pViiOfHQ0k+OcI4bBLHytvvcKyL6AGjFKx7kRRTDLBYn21CRB9rIVjttUA5GN7vLnyuuTgBLCkY2dpeCw1B98KC0F/onheFeb+d5k/vCkMmrHqPhzkljQ6dicIiRTrpEyASfiMdz6GD0d+v30BYGfGO4ysBRuxoOsesByXlLGGLTHOXEW9P788XHQHM9K3+egzQLXAgMBAAECggEAAOL2O3Lf4lsoi8gJ2sPSYEInwiyVcQsrmWuIiYfX4wtfFD0jWYgj0c9jnb6rTd4YY8AZzIJXmdI5rc+b1V1XW2Lz1QQQv1rtmXOk7i2xWgUP3FwbFPJnnGw8J1oVf34jDapvg3XJYVLeFGjG0rfWbD6b2hTaa+N9PNniqoWXjAVbWp2yJ0emN2nyFF/jhXIKJHmJZFAe4DFp/vHLykxHKOtMxsoHikjRj3KnpPy2NQzZue8jQ6UvX1zZhucR9tJb+9kVq9nLVxKVinSvaq8hLavtEh74o0ykQzxr4bT+eeX+6Jm0vON7VCH+HmeKdrACnsZ5tKd4oCA+2EXw2cPPMQKBgQDELGPJHQH0SxSjOyaXkKoSf2jvxYCQiay6Y+qT6lnL7Ag9MtOOGLARezaV8fYRBwTYdIUKCJj8jZtzTJVmg30t1qyy1jTkzwlq36cWxzToaQPYZVULuHOWMyMcUPdgLk+kslVxN7ZyhpDxdatAcnr4HphAsD20F+Dk0ZJASDU0kwKBgQDWMD3OKZOC661NsSjI7+INDIxov8aP/MBJKirj+/I9KU4cXfvzuMS/G20EvI9Bxc294Aghnp/I25Eg9NTL8AzWCJlXM4AF+fzM8yR/NlW/nfxOT07wHbvKMTQHM3bBcIKQkg3BCCIomGf0jWthXRROdWaFE3G7HksfnOS0k2pHLQKBgQC/2d24yKqpnGfRfz6tyafaMUqR+2hRcqM/Igo+oFkzamFgYH2vIQvH/OUUXa7VVjTx73pQprnffCnD5+jQedWJZ8I7n+vYvXWrVJEXYLiodlNxZSB4NuqrwNUckz5qjMANBO80q1S9ykakLfzOKWeDkoA5+2JM53FktmQ+g5+tCwKBgFnjhQywhie7oM+qOeOaSNQRIBwV388t08Tg3X8wjUj9vLpK9yIhuPA7IlWKjNSdnurAyqjRWV2CSDX8ihHMfJaWpUPjaScY8u9QW1DIDNSOCQUUY5yB3f3NCHi9MGmePi1OHleUgkFnNLl9YENMPOlwe8X9kw1keUKbJaBi/YdBAoGAWQ+zica3FnZI5oTEv44qh/S0hbjHjo3AhST+5VTOx7pitwySI8gC2u1af5fHJskBEwQKhkvOt1n7eh88aLo3b7HHB4QIur+KFrKmUvBHIa3Y2FQOTsBQj1Cj9hMTWBErqEb/+/D9n5PlH7zt5MVwZTA8HAGUpVhIR3xxUtpTiJI='
+enc0 = 'nCFhvHbvIbAYlk8MpjVd5hmQHrbm3kVc/heznSujIV4xsofvYpxUntktOppBDHMlxoqDSS8KKOw7uC6mnzPjjNAzGY4UWBvakegqEsWVSfiGouh8sNJyMyx5dsc8dk4j2IDe8gNqE/l04cddtrfVSgRle82FJOKvSNyAfI0bJPooj1WJJIXa+LdEiP5EY8y7ccIP+2T5rTqHUHNkjzlUGZOr+6Mkj6eVgfJKhtKhw3tt7tLM/HF8NbBNPRSGO8cHEVuHMke0JLaRHc68qpE3vKT/GCxveJC5L7T5wxiX9KOwB6zr9fWaVxfTiEDGU4IdUZgyeZOAEXY9V19uFExLAw=='
+sign0 = 'WagxpWpmGUK2vtx1Vjf1Bn67FHwdNy5co9uMV2SV9ZI6KCOYl/QWfA5oF9qIhb58lY00RVzUE+GiqQozGuAE9KIK70icBlWB1bq5azcBbR1sRDycLldT8HZPTyDdnW+pC/D0lvAWA99xVNSk5mEaJn1FKPbCAJwTrJZY5UQTF0XM8vWFUW2JQtlYLVQgcpALY6HYgOVSaXAaAEifftOurRBncn7BAudwIIv4OL5kBbXciEDlHO5aHDC3I0GG3zVhKA0BousFC2V+fiLYfH73i7K1rXIb5uhopSKhi82tRgII9rxWACwV3n3fOTSaNWvGHwZKIXvQChpRQHcBFomZcg=='
+pub1 = 'MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQB4/7rJ6fahchEz7zMxDwiTuBV3LiuBDbBBh2dY9/xFe9m+3YjZysS68lR+YM4FBtG3iv+wCqTJIcLimN2srN1m60BBJsaX07gndaDJg+lckP35VDdUNuelksGYHUP/8ctv4s5tCrhZRuA//js9AiipKRCmcJz96Ulc4E1GSvAS9au82Q='
+pri1 = 'MIHuAgEAMBAGByqGSM49AgEGBSuBBAAjBIHWMIHTAgEBBEIAo+FXGL3WkDgdlPWNKWASFNIjZ2dFLNqhp+NtBvrTSHygdCp3wspE1lgFKsAjZCw9+PfQY0DZI7Ed9rj3kh6ei+6hgYkDgYYABAHj/usnp9qFyETPvMzEPCJO4FXcuK4ENsEGHZ1j3/EV72b7diNnKxLryVH5gzgUG0beK/7AKpMkhwuKY3ays3WbrQEEmxpfTuCd1oMmD6VyQ/flUN1Q256WSwZgdQ//xy2/izm0KuFlG4D/+Oz0CKKkpEKZwnP3pSVzgTUZK8BL1q7zZA=='
+enc1 = 'njCBmzAQBgcqhkjOPQIBBgUrgQQAIwOBhgAEAWlnIT+zgmfnE+2MgAm8qZ2nS37JW5y0a5a7lecFdci6fZ7e+pYKur45vfVDXbs9YyPDF6Dy02tqSA1PnzgeJAm3APxDHHfirmGs6zUPQrpCP7+MIYs7Yd4PH4Ik2nxCvdf+2LOGdGsvlrQ89iXyZF6/rAYHhOmm4B76TofzwFaM7wvf2fw7mpOnHXC7uMa8T/j211GT+rg='
+sign1 = 'MIGHAkIAmz/B5YhDZB6Bmm1NPRlE0YtSoBIvLyaBy8z70wuqIMnpu3xt5GkL/x6eHEzRI6O8R9/UxwHLIPvVQkl8bcy0KrkCQVEJqEXc//h5vq9qTVzJk19pX93OQSxsvKPdA0T99AYBwyaLE5MIAKV9/kHzmNc8DHZXSD+ag4nVi8RlG+vLJ3AY'
 def p(d: bytes):
     for i in d:
         print(i, end=" ")
     print("====================")
 
+print("\n===== basic test =====")
 p(Bencrypt.random(16))
 p(Bencrypt.sha3256(b""))
 p(Bencrypt.sha3512(b""))
@@ -20,20 +25,48 @@ print(t)
 print(Bencrypt.argon2Verify(t, b"0000"))
 p(Bencrypt.genkey(b"0000000000000000", "test", 16))
 
+print("\n===== aes test =====")
 plain, key = b"Hello, world!" * 4, b"0123" * 11
-enc = Bencrypt.enAESGCM(key, plain)
+m = Bencrypt.AES1()
+enc = m.enAESGCM(key, plain)
 p(enc)
-print( Bencrypt.deAESGCM(key, enc).decode() )
+print(m.processed)
+print(m.deAESGCM(key, enc).decode())
+print(m.processed)
 plain = b"\x00" * 100000000 # 100MB
 r = io.BytesIO(plain)
 w = io.BytesIO()
-Bencrypt.enAESGCMx(key, r, len(plain), w)
+m.enAESGCMx(key, r, len(plain), w)
+t = w.getvalue()
+p(t[0:16])
+print(m.processed)
+r = io.BytesIO(t)
+w = io.BytesIO()
+m.deAESGCMx(key, r, len(t), w)
+print(m.processed)
+print(w.getvalue() == plain)
+
+# test various sizes
+t = m.enAESGCM(key, b"")
+print(m.deAESGCM(key, t) == b"")
+r = io.BytesIO(b"")
+w = io.BytesIO()
+m.enAESGCMx(key, r, 0, w)
 t = w.getvalue()
 r = io.BytesIO(t)
 w = io.BytesIO()
-Bencrypt.deAESGCMx(key, r, len(t), w)
-print(w.getvalue() == plain)
+m.deAESGCMx(key, r, len(t), w)
+print(w.getvalue() == b"")
+r = io.BytesIO(b"\x00" * 1048576 * 4)
+w = io.BytesIO()
+m.enAESGCMx(key, r, 1048576 * 4, w)
+t = w.getvalue()
+r = io.BytesIO(t)
+w = io.BytesIO()
+m.deAESGCMx(key, r, len(t), w)
+print(w.getvalue() == b"\x00" * 1048576 * 4)
 
+print("\n===== rsa test =====")
 you = Bencrypt.RSA1()
 you.loadkey(base64.b64decode(pub0), base64.b64decode(pri0))
 enc = you.encrypt(b"Hello, world!" * 4)
@@ -42,7 +75,10 @@ me = Bencrypt.RSA1()
 me.genkey()
 enc = me.sign(b"Hello, world!" * 4)
 print(me.verify(b"Hello, world!" * 4, enc))
+p( you.decrypt(base64.b64decode(enc0)) )
+print( you.verify(b"0000", base64.b64decode(sign0)) )
 
+print("\n===== ecc test =====")
 you = Bencrypt.ECC1()
 you.loadkey(base64.b64decode(pub1), base64.b64decode(pri1))
 me = Bencrypt.ECC1()
@@ -51,3 +87,5 @@ enc = me.encrypt(b"Hello, world!" * 4, you.public)
 print(you.decrypt(enc).decode())
 enc = me.sign(b"Hello, world!" * 4)
 print(me.verify(b"Hello, world!" * 4, enc))
+p( you.decrypt(base64.b64decode(enc1)) )
+print( you.verify(b"0000", base64.b64decode(sign1)) )
