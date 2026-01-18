@@ -4,6 +4,7 @@
 * !!! JS version is  not designed for big data !!!
 * require js-sha3: npm install js-sha3, <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/src/sha3.min.js"></script>
 * require argon2: npm install argon2, <script src="https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js"></script>
+* require @noble/curves: <script type="module">import {x448, ed448} from 'https://esm.sh/@noble/curves@1.4.0/ed448';window.noble = {x448, ed448};</script>
 */
 
 const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
@@ -11,44 +12,38 @@ const deps = {
     crypto: null,
     argon2: null,
     sha3256: null,
-    sha3512: null
+    sha3512: null,
+    noble: null
 };
-if (isNode) {
-    try {
-        deps.crypto = require('crypto');
-    } catch (e) {
-        console.error('crypto module not found');
-    }
-    try {
-        const sha3 = require('js-sha3');
-        deps.sha3256 = sha3.sha3_256;
-        deps.sha3512 = sha3.sha3_512;
-    } catch (e) {
-        console.error('js-sha3 module not installed');
-    }
-    try {
-        deps.argon2 = require('argon2');
-    } catch (e) {
-        console.error('argon2 module not installed');
-    }
-} else {
-    if (typeof self.crypto !== 'undefined') {
-        deps.crypto = self.crypto; // Web Crypto API (Standard)
-    } else if (typeof window !== 'undefined' && window.crypto) {
-        deps.crypto = window.crypto;
+// Initialize Dependencies, call once before use
+function InitBencrypt() {
+    if (isNode) {
+        try { deps.crypto = require('crypto'); }
+        catch (e) { console.error('crypto module not found'); }
+        try {
+            const sha3 = require('js-sha3');
+            deps.sha3256 = sha3.sha3_256;
+            deps.sha3512 = sha3.sha3_512;
+        } catch (e) {
+            console.error('js-sha3 module not installed');
+        }
+        try { deps.argon2 = require('argon2'); } 
+        catch (e) { console.error('argon2 module not installed'); }
+
     } else {
-        console.error('web crypto api not found');
-    }
-    if (window.sha3_256 && window.sha3_512) {
-        deps.sha3256 = window.sha3_256;
-        deps.sha3512 = window.sha3_512;
-    } else {
-        console.error('sha3 module not installed');
-    }
-    if (window.argon2) {
-        deps.argon2 = window.argon2;
-    } else {
-        console.error('argon2 module not installed');
+        if (typeof self.crypto !== 'undefined') {deps.crypto = self.crypto; } 
+        else if (typeof window !== 'undefined' && window.crypto) { deps.crypto = window.crypto; } 
+        else { console.error('web crypto api not found'); }
+        if (window.sha3_256 && window.sha3_512) {
+            deps.sha3256 = window.sha3_256;
+            deps.sha3512 = window.sha3_512;
+        } else {
+            console.error('sha3 module not installed');
+        }
+        if (window.argon2) { deps.argon2 = window.argon2; }
+        else { console.error('argon2 module not installed'); }
+        if (window.noble && window.noble.x448 && window.noble.ed448) { deps.noble = window.noble; } 
+        else { console.error('@noble/curves module not installed'); }
     }
 }
 
@@ -805,143 +800,128 @@ class RSA1 {
 
 class ECC1 {
     constructor() {
-        this.pub = null; // Node: KeyObject, Browser: CryptoKey
-        this.pri = null; // Node: KeyObject, Browser: CryptoKey
-        this.signPub = null; // Browser only: CryptoKey
-        this.signPri = null; // Browser only: CryptoKey
+        this.pubX = null; // 56 bytes
+        this.priX = null; // 56 bytes
+        this.pubEd = null; // 57 bytes
+        this.priEd = null; // 57 bytes
         this.em = new AES1();
         // encryption format: [1B PubLen][PubKey][encdata][tag]
     }
 
     /**
-     * Generate P-521 Key Pair: DER(PKIX, PKCS8) format
+     * Generate Curve448 Key Pair: [X448 56B][Ed448 57B] format
      * @returns {Promise<[Uint8Array, Uint8Array]>} (public, private)
      */
     async genkey() {
         if (isNode) {
-            return new Promise((resolve, reject) => { // wrap in promise
-                deps.crypto.generateKeyPair('ec', {
-                    namedCurve: 'P-521',
-                    publicKeyEncoding: { type: 'spki', format: 'der' },
-                    privateKeyEncoding: { type: 'pkcs8', format: 'der' }
-                }, (err, pub, pri) => {
-                    if (err) reject(err);
-                    else {
-                        this.loadkey(new Uint8Array(pub), new Uint8Array(pri));
-                        resolve([new Uint8Array(pub), new Uint8Array(pri)]);
-                    }
-                });
-            });
+            // X448 - Raw export supported in Node 16+
+            const xKp = deps.crypto.generateKeyPairSync('x448');
+            const pubX = xKp.publicKey.export({ format: 'raw', type: 'spki' });
+            const priX = xKp.privateKey.export({ format: 'raw', type: 'pkcs8' });
+            
+            // Ed448
+            const edKp = deps.crypto.generateKeyPairSync('ed448');
+            const pubEd = edKp.publicKey.export({ format: 'raw', type: 'spki' });
+            const priEd = edKp.privateKey.export({ format: 'raw', type: 'pkcs8' });
+
+            // Concat
+            const pubFull = new Uint8Array(113);
+            pubFull.set(new Uint8Array(pubX), 0);
+            pubFull.set(new Uint8Array(pubEd), 56);
+            const priFull = new Uint8Array(113);
+            priFull.set(new Uint8Array(priX), 0);
+            priFull.set(new Uint8Array(priEd), 56);
+
+            // Assign
+            this.pubX = new Uint8Array(pubX); this.priX = new Uint8Array(priX);
+            this.pubEd = new Uint8Array(pubEd); this.priEd = new Uint8Array(priEd);
+            return [pubFull, priFull];
+
         } else {
-            const keyPair = await deps.crypto.subtle.generateKey(
-                { name: "ECDH", namedCurve: "P-521" },
-                true,
-                ["deriveBits"]
-            );
-            const pub = new Uint8Array(await deps.crypto.subtle.exportKey("spki", keyPair.publicKey));
-            const pri = new Uint8Array(await deps.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-            await this.loadkey(pub, pri);
-            return [pub, pri];
+            // Generate keys
+            const priX = deps.noble.x448.utils.randomPrivateKey();
+            const pubX = deps.noble.x448.getPublicKey(priX);
+            const priEd = deps.noble.ed448.utils.randomPrivateKey();
+            const pubEd = deps.noble.ed448.getPublicKey(priEd);
+
+            // Concat
+            const pubFull = new Uint8Array(113);
+            pubFull.set(pubX, 0);
+            pubFull.set(pubEd, 56);
+            const priFull = new Uint8Array(113);
+            priFull.set(priX, 0);
+            priFull.set(priEd, 56);
+
+            // Assign
+            this.pubX = pubX; this.priX = priX;
+            this.pubEd = pubEd; this.priEd = priEd;
+            return [pubFull, priFull];
         }
     }
 
     /**
-     * Load P-521 Key Pair: DER(PKIX, PKCS8) format
+     * Load Curve448 Key Pair: [X448 56B][Ed448 57B] format
      * @param {Uint8Array} pub 
      * @param {Uint8Array} pri 
      */
     async loadkey(pub, pri) {
-        if (isNode) {
-            if (pub != null) this.pub= deps.crypto.createPublicKey({ key: pub, format: 'der', type: 'spki' });
-            if (pri != null) this.pri = deps.crypto.createPrivateKey({ key: pri, format: 'der', type: 'pkcs8' });
-        } else { // double import in browser
-            if (pub != null) {
-                this.pub = await deps.crypto.subtle.importKey(
-                    "spki", pub, { name: "ECDH", namedCurve: "P-521" }, true, []
-                );
-                this.signPub = await deps.crypto.subtle.importKey(
-                    "spki", pub, 
-                    { name: "ECDSA", namedCurve: "P-521" }, 
-                    false, ["verify"]
-                );
-            }
-            if (pri != null) {
-                this.pri = await deps.crypto.subtle.importKey(
-                    "pkcs8", pri, { name: "ECDH", namedCurve: "P-521" }, true, ["deriveBits"]
-                );
-                this.signPri = await deps.crypto.subtle.importKey(
-                    "pkcs8", pri, 
-                    { name: "ECDSA", namedCurve: "P-521" }, 
-                    false, ["sign"]
-                );
-            }
+        if (pub != null) {
+            const p = toU8(pub);
+            if (p.length !== 113) throw new Error("Invalid Curve448 public key length (must be 113 bytes)");
+            this.pubX = p.slice(0, 56);
+            this.pubEd = p.slice(56, 113);
+        }
+        if (pri != null) {
+            const p = toU8(pri);
+            if (p.length !== 113) throw new Error("Invalid Curve448 private key length (must be 113 bytes)");
+            this.priX = p.slice(0, 56);
+            this.priEd = p.slice(56, 113);
         }
     }
 
     /**
      * encrypt with receiver's public key
      * @param {Uint8Array} data
-     * @param {Object} receiver // Node: KeyObject, Browser: CryptoKey
+     * @param {Uint8Array} receiver
      * @returns {Promise<Uint8Array>}
      */
     async encrypt(data, receiver) {
+        // check receiver
+        const d = toU8(data);
+        const r = toU8(receiver);
+        if (r.length !== 113) throw new Error("Invalid receiver key");
+        const peerPubRaw = r.slice(0, 56); // Extract X448 public
+        let sharedSecret, ephPubRaw;
+
         if (isNode) {
-            const ecdh = deps.crypto.createECDH('secp521r1'); // P-521
-            ecdh.generateKeys();
-            ephPub = ecdh;
-
-            const tempKey = deps.crypto.generateKeyPairSync('ec', { namedCurve: 'P-521' });
-            const sharedRaw = deps.crypto.diffieHellman({
-                privateKey: tempKey.privateKey,
-                publicKey: receiver
-            }); // sharedRaw is the X coordinate (Big Endian) for EC
-            const ephPubDer = tempKey.publicKey.export({ format: 'der', type: 'spki' }); // export tempKey public
+            // make temp key
+            const ephKp = deps.crypto.generateKeyPairSync('x448');
+            ephPubRaw = ephKp.publicKey.export({ format: 'raw', type: 'spki' });
             
-            // Big Endian X -> Little Endian 128 Bytes
-            const sharedValue = new Uint8Array(128);
-            const rawRev = Uint8Array.from(sharedRaw).reverse();
-            sharedValue.set(rawRev, 0);
-            
-            // KDF, Encrypt
-            const gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44);
-            const enc = await this.em.enAESGCM(gcmKey, data);
-
-            // Return
-            const lenBuf = new Uint8Array([ephPubDer.length]);
-            if (ephPubDer.length > 255) throw new Error("key too long");
-            return Buffer.concat([lenBuf, ephPubDer, enc]);
-
+            // get shared secret
+            const peerKeyObj = deps.crypto.createPublicKey({ key: peerPubRaw, format: 'raw', type: 'spki' });
+            sharedSecret = deps.crypto.diffieHellman({
+                privateKey: ephKp.privateKey,
+                publicKey: peerKeyObj
+            });
+            ephPubRaw = new Uint8Array(ephPubRaw); // ensure Uint8Array
         } else {
-            // Generate temp ephemeral key
-            const tempKey = await deps.crypto.subtle.generateKey(
-                { name: "ECDH", namedCurve: "P-521" }, true, ["deriveBits"]
-            );
-            const sharedBits = await deps.crypto.subtle.deriveBits(
-                { name: "ECDH", public: receiver },
-                tempKey.privateKey,
-                528 // 66 bytes
-            ); // sharedBits is the X coordinate (Big Endian)
-            
-            // Big Endian X -> Little Endian 128 Bytes
-            const sharedRaw = new Uint8Array(sharedBits);
-            const sharedValue = new Uint8Array(128);
-            for(let i=0; i<sharedRaw.length; i++) {
-                sharedValue[i] = sharedRaw[sharedRaw.length - 1 - i];
-            }
-
-            // KDF, Encrypt
-            const gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44);
-            const enc = await this.em.enAESGCM(gcmKey, data);
-            
-            // return
-            const pubBytes = new Uint8Array(await deps.crypto.subtle.exportKey("spki", ephKey.publicKey));
-            if (pubBytes.length > 255) throw new Error("key too long");
-            const res = new Uint8Array(1 + pubBytes.length + enc.length);
-            res[0] = pubBytes.length;
-            res.set(pubBytes, 1);
-            res.set(enc, 1 + pubBytes.length);
-            return res;
+            // make temp key, get shared secret
+            const ephPri = deps.noble.x448.utils.randomPrivateKey();
+            ephPubRaw = deps.noble.x448.getPublicKey(ephPri);
+            sharedSecret = deps.noble.x448.getSharedSecret(ephPri, peerPubRaw);
         }
+
+        // encrypt
+        const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 44);
+        const enc = await this.em.enAESGCM(gcmKey, d);
+
+        // Pack: [1B Len][EphPub][Enc]
+        const res = new Uint8Array(1 + ephPubRaw.length + enc.length);
+        res[0] = ephPubRaw.length;
+        res.set(ephPubRaw, 1);
+        res.set(enc, 1 + ephPubRaw.length);
+        return res;
     }
 
     /**
@@ -953,90 +933,56 @@ class ECC1 {
         // parse data
         const d = toU8(data);
         const keyLen = d[0];
-        const ephPubBytes = d.slice(1, 1 + keyLen);
+        const ephPubRaw = d.slice(1, 1 + keyLen);
         const enc = d.slice(1 + keyLen);
-        
-        let sharedValue; // make shared value (128B, little endian)
-        if (isNode) {
-            const ephPub = deps.crypto.createPublicKey({ key: ephPubBytes, format: 'der', type: 'spki' });
-            const sharedRaw = deps.crypto.diffieHellman({
-                privateKey: this.pri,
-                publicKey: ephPub
-            });
-            sharedValue = new Uint8Array(128);
-            const rawRev = Uint8Array.from(sharedRaw).reverse();
-            sharedValue.set(rawRev, 0);
 
+        // get shared secret
+        let sharedSecret;
+        if (isNode) {
+            const ephKeyObj = deps.crypto.createPublicKey({ key: ephPubRaw, format: 'raw', type: 'spki' });
+            const myPriKeyObj = deps.crypto.createPrivateKey({ key: this.priX, format: 'raw', type: 'x448' });
+            sharedSecret = deps.crypto.diffieHellman({
+                privateKey: myPriKeyObj,
+                publicKey: ephKeyObj
+            });
         } else {
-            const ephPub = await deps.crypto.subtle.importKey(
-                "spki", ephPubBytes, { name: "ECDH", namedCurve: "P-521" }, false, []
-            );
-            const sharedBits = await deps.crypto.subtle.deriveBits(
-                { name: "ECDH", public: ephPub },
-                this.pri,
-                528
-            );
-            const sharedRaw = new Uint8Array(sharedBits);
-            sharedValue = new Uint8Array(128);
-            for(let i=0; i<sharedRaw.length; i++) {
-                sharedValue[i] = sharedRaw[sharedRaw.length - 1 - i];
-            }
+            sharedSecret = deps.noble.x448.getSharedSecret(this.priX, ephPubRaw);
         }
 
-        // KDF, Decrypt
-        const gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44);
+        // decrypt
+        const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 44);
         return await this.em.deAESGCM(gcmKey, enc);
     }
 
     /** 
-     * sign with private key, DER-SHA-256
+     * sign with private key, Ed448
      * @param {Uint8Array} data
      * @returns {Promise<Uint8Array>}
      */
     async sign(data) {
         const d = toU8(data);
         if (isNode) {
-            const sign = deps.crypto.createSign('SHA256');
-            sign.update(d);
-            const sig = sign.sign(this.pri);
-            return new Uint8Array(sig);
-
+             const myPriKeyObj = deps.crypto.createPrivateKey({ key: this.priEd, format: 'raw', type: 'ed448' });
+            return new Uint8Array(deps.crypto.sign(null, d, myPriKeyObj));
         } else {
-            const rawSig = await deps.crypto.subtle.sign(
-                { name: "ECDSA", hash: "SHA-256" },
-                this.signPri,
-                d
-            );
-            return toDER(new Uint8Array(rawSig), 521); // Convert P1363 (Raw) to DER
+            return deps.noble.ed448.sign(d, this.priEd);
         }
     }
 
     /** 
-     * verify with public key, DER-SHA-256
+     * verify with public key, Ed448
      * @param {Uint8Array} data
      * @param {Uint8Array} signature
      * @returns {Promise<boolean>}
      */
     async verify(data, signature) {
         const d = toU8(data);
-        const sig = toU8(signature);
+        const s = toU8(signature);
         if (isNode) {
-            const verify = deps.crypto.createVerify('SHA256');
-            verify.update(d);
-            return verify.verify(this.pub, sig);
-
+             const myPubKeyObj = deps.crypto.createPublicKey({ key: this.pubEd, format: 'raw', type: 'spki' });
+            return deps.crypto.verify(null, d, myPubKeyObj, s);
         } else {
-            try {
-                const rawSig = fromDER(sig, 521); // Convert DER to P1363 (Raw)
-                return await deps.crypto.subtle.verify(
-                    { name: "ECDSA", hash: "SHA-256" },
-                    this.signPub,
-                    rawSig,
-                    d
-                );
-            } catch (e) {
-                return false;
-            }
+            return deps.noble.ed448.verify(s, d, this.pubEd);
         }
     }
 }

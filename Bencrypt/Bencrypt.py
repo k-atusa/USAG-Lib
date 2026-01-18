@@ -19,6 +19,9 @@ from Cryptodome.Hash import SHA256, SHA512
 from Cryptodome.PublicKey import ECC
 from Cryptodome.Signature import DSS
 
+from cryptography.hazmat.primitives.asymmetric import x448, ed448
+from cryptography.hazmat.primitives import serialization
+
 def mkiv(g: bytes, c: int) -> bytearray:
     g, c = bytearray(g), c.to_bytes(8, 'little')
     for i in range(0, 8):
@@ -167,55 +170,71 @@ class RSA1:
         except (ValueError, TypeError):
             return False
 
-class ECC1:
+class ECC1: # Curve448
     def __init__(self):
-        self.public: Optional[ECC.EccKey] = None
-        self.private: Optional[ECC.EccKey] = None
+        self.pubX: Optional[x448.X448PublicKey] = None
+        self.priX: Optional[x448.X448PrivateKey] = None
+        self.pubEd: Optional[ed448.Ed448PublicKey] = None
+        self.priEd: Optional[ed448.Ed448PrivateKey] = None
         self.em = AES1()
         # encryption format: [1B PubLen][PubKey][encdata][tag]
 
-    def genkey(self) -> Tuple[bytes, bytes]: # DER(PKIX, PKCS8) format, (public, private)
-        key = ECC.generate(curve='P-521')
-        self.private = key
-        self.public = key.public_key()
-        return (self.public.export_key(format='DER'), self.private.export_key(format='DER', use_pkcs8=True))
+    def genkey(self) -> Tuple[bytes, bytes]: # [X448 56B][Ed448 57B] format, (public, private)
+        # 1. Generate both keys
+        self.priX = x448.X448PrivateKey.generate()
+        self.pubX = self.priX.public_key()
+        self.priEd = ed448.Ed448PrivateKey.generate()
+        self.pubEd = self.priEd.public_key()
 
-    def loadkey(self, public: bytes|None, private: bytes|None): # DER(PKIX, PKCS8) format, load if not None
-        if public is not None:
-            self.public = ECC.import_key(public)
-        if private is not None:
-            self.private = ECC.import_key(private)
+        # 2. Get Raw Bytes
+        pub0 = self.pubX.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        pri0 = self.priX.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
+        pub1 = self.pubEd.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        pri1 = self.priEd.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
 
-    def encrypt(self, data: bytes, receiver: ECC.EccKey) -> bytes: # encrypt with receiver's public key
-        tempKey = ECC.generate(curve='P-521') # ephemeral key
-        sharedPtr = receiver.pointQ * tempKey.d # shared secret (ECDH)
-        sharedValue = sharedPtr.x.to_bytes(128, 'little') # x coordinate 128B as secret
-        gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
-        enc = self.em.enAESGCM(gcmKey, data)
-        pubBytes = tempKey.public_key().export_key(format='DER') # ephemeral public key
-        if len(pubBytes) > 255:
-            raise ValueError("key too long")
-        return len(pubBytes).to_bytes(1, 'big') + pubBytes + enc
+        # 3. Join to 113B
+        return (pub0 + pub1, pri0 + pri1)
+
+    def loadkey(self, public: bytes|None, private: bytes|None): # [X448 56B][Ed448 57B] format, load if not None
+        if public != None:
+            if len(public) != 113: raise ValueError("Invalid Curve448 public key length (must be 113 bytes)")
+            self.pubX = x448.X448PublicKey.from_public_bytes(public[:56])
+            self.pubEd = ed448.Ed448PublicKey.from_public_bytes(public[56:])
+        if private != None:
+            if len(private) != 113: raise ValueError("Invalid Curve448 private key length (must be 113 bytes)")
+            self.priX = x448.X448PrivateKey.from_private_bytes(private[:56])
+            self.priEd = ed448.Ed448PrivateKey.from_private_bytes(private[56:])
+
+    def encrypt(self, data: bytes, receiver: bytes) -> bytes: # encrypt with receiver's public key
+        if len(receiver) != 113: raise ValueError("Invalid receiver key")
+        peerKey = x448.X448PublicKey.from_public_bytes(receiver[:56]) # 1. Get receiver X448 public key
+        tempKey = x448.X448PrivateKey.generate() # 2. Generate temp ephemeral key
+        tempPub = tempKey.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        shared = tempKey.exchange(peerKey) # 3. Get shared secret (ECDH)
+        gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
+        enc = self.em.enAESGCM(gcmKey, data) # 4. Encrypt with AES-GCM
+        return len(tempPub).to_bytes(1, 'big') + tempPub + enc
 
     def decrypt(self, data: bytes) -> bytes:
-        keyLen = data[0]
-        tempPub = ECC.import_key(data[1 : 1 + keyLen]) # ephemeral public key
-        enc = data[1 + keyLen :]
-        sharedPtr = tempPub.pointQ * self.private.d # shared secret (ECDH)
-        sharedValue = sharedPtr.x.to_bytes(128, 'little') # x coordinate 128B as secret
-        gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44)
+        # 1. parse data
+        keylen = data[0]
+        tempPub = data[1 : 1 + keylen]
+        enc = data[1 + keylen :]
+
+        # 2. Load key, Get shared secret (ECDH)
+        tempKey = x448.X448PublicKey.from_public_bytes(tempPub)
+        shared = self.priX.exchange(tempKey)
+
+        # 3. Decrypt with AES-GCM
+        gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
         return self.em.deAESGCM(gcmKey, enc)
 
-    def sign(self, data: bytes) -> bytes: # DSA-SHA-256
-        h = SHA256.new(data)
-        signer = DSS.new(self.private, 'fips-186-3', encoding='der')
-        return signer.sign(h)
+    def sign(self, data: bytes) -> bytes: # Ed448
+        return self.priEd.sign(data)
 
-    def verify(self, data: bytes, signature: bytes) -> bool: # DSA-SHA-256
+    def verify(self, data: bytes, signature: bytes) -> bool: # Ed448
         try:
-            h = SHA256.new(data)
-            verifier = DSS.new(self.public, 'fips-186-3', encoding='der')
-            verifier.verify(h, signature)
+            self.pubEd.verify(signature, data)
             return True
-        except (ValueError, TypeError):
+        except:
             return False

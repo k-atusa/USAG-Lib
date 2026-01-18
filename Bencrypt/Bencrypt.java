@@ -12,6 +12,17 @@ import org.bouncycastle.crypto.digests.SHA3Digest;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.macs.HMac;
 import org.bouncycastle.crypto.params.Argon2Parameters;
+import org.bouncycastle.crypto.generators.X448KeyPairGenerator;
+import org.bouncycastle.crypto.generators.Ed448KeyPairGenerator;
+import org.bouncycastle.crypto.params.X448KeyGenerationParameters;
+import org.bouncycastle.crypto.params.Ed448KeyGenerationParameters;
+import org.bouncycastle.crypto.params.X448PrivateKeyParameters;
+import org.bouncycastle.crypto.params.X448PublicKeyParameters;
+import org.bouncycastle.crypto.params.Ed448PrivateKeyParameters;
+import org.bouncycastle.crypto.params.Ed448PublicKeyParameters;
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
+import org.bouncycastle.crypto.agreement.X448Agreement;
+import org.bouncycastle.crypto.signers.Ed448Signer;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,7 +39,6 @@ import java.util.concurrent.Future;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyAgreement;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.OAEPParameterSpec;
@@ -44,7 +54,6 @@ import java.security.KeyPairGenerator;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.security.spec.ECGenParameterSpec;
 
 public class Bencrypt {
     public Bencrypt() {
@@ -52,8 +61,10 @@ public class Bencrypt {
         this.processed = 0;
         this.RSApub = null;
         this.RSApri = null;
-        this.ECCpub = null;
-        this.ECCpri = null;
+        this.pubX = null;
+        this.priX = null;
+        this.pubEd = null;
+        this.priEd = null;
     }
 
     // ========== Basic Functions ==========
@@ -414,101 +425,134 @@ public class Bencrypt {
     }
 
     // ========== ECC1 Functions ==========
-    public PublicKey ECCpub;
-    public PrivateKey ECCpri;
+    public X448PublicKeyParameters pubX;
+    public X448PrivateKeyParameters priX;
+    public Ed448PublicKeyParameters pubEd;
+    public Ed448PrivateKeyParameters priEd;
 
-    private byte[] getSharedValue(PrivateKey pri, PublicKey pub) throws Exception {
-        KeyAgreement ka = KeyAgreement.getInstance("ECDH");
-        ka.init(pri);
-        ka.doPhase(pub, true);
-        byte[] rawSecret = ka.generateSecret(); // Big Endian X coordinate
-        byte[] sharedValue = new byte[128];
-        for (int i = 0; i < rawSecret.length; i++) { // 128B little endian
-            sharedValue[i] = rawSecret[rawSecret.length - 1 - i];
-        }
-        return sharedValue;
-    }
-
-    // Generate ECC key (public, private), DER(PKIX, PKCS8) format
+    // Generate ECC key (public, private), [X448 56B][Ed448 57B] format
     public byte[][] ECCgenkey() throws Exception {
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
-        kpg.initialize(new ECGenParameterSpec("secp521r1")); // P-521
-        KeyPair kp = kpg.generateKeyPair();
-        this.ECCpub = kp.getPublic();
-        this.ECCpri = kp.getPrivate();
-        return new byte[][] {
-            this.ECCpub.getEncoded(),
-            this.ECCpri.getEncoded()
-        };
+        SecureRandom rnd = new SecureRandom();
+
+        // 1. Generate X448
+        X448KeyPairGenerator xGen = new X448KeyPairGenerator();
+        xGen.init(new X448KeyGenerationParameters(rnd));
+        AsymmetricCipherKeyPair xKp = xGen.generateKeyPair();
+        this.pubX = (X448PublicKeyParameters) xKp.getPublic();
+        this.priX = (X448PrivateKeyParameters) xKp.getPrivate();
+
+        // 2. Generate Ed448
+        Ed448KeyPairGenerator edGen = new Ed448KeyPairGenerator();
+        edGen.init(new Ed448KeyGenerationParameters(rnd));
+        AsymmetricCipherKeyPair edKp = edGen.generateKeyPair();
+        this.pubEd = (Ed448PublicKeyParameters) edKp.getPublic();
+        this.priEd = (Ed448PrivateKeyParameters) edKp.getPrivate();
+
+        // 3. Get Raw Bytes & Concatenate
+        byte[] xPubB = this.pubX.getEncoded(); // 56 bytes
+        byte[] xPriB = this.priX.getEncoded(); // 56 bytes
+        byte[] edPubB = this.pubEd.getEncoded(); // 57 bytes
+        byte[] edPriB = this.priEd.getEncoded(); // 57 bytes
+
+        byte[] pubFull = new byte[113];
+        System.arraycopy(xPubB, 0, pubFull, 0, 56);
+        System.arraycopy(edPubB, 0, pubFull, 56, 57);
+
+        byte[] priFull = new byte[113];
+        System.arraycopy(xPriB, 0, priFull, 0, 56);
+        System.arraycopy(edPriB, 0, priFull, 56, 57);
+
+        return new byte[][] { pubFull, priFull };
     }
 
-    // Load ECC key if not null (public, private), DER(PKIX, PKCS8) format
+    // Load ECC key if not null (public, private), [X448 56B][Ed448 57B] format
     public void ECCloadkey(byte[] pubBytes, byte[] priBytes) throws Exception {
-        KeyFactory kf = KeyFactory.getInstance("EC");
         if (pubBytes != null) {
-            this.ECCpub = kf.generatePublic(new X509EncodedKeySpec(pubBytes));
+            if (pubBytes.length != 113) throw new IllegalArgumentException("Invalid Curve448 public key length");
+            byte[] xPubB = Arrays.copyOfRange(pubBytes, 0, 56);
+            byte[] edPubB = Arrays.copyOfRange(pubBytes, 56, 113);
+            this.pubX = new X448PublicKeyParameters(xPubB, 0);
+            this.pubEd = new Ed448PublicKeyParameters(edPubB, 0);
         }
         if (priBytes != null) {
-            this.ECCpri = kf.generatePrivate(new PKCS8EncodedKeySpec(priBytes));
+            if (priBytes.length != 113) throw new IllegalArgumentException("Invalid Curve448 private key length");
+            byte[] xPriB = Arrays.copyOfRange(priBytes, 0, 56);
+            byte[] edPriB = Arrays.copyOfRange(priBytes, 56, 113);
+            this.priX = new X448PrivateKeyParameters(xPriB, 0);
+            this.priEd = new Ed448PrivateKeyParameters(edPriB, 0);
         }
     }
 
     // ECC encrypt with receiver's public key, output: [1B KeyLen][PubKey][Ciphertext]
-    public byte[] ECCencrypt(byte[] data, PublicKey receiver) throws Exception {
-        // 1. Generate Ephemeral Key Pair
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
-        kpg.initialize(new ECGenParameterSpec("secp521r1"));
-        KeyPair tempKey = kpg.generateKeyPair();
+    public byte[] ECCencrypt(byte[] data, byte[] receiver) throws Exception {
+        if (receiver.length != 113) throw new IllegalArgumentException("Invalid receiver key");
+            
+        // 1. Parse Receiver X448 Public Key
+        byte[] peerPubRaw = Arrays.copyOfRange(receiver, 0, 56);
+        X448PublicKeyParameters peerPub = new X448PublicKeyParameters(peerPubRaw, 0);
 
-        // 2. ECDH & KDF, encrypt
-        byte[] sharedValue = getSharedValue(tempKey.getPrivate(), receiver);
-        byte[] gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44);
+        // 2. Generate Ephemeral Key
+        X448KeyPairGenerator xGen = new X448KeyPairGenerator();
+        xGen.init(new X448KeyGenerationParameters(new SecureRandom()));
+        AsymmetricCipherKeyPair ephKp = xGen.generateKeyPair();
+        X448PublicKeyParameters ephPub = (X448PublicKeyParameters) ephKp.getPublic();
+        X448PrivateKeyParameters ephPri = (X448PrivateKeyParameters) ephKp.getPrivate();
+
+        // 3. ECDH Agreement
+        X448Agreement agreement = new X448Agreement();
+        agreement.init(ephPri);
+        byte[] sharedSecret = new byte[agreement.getAgreementSize()];
+        agreement.calculateAgreement(peerPub, sharedSecret, 0);
+
+        // 4. KDF & Encrypt
+        byte[] gcmKey = genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
         byte[] enc = enAESGCM(gcmKey, data);
 
-        // 3. Pack Result
-        byte[] pubBytes = tempKey.getPublic().getEncoded();
-        if (pubBytes.length > 255) throw new IllegalArgumentException("key too long");
-        byte[] result = new byte[1 + pubBytes.length + enc.length];
-        result[0] = (byte) pubBytes.length;
-        System.arraycopy(pubBytes, 0, result, 1, pubBytes.length);
-        System.arraycopy(enc, 0, result, 1 + pubBytes.length, enc.length);
-        return result;
+        // 5. Pack
+        byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
+        byte[] res = new byte[1 + ephPubRaw.length + enc.length];
+        res[0] = (byte) ephPubRaw.length;
+        System.arraycopy(ephPubRaw, 0, res, 1, ephPubRaw.length);
+        System.arraycopy(enc, 0, res, 1 + ephPubRaw.length, enc.length);
+        return res;
     }
 
     // ECC decrypt with my private key
     public byte[] ECCdecrypt(byte[] data) throws Exception {
-        // 1. Parse Data
-        int keyLen = data[0] & 0xFF; // unsigned conversion
-        byte[] ephPubBytes = new byte[keyLen];
-        System.arraycopy(data, 1, ephPubBytes, 0, keyLen);
-        byte[] enc = new byte[data.length - 1 - keyLen];
-        System.arraycopy(data, 1 + keyLen, enc, 0, enc.length);
+        // 1. Parse
+        int keyLen = data[0] & 0xFF;
+        byte[] ephPubRaw = Arrays.copyOfRange(data, 1, 1 + keyLen);
+        byte[] enc = Arrays.copyOfRange(data, 1 + keyLen, data.length);
 
-        // 2. Load Ephemeral Public Key
-        KeyFactory kf = KeyFactory.getInstance("EC");
-        PublicKey ephPub = kf.generatePublic(new X509EncodedKeySpec(ephPubBytes));
+        // 2. Load Eph Public Key
+        X448PublicKeyParameters ephPub = new X448PublicKeyParameters(ephPubRaw, 0);
 
-        // 3. ECDH & KDF, decrypt
-        byte[] sharedValue = getSharedValue(this.ECCpri, ephPub);
-        byte[] gcmKey = genkey(sharedValue, "KEYGEN_ECC1_ENCRYPT", 44);
+        // 3. ECDH Agreement
+        X448Agreement agreement = new X448Agreement();
+        agreement.init(this.priX);
+        byte[] sharedSecret = new byte[agreement.getAgreementSize()];
+        agreement.calculateAgreement(ephPub, sharedSecret, 0);
+
+        // 4. KDF & Decrypt
+        byte[] gcmKey = genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
         return deAESGCM(gcmKey, enc);
     }
 
-    // ECC sign: DER-SHA-256
+    // ECC sign: Ed448
     public byte[] ECCsign(byte[] data) throws Exception {
-        Signature sig = Signature.getInstance("SHA256withECDSA");
-        sig.initSign(this.ECCpri);
-        sig.update(data);
-        return sig.sign();
+        Ed448Signer signer = new Ed448Signer(new byte[0]); // context empty
+        signer.init(true, this.priEd);
+        signer.update(data, 0, data.length);
+        return signer.generateSignature();
     }
 
-    // ECC verify: DER-SHA-256
+    // ECC verify: Ed448
     public boolean ECCverify(byte[] data, byte[] signature) {
         try {
-            Signature sig = Signature.getInstance("SHA256withECDSA");
-            sig.initVerify(this.ECCpub);
-            sig.update(data);
-            return sig.verify(signature);
+            Ed448Signer signer = new Ed448Signer(new byte[0]); // context empty
+            signer.init(false, this.pubEd);
+            signer.update(data, 0, data.length);
+            return signer.verifySignature(signature);
         } catch (Exception e) {
             return false;
         }
