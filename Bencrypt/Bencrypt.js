@@ -107,48 +107,6 @@ function hmac_sha3_512(key, msg) {
     return sha3512(outerData);
 }
 
-function toDER(rawSig, curveBits) {
-    const n = Math.ceil(curveBits / 8); // 66 for P-521
-    const r = rawSig.slice(0, n);
-    const s = rawSig.slice(n);
-
-    function trimAndPad(buf) {
-        // Remove leading zeros
-        let i = 0;
-        while (i < buf.length - 1 && buf[i] === 0) i++;
-        let res = buf.slice(i);
-        // If MSB is 1, prepend 0x00 (DER Integer rule)
-        if ((res[0] & 0x80) !== 0) {
-            const temp = new Uint8Array(res.length + 1);
-            temp[0] = 0x00;
-            temp.set(res, 1);
-            res = temp;
-        }
-        return res;
-    }
-    const rDer = trimAndPad(r);
-    const sDer = trimAndPad(s);
-    
-    // Construct Sequence
-    const totalLen = rDer.length + sDer.length + 4; // 2 tags + 2 lengths
-    const res = new Uint8Array(totalLen + 2); // + Sequence tag + len
-    
-    let offset = 0;
-    res[offset++] = 0x30; // Sequence
-    res[offset++] = totalLen;
-    
-    res[offset++] = 0x02; // Integer
-    res[offset++] = rDer.length;
-    res.set(rDer, offset);
-    offset += rDer.length;
-    
-    res[offset++] = 0x02; // Integer
-    res[offset++] = sDer.length;
-    res.set(sDer, offset);
-    
-    return res;
-}
-
 function fromDER(derSig, curveBits) {
     // Basic ASN.1 Parser for SEQUENCE { INTEGER r, INTEGER s }
     let offset = 0;

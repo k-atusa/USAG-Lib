@@ -16,8 +16,6 @@ from Cryptodome.PublicKey import RSA
 from Cryptodome.Cipher import PKCS1_OAEP
 from Cryptodome.Signature import pkcs1_15
 from Cryptodome.Hash import SHA256, SHA512
-from Cryptodome.PublicKey import ECC
-from Cryptodome.Signature import DSS
 
 from cryptography.hazmat.primitives.asymmetric import x448, ed448
 from cryptography.hazmat.primitives import serialization
