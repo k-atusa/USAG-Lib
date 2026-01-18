@@ -6,7 +6,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
-	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha3"
 	"crypto/sha512"
@@ -22,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 type aesResult struct {
@@ -66,14 +66,14 @@ func Sha3512(data []byte) []byte {
 }
 
 // default iter=1000000, outsize=64
-func Pbkdf2(pw []byte, salt []byte, iter int, outsize int) ([]byte, error) {
+func Pbkdf2(pw []byte, salt []byte, iter int, outsize int) []byte {
 	if iter <= 0 {
 		iter = 1000000
 	}
 	if outsize <= 0 {
 		outsize = 64
 	}
-	return pbkdf2.Key(sha512.New, string(pw), salt, iter, outsize)
+	return pbkdf2.Key(pw, salt, iter, outsize, sha512.New)
 }
 
 // fixxed parameters: Time=3, Mem=262144(256MB), Parallel=4, HashLen=32
@@ -145,50 +145,56 @@ func (a *AES1) Init() { a.processed = 0 }
 
 func (a *AES1) Processed() int { return int(atomic.LoadInt64(&a.processed)) }
 
-func (a *AES1) inlineEnc(key []byte, iv []byte, data []byte) []byte {
-	block, e0 := aes.NewCipher(key)
-	aesgcm, e1 := cipher.NewGCM(block)
-	if e0 != nil || e1 != nil {
-		panic(e0.Error() + e1.Error()) // AES fail should not happen
-	}
-	return aesgcm.Seal(data[:0], iv, data, nil)
-}
-
-func (a *AES1) inlineDec(key []byte, iv []byte, data []byte) []byte {
-	block, e0 := aes.NewCipher(key)
-	aesgcm, e1 := cipher.NewGCM(block)
-	plain, e2 := aesgcm.Open(data[:0], iv, data, nil)
-	if e0 != nil || e1 != nil || e2 != nil {
-		panic(e0.Error() + e1.Error() + e2.Error()) // AES fail should not happen
-	}
-	return plain
-}
-
 // AES-GCM encryption, 44B key (12B IV + 32B AES Key)
-func (a *AES1) EnAESGCM(key [44]byte, data []byte) []byte {
+func (a *AES1) EnAESGCM(key [44]byte, data []byte) ([]byte, error) {
+	// basic setup
 	a.processed = 0
 	iv := key[:12]
 	aeskey := key[12:]
-	d := make([]byte, len(data), len(data)+16)
-	copy(d, data)
-	enc := a.inlineEnc(aeskey, iv, d)
+
+	// make AES cipher
+	block, e0 := aes.NewCipher(aeskey)
+	if e0 != nil {
+		return nil, e0
+	}
+	aesgcm, e1 := cipher.NewGCM(block)
+	if e1 != nil {
+		return nil, e1
+	}
+
+	// encrypt
+	enc := aesgcm.Seal(nil, iv, data, nil)
 	a.processed = int64(len(data))
-	return enc // format: [encdata][tag 16B]
+	return enc, nil // format: [encdata][tag 16B]
 }
 
 // AES-GCM decryption, 44B key (12B IV + 32B AES Key)
-func (a *AES1) DeAESGCM(key [44]byte, data []byte) []byte {
+func (a *AES1) DeAESGCM(key [44]byte, data []byte) ([]byte, error) {
+	// basic setup
 	a.processed = 0
 	if len(data) < 16 {
-		return nil
+		return nil, errors.New("data too short")
 	}
 	iv := key[:12]
 	aeskey := key[12:]
-	d := make([]byte, len(data))
-	copy(d, data)
-	plain := a.inlineDec(aeskey, iv, d)
+
+	// make AES cipher
+	block, e0 := aes.NewCipher(aeskey)
+	if e0 != nil {
+		return nil, e0
+	}
+	aesgcm, e1 := cipher.NewGCM(block)
+	if e1 != nil {
+		return nil, e1
+	}
+
+	// decrypt
+	plain, e2 := aesgcm.Open(nil, iv, data, nil)
+	if e2 != nil {
+		return nil, e2
+	}
 	a.processed = int64(len(data))
-	return plain
+	return plain, nil
 }
 
 // AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
@@ -208,6 +214,16 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 	thrN := runtime.NumCPU()
 	if thrN <= 0 {
 		thrN = 1
+	}
+
+	// make AES cipher
+	block, e0 := aes.NewCipher(globalKey)
+	if e0 != nil {
+		return e0
+	}
+	aesgcm, e1 := cipher.NewGCM(block)
+	if e1 != nil {
+		return e1
 	}
 
 	// task setup
@@ -280,7 +296,7 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 		}
 
 		// encryption goroutine
-		go func(key []byte, iv []byte, data []byte, outCh chan aesResult) {
+		go func(m cipher.AEAD, key []byte, iv []byte, data []byte, outCh chan aesResult) {
 			var r aesResult
 			defer func() {
 				if e := recover(); e != nil {
@@ -289,8 +305,8 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 				outCh <- r
 				close(outCh)
 			}()
-			r.data = a.inlineEnc(key, iv, data)
-		}(globalKey, currentIV, buf, future)
+			r.data = aesgcm.Seal(data[:0], iv, data, nil)
+		}(aesgcm, globalKey, currentIV, buf, future)
 		if remaining <= 0 {
 			loopCtrl = false
 		}
@@ -324,6 +340,16 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 	thrN := runtime.NumCPU()
 	if thrN <= 0 {
 		thrN = 1
+	}
+
+	// make AES cipher
+	block, e0 := aes.NewCipher(globalKey)
+	if e0 != nil {
+		return e0
+	}
+	aesgcm, e1 := cipher.NewGCM(block)
+	if e1 != nil {
+		return e1
 	}
 
 	// task setup
@@ -395,7 +421,7 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 		}
 
 		// encryption goroutine
-		go func(key []byte, iv []byte, data []byte, outCh chan aesResult) {
+		go func(m cipher.AEAD, key []byte, iv []byte, data []byte, outCh chan aesResult) {
 			var r aesResult
 			defer func() {
 				if e := recover(); e != nil {
@@ -404,8 +430,8 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 				outCh <- r
 				close(outCh)
 			}()
-			r.data = a.inlineDec(key, iv, data)
-		}(globalKey, currentIV, buf, future)
+			r.data, r.err = aesgcm.Open(data[:0], iv, data, nil)
+		}(aesgcm, globalKey, currentIV, buf, future)
 	}
 
 	// wait for writer, return
