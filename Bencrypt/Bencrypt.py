@@ -1,6 +1,7 @@
 # test793a : USAG-Lib bencrypt
 from typing import Optional, Tuple
 
+import threading
 import io
 import secrets
 import hashlib
@@ -64,28 +65,34 @@ def genkey(data: bytes, lbl: str, size: int) -> bytes: # HMAC-SHA3-512
 # ========== Encrypting Functions ==========
 class AES1:
     def __init__(self):
-        self.processed: int = 0
+        self._processed: int = 0
+        self._lock = threading.Lock()
+
+    @property
+    def processed(self) -> int:
+        with self._lock:
+            return self._processed
 
     def enAESGCM(self, key: bytes, data: bytes) -> bytes: # AES-GCM
-        self.processed = 0
+        with self._lock: self._processed = 0
         if len(key) != 44:
             raise ValueError("key size must be 44 bytes")
         cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
         ciphertext, tag = cipher.encrypt_and_digest(data)
-        self.processed = len(data)
+        with self._lock: self._processed = len(data)
         return ciphertext + tag # [encdata][tag 16B]
 
     def deAESGCM(self, key: bytes, data: bytes) -> bytes: # AES-GCM
-        self.processed = 0
+        with self._lock: self._processed = 0
         if len(key) != 44:
             raise ValueError("key size must be 44 bytes")
         cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
         plaintext = cipher.decrypt_and_verify(data[:-16], data[-16:])
-        self.processed = len(data)
+        with self._lock: self._processed = len(data)
         return plaintext
 
     def enAESGCMx(self, key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
-        self.processed = 0
+        with self._lock: self._processed = 0
         if len(key) != 44:
             raise ValueError("key size must be 44 bytes")
         globalIV, globalKey, count = key[:12], key[12:], 0
@@ -97,7 +104,7 @@ class AES1:
             ciphertext, tag = cipher.encrypt_and_digest(chunk)
             dst.write(ciphertext)
             dst.write(tag)
-            self.processed += chunkSize
+            with self._lock: self._processed += chunkSize
         if size == 0 or size % chunkSize != 0:
             iv = mkiv(globalIV, count)
             cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
@@ -105,10 +112,10 @@ class AES1:
             ciphertext, tag = cipher.encrypt_and_digest(chunk)
             dst.write(ciphertext)
             dst.write(tag)
-            self.processed += size % chunkSize
+            with self._lock: self._processed += size % chunkSize
 
     def deAESGCMx(self, key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
-        self.processed = 0
+        with self._lock: self._processed = 0
         if len(key) != 44:
             raise ValueError("key size must be 44 bytes")
         globalIV, globalKey, count = key[:12], key[12:], 0
@@ -120,7 +127,7 @@ class AES1:
             tag = src.read(16)
             plaintext = cipher.decrypt_and_verify(chunk, tag)
             dst.write(plaintext)
-            self.processed += chunkSize + 16
+            with self._lock: self._processed += chunkSize + 16
         if size == 0 or size % (chunkSize + 16) != 0:
             iv = mkiv(globalIV, count)
             cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
@@ -128,7 +135,7 @@ class AES1:
             tag = src.read(16)
             plaintext = cipher.decrypt_and_verify(chunk, tag)
             dst.write(plaintext)
-            self.processed += size % (chunkSize + 16)
+            with self._lock: self._processed += size % (chunkSize + 16)
 
 # ========== Signing Functions ==========
 class RSA1:

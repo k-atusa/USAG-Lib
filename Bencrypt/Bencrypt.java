@@ -36,6 +36,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
@@ -58,7 +59,7 @@ import java.security.spec.X509EncodedKeySpec;
 public class Bencrypt {
     public Bencrypt() {
         this.randSrc = new SecureRandom();
-        this.processed = 0;
+        this.processed = new AtomicLong(0);
         this.RSApub = null;
         this.RSApri = null;
         this.pubX = null;
@@ -199,7 +200,7 @@ public class Bencrypt {
     }
 
     // ========== AES1 Functions ==========
-    public long processed;
+    private final AtomicLong processed;
 
     private byte[] inlineEnc(byte[] key, byte[] iv, byte[] data) throws Exception {
         SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
@@ -228,32 +229,37 @@ public class Bencrypt {
         return b;
     }
 
+    // get processed bytes
+    public long Processed() {
+        return this.processed.get();
+    }
+
     // encrypt single block with 44B key, output: [Ciphertext][Tag 16B]
     public byte[] enAESGCM(byte[] key, byte[] data) throws Exception {
-        this.processed = 0;
+        this.processed.set(0);
         if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
         byte[] iv = Arrays.copyOfRange(key, 0, 12);
         byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
         byte[] result = inlineEnc(keyBytes, iv, data);
-        this.processed = data.length;
+        this.processed.set(data.length);
         return result;
     }
 
     // decrypt single block with 44B key
     public byte[] deAESGCM(byte[] key, byte[] data) throws Exception {
-        this.processed = 0;
+        this.processed.set(0);
         if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
         if (data.length < 16) throw new IllegalArgumentException("data size must be at least 16 bytes");
         byte[] iv = Arrays.copyOfRange(key, 0, 12);
         byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
         byte[] result = inlineDec(keyBytes, iv, data);
-        this.processed = data.length;
+        this.processed.set(data.length);
         return result;
     }
 
     // encrypt stream with 44B key, default chunkSize=1048576
     public void enAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize) throws Exception {
-        this.processed = 0;
+        this.processed.set(0);
         if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
         if (chunkSize <= 0) chunkSize = 1048576;
         byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
@@ -284,7 +290,7 @@ public class Bencrypt {
                 while (futures.size() > 8) {
                     byte[] result = futures.poll().get();
                     dst.write(result);
-                    this.processed += result.length - 16;
+                    this.processed.addAndGet(result.length - 16);
                 }
                 if (remaining <= 0) break;
             }
@@ -293,7 +299,7 @@ public class Bencrypt {
             while (futures.size() > 0) {
                 byte[] result = futures.poll().get();
                 dst.write(result);
-                this.processed += result.length - 16;
+                this.processed.addAndGet(result.length - 16);
             }
 
         } finally { // 6. Close Thread x8 Pool
@@ -303,7 +309,7 @@ public class Bencrypt {
 
     // decrypt stream with 44B key, default chunkSize=1048576
     public void deAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize) throws Exception {
-        this.processed = 0;
+        this.processed.set(0);
         if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
         if (chunkSize <= 0) chunkSize = 1048576;
         byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
@@ -334,7 +340,7 @@ public class Bencrypt {
                 while (futures.size() > 8) {
                     byte[] result = futures.poll().get();
                     dst.write(result);
-                    this.processed += result.length + 16;
+                    this.processed.addAndGet(result.length + 16);
                 }
             }
 
@@ -342,7 +348,7 @@ public class Bencrypt {
             while (futures.size() > 0) {
                 byte[] result = futures.poll().get();
                 dst.write(result);
-                this.processed += result.length + 16;
+                this.processed.addAndGet(result.length + 16);
             }
 
         } finally { // 6. Close Thread x8 Pool

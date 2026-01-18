@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -137,10 +138,12 @@ func Genkey(data []byte, lbl string, size int) ([]byte, error) {
 
 // ========== Encrypting Functions ==========
 type AES1 struct {
-	Processed int
+	processed int64
 }
 
-func (a *AES1) Init() { a.Processed = 0 }
+func (a *AES1) Init() { a.processed = 0 }
+
+func (a *AES1) Processed() int { return int(atomic.LoadInt64(&a.processed)) }
 
 func (a *AES1) inlineEnc(key []byte, iv []byte, data []byte) []byte {
 	block, e0 := aes.NewCipher(key)
@@ -163,19 +166,19 @@ func (a *AES1) inlineDec(key []byte, iv []byte, data []byte) []byte {
 
 // AES-GCM encryption, 44B key (12B IV + 32B AES Key)
 func (a *AES1) EnAESGCM(key [44]byte, data []byte) []byte {
-	a.Processed = 0
+	a.processed = 0
 	iv := key[:12]
 	aeskey := key[12:]
 	d := make([]byte, len(data), len(data)+16)
 	copy(d, data)
 	enc := a.inlineEnc(aeskey, iv, d)
-	a.Processed = len(data)
+	a.processed = int64(len(data))
 	return enc // format: [encdata][tag 16B]
 }
 
 // AES-GCM decryption, 44B key (12B IV + 32B AES Key)
 func (a *AES1) DeAESGCM(key [44]byte, data []byte) []byte {
-	a.Processed = 0
+	a.processed = 0
 	if len(data) < 16 {
 		return nil
 	}
@@ -184,14 +187,14 @@ func (a *AES1) DeAESGCM(key [44]byte, data []byte) []byte {
 	d := make([]byte, len(data))
 	copy(d, data)
 	plain := a.inlineDec(aeskey, iv, d)
-	a.Processed = len(data)
+	a.processed = int64(len(data))
 	return plain
 }
 
 // AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
 func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, chunkSize int) error {
 	// basic setup
-	a.Processed = 0
+	a.processed = 0
 	if chunkSize <= 0 {
 		chunkSize = 1048576 // 1MiB
 	}
@@ -220,6 +223,7 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 			if e := recover(); e != nil {
 				wErr <- e.(error) // panic to error
 			}
+			close(wErr)
 			wg.Done()
 		}()
 		for ch := range writeQue {
@@ -233,7 +237,7 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 				wErr <- e
 				return
 			}
-			a.Processed += (len(res.data) - 16)
+			atomic.AddInt64(&a.processed, int64(len(res.data)-16))
 			if cap(res.data) >= chunkSize+16 { // return buffer
 				memPool.Put(res.data[:0])
 			}
@@ -306,7 +310,7 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 // AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
 func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, chunkSize int) error {
 	// basic setup
-	a.Processed = 0
+	a.processed = 0
 	if chunkSize <= 0 {
 		chunkSize = 1048576 // 1MiB
 	}
@@ -335,6 +339,7 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 			if e := recover(); e != nil {
 				wErr <- e.(error) // panic to error
 			}
+			close(wErr)
 			wg.Done()
 		}()
 		for ch := range writeQue {
@@ -348,7 +353,7 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 				wErr <- e
 				return
 			}
-			a.Processed += (len(res.data) + 16)
+			atomic.AddInt64(&a.processed, int64(len(res.data)+16))
 			if cap(res.data) >= chunkSize+16 { // return buffer
 				memPool.Put(res.data[:0])
 			}

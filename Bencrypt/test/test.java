@@ -66,11 +66,11 @@ public class test {
 
             byte[] enc = ben.enAESGCM(key, plain);
             p(enc);
-            System.out.println(ben.processed);
+            System.out.println(ben.Processed());
             
             byte[] dec = ben.deAESGCM(key, enc);
             System.out.println(new String(dec, StandardCharsets.UTF_8));
-            System.out.println(ben.processed);
+            System.out.println(ben.Processed());
 
             // Large stream test (100MB)
             byte[] hugePlain = new byte[100000000]; // 100MB zero-filled
@@ -82,12 +82,12 @@ public class test {
             
             // Print first 16 bytes (p(t[0:16]))
             p(Arrays.copyOfRange(tBytes, 0, 16));
-            System.out.println(ben.processed);
+            System.out.println(ben.Processed());
 
             rin = new ByteArrayInputStream(tBytes);
             wout = new ByteArrayOutputStream();
             ben.deAESGCMx(key, rin, tBytes.length, wout, 1048576);
-            System.out.println(ben.processed);
+            System.out.println(ben.Processed());
             System.out.println(Arrays.equals(wout.toByteArray(), hugePlain));
 
             // Test various sizes (Edge cases)
