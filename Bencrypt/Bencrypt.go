@@ -3,12 +3,16 @@
 package Bencrypt
 
 import (
+	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/sha3"
 	"crypto/sha512"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -22,6 +26,9 @@ import (
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/pbkdf2"
+
+	"github.com/cloudflare/circl/dh/x448"
+	"github.com/cloudflare/circl/sign/ed448"
 )
 
 type aesResult struct {
@@ -443,4 +450,255 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 	default:
 		return rErr
 	}
+}
+
+// ========== Signing Functions ==========
+type RSA1 struct {
+	Private *rsa.PrivateKey
+	Public  *rsa.PublicKey
+}
+
+// DER(PKIX, PKCS8) format, returns (public, private, error)
+func (r *RSA1) Genkey(bits int) ([]byte, []byte, error) {
+	if bits <= 0 {
+		bits = 2048 // Default bits: 2048
+	}
+	// 1. Generate Key
+	key, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		return nil, nil, err
+	}
+	r.Private = key
+	r.Public = &key.PublicKey
+
+	// 2. Marshal Public Key (PKIX / DER)
+	pubBytes, err := x509.MarshalPKIXPublicKey(r.Public)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 3. Marshal Private Key (PKCS8 / DER)
+	privBytes, err := x509.MarshalPKCS8PrivateKey(r.Private)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pubBytes, privBytes, nil
+}
+
+// Load keys from DER(PKIX, PKCS8) format bytes. Pass nil to skip.
+func (r *RSA1) Loadkey(public []byte, private []byte) error {
+	if public != nil {
+		pubInterface, err := x509.ParsePKIXPublicKey(public)
+		if err != nil {
+			return err
+		}
+		pubKey, ok := pubInterface.(*rsa.PublicKey)
+		if !ok {
+			return errors.New("not an RSA public key")
+		}
+		r.Public = pubKey
+	}
+
+	if private != nil {
+		privInterface, err := x509.ParsePKCS8PrivateKey(private)
+		if err != nil {
+			return err
+		}
+		privKey, ok := privInterface.(*rsa.PrivateKey)
+		if !ok {
+			return errors.New("not an RSA private key")
+		}
+		r.Private = privKey
+	}
+	return nil
+}
+
+// OAEP-SHA-512
+func (r *RSA1) Encrypt(data []byte) ([]byte, error) {
+	hash := sha512.New()
+	return rsa.EncryptOAEP(hash, rand.Reader, r.Public, data, nil)
+}
+
+// OAEP-SHA-512
+func (r *RSA1) Decrypt(data []byte) ([]byte, error) {
+	hash := sha512.New()
+	return rsa.DecryptOAEP(hash, rand.Reader, r.Private, data, nil)
+}
+
+// PKCS1 v1.5 + SHA256
+func (r *RSA1) Sign(data []byte) ([]byte, error) {
+	hashed := sha256.Sum256(data)
+	return rsa.SignPKCS1v15(rand.Reader, r.Private, crypto.SHA256, hashed[:])
+}
+
+// PKCS1 v1.5 + SHA256, returns true if valid
+func (r *RSA1) Verify(data []byte, signature []byte) bool {
+	hashed := sha256.Sum256(data)
+	err := rsa.VerifyPKCS1v15(r.Public, crypto.SHA256, hashed[:], signature)
+	return err == nil
+}
+
+type ECC1 struct {
+	// X448 Keys (Encryption)
+	PrivX *x448.Key
+	PubX  *x448.Key
+
+	// Ed448 Keys (Signing)
+	PrivEd ed448.PrivateKey
+	PubEd  ed448.PublicKey
+
+	// Format: [1B PubLen][TempPub][EncData]
+	em AES1
+}
+
+// Generates keys: [X448 56B][Ed448 57B], (public bytes, private bytes, error)
+func (e *ECC1) Genkey() ([]byte, []byte, error) {
+	// 1. Generate X448 (56 bytes)
+	var xPub, xPriv x448.Key
+	// random bytes for private key
+	if _, err := io.ReadFull(rand.Reader, xPriv[:]); err != nil {
+		return nil, nil, err
+	}
+	x448.KeyGen(&xPub, &xPriv)
+	e.PrivX = &xPriv
+	e.PubX = &xPub
+
+	// 2. Generate Ed448 (57 bytes public, 57 bytes private seed)
+	edPub, edPriv, err := ed448.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	e.PubEd = edPub
+	e.PrivEd = edPriv
+
+	// 3. Serialize Public: 56 + 57 = 113
+	pubBytes := make([]byte, 113)
+	copy(pubBytes[:56], e.PubX[:])
+	copy(pubBytes[56:], e.PubEd)
+
+	// 4. Serialize Private: 56 + 57 = 113
+	privBytes := make([]byte, 113)
+	copy(privBytes[:56], e.PrivX[:])
+	copy(privBytes[56:], e.PrivEd.Seed()) // Use Seed() to get the raw 57B private scalar
+	return pubBytes, privBytes, nil
+}
+
+// Load keys. Public must be 113B, Private must be 113B.
+func (e *ECC1) Loadkey(public []byte, private []byte) error {
+	if public != nil {
+		if len(public) != 113 {
+			return errors.New("invalid public key length (must be 113 bytes for Curve448)")
+		}
+		// Load X448 Public
+		e.PubX = new(x448.Key)
+		copy(e.PubX[:], public[:56])
+
+		// Load Ed448 Public
+		e.PubEd = make(ed448.PublicKey, ed448.PublicKeySize)
+		copy(e.PubEd, public[56:])
+	}
+
+	if private != nil {
+		if len(private) != 113 {
+			return errors.New("invalid private key length (must be 113 bytes for Curve448)")
+		}
+		// Load X448 Private
+		e.PrivX = new(x448.Key)
+		copy(e.PrivX[:], private[:56])
+
+		// Load Ed448 Private (Re-derive full key from seed)
+		e.PrivEd = ed448.NewKeyFromSeed(private[56:])
+	}
+	return nil
+}
+
+// Encrypt data using receiver's public key (Hybrid: ECDH + AES-GCM)
+func (e *ECC1) Encrypt(data []byte, receiver []byte) ([]byte, error) {
+	// 1. Get receiver X448 public key
+	if len(receiver) != 113 {
+		return nil, errors.New("invalid receiver key length")
+	}
+	var peerKey x448.Key
+	copy(peerKey[:], receiver[:56])
+
+	// 2. Generate temp ephemeral key
+	var tempPub, tempPriv x448.Key
+	if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
+		return nil, err
+	}
+	x448.KeyGen(&tempPub, &tempPriv)
+
+	// 3. Get shared secret (ECDH)
+	var shared x448.Key
+	ok := x448.Shared(&shared, &tempPriv, &peerKey)
+	if !ok {
+		return nil, errors.New("ECDH key exchange failed (bad public key)")
+	}
+
+	// 4. Derive Key & Encrypt with AES-GCM
+	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
+	if err != nil {
+		return nil, err
+	}
+	var keyArr [44]byte
+	copy(keyArr[:], gcmKey)
+	enc, err := e.em.EnAESGCM(keyArr, data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Join to make [1B Len][TempPub 56B][Enc]
+	out := make([]byte, 1+56+len(enc))
+	out[0] = 56 // X448 pub key length
+	copy(out[1:], tempPub[:])
+	copy(out[1+56:], enc)
+	return out, nil
+}
+
+// Decrypt data using private key (Hybrid: ECDH + AES-GCM)
+func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
+	// 1. Parse data
+	if len(data) < 57 {
+		return nil, errors.New("data too short")
+	}
+	keylen := int(data[0])
+	if keylen != 56 {
+		return nil, errors.New("unsupported public key length")
+	}
+	var tempPub x448.Key
+	copy(tempPub[:], data[1:1+keylen])
+	enc := data[1+keylen:]
+
+	// 2. Get shared secret (ECDH)
+	var shared x448.Key
+	ok := x448.Shared(&shared, e.PrivX, &tempPub)
+	if !ok {
+		return nil, errors.New("ECDH key exchange failed")
+	}
+
+	// 3. Decrypt with AES-GCM
+	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
+	if err != nil {
+		return nil, err
+	}
+	var keyArr [44]byte
+	copy(keyArr[:], gcmKey)
+	return e.em.DeAESGCM(keyArr, enc)
+}
+
+// Ed448 Sign (empty context is default)
+func (e *ECC1) Sign(data []byte) ([]byte, error) {
+	if e.PrivEd == nil {
+		return nil, errors.New("private key not loaded")
+	}
+	// Python cryptography signs with empty context by default for Ed448
+	return ed448.Sign(e.PrivEd, data, ""), nil
+}
+
+// Ed448 Verify
+func (e *ECC1) Verify(data []byte, signature []byte) bool {
+	if e.PubEd == nil {
+		return false
+	}
+	return ed448.Verify(e.PubEd, data, signature, "")
 }

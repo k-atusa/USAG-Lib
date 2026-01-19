@@ -99,9 +99,9 @@
                 const key = new TextEncoder().encode("0123".repeat(11));
                 let plain = new TextEncoder().encode("Hello, world!".repeat(4));
                 let enc = await m.enAESGCM(key, plain);
-                log("en-AES-GCM: " + m.processed + ", " + formatBytes(enc), "#569cd6");
+                log("en-AES-GCM: " + m.processed() + ", " + formatBytes(enc), "#569cd6");
                 let dec = await m.deAESGCM(key, enc);
-                log("de-AES-GCM: " + m.processed + ", " + new TextDecoder().decode(dec), "#569cd6");
+                log("de-AES-GCM: " + m.processed() + ", " + new TextDecoder().decode(dec), "#569cd6");
 
                 // 2-2. AES-GCMx
                 plain = new Uint8Array(20 * 1000000); // 20MB
@@ -109,12 +109,12 @@
                 let w = new TestWriter();
                 await m.enAESGCMx(key, r, plain.length, w);
                 enc = w.getValue();
-                log("en-AES-GCMx: " + m.processed + ", " +formatBytes(enc.slice(0, 16)), "#569cd6");
+                log("en-AES-GCMx: " + m.processed() + ", " +formatBytes(enc.slice(0, 16)), "#569cd6");
                 r = new TestReader(enc);
                 w = new TestWriter();
                 await m.deAESGCMx(key, r, enc.length, w);
                 dec = w.getValue();
-                log("de-AES-GCMx: " + m.processed + ", " + formatBytes(dec.slice(0, 16)), "#569cd6");
+                log("de-AES-GCMx: " + m.processed() + ", " + formatBytes(dec.slice(0, 16)), "#569cd6");
 
                 // 2-3. AES-GCMx with size 0
                 plain = new Uint8Array(0);

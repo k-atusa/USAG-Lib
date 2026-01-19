@@ -68,7 +68,6 @@ class AES1:
         self._processed: int = 0
         self._lock = threading.Lock()
 
-    @property
     def processed(self) -> int:
         with self._lock:
             return self._processed

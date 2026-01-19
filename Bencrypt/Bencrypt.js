@@ -107,46 +107,6 @@ function hmac_sha3_512(key, msg) {
     return sha3512(outerData);
 }
 
-function fromDER(derSig, curveBits) {
-    // Basic ASN.1 Parser for SEQUENCE { INTEGER r, INTEGER s }
-    let offset = 0;
-    if (derSig[offset++] !== 0x30) throw new Error("Invalid DER");
-    
-    // Length (simplified, assuming short form < 128 for signatures)
-    let len = derSig[offset++];
-    if (len & 0x80) { // Long form length
-        const bytes = len & 0x7f;
-        offset += bytes; 
-    }
-
-    function readInt() {
-        if (derSig[offset++] !== 0x02) throw new Error("Invalid DER Integer");
-        let len = derSig[offset++];
-        let val = derSig.slice(offset, offset + len);
-        offset += len;
-        // Remove DER padding (0x00) if exists
-        if (val[0] === 0x00) val = val.slice(1);
-        return val;
-    }
-    const r = readInt();
-    const s = readInt();
-    const n = Math.ceil(curveBits / 8);
-    const res = new Uint8Array(n * 2);
-    
-    // Pad or trim to fit n bytes (Big Endian)
-    function copyTo(src, destOffset) {
-        const srcLen = src.length;
-        if (srcLen > n) { // Should rarely happen if valid, but just in case
-            res.set(src.slice(srcLen - n), destOffset);
-        } else {
-            res.set(src, destOffset + (n - srcLen));
-        }
-    }
-    copyTo(r, 0);
-    copyTo(s, n);
-    return res;
-}
-
 class TestReader {
     constructor(u8Array) {
         this.data = u8Array; // Uint8Array
@@ -342,7 +302,11 @@ function genkey(data, lbl, size) {
 // Encrypting Functions (AES1)
 class AES1 {
     constructor() {
-        this.processed = 0;
+        this._processed = 0;
+    }
+
+    processed() {
+        return this._processed;
     }
 
     /**
@@ -352,7 +316,7 @@ class AES1 {
      * @returns {Promise<Uint8Array>} ciphertext + tag(16 bytes)
      */
     async enAESGCM(key, data) {
-        this.processed = 0;
+        this._processed = 0;
         const k = toU8(key);
         const d = toU8(data);
         if (k.length !== 44) throw new Error("key size must be 44 bytes");
@@ -363,7 +327,7 @@ class AES1 {
             const cipher = deps.crypto.createCipheriv('aes-256-gcm', aesKey, iv);
             const encrypted = Buffer.concat([cipher.update(d), cipher.final()]);
             const tag = cipher.getAuthTag();
-            this.processed = d.length;
+            this._processed = d.length;
             return new Uint8Array(Buffer.concat([encrypted, tag]));
 
         } else {
@@ -373,7 +337,7 @@ class AES1 {
             const res = await deps.crypto.subtle.encrypt(
                 { name: "AES-GCM", iv: iv }, importedKey, d
             ); // res = ciphertext + tag
-            this.processed = d.length;
+            this._processed = d.length;
             return new Uint8Array(res);
         }
     }
@@ -385,7 +349,7 @@ class AES1 {
      * @returns {Promise<Uint8Array>} plaintext
      */
     async deAESGCM(key, data) {
-        this.processed = 0;
+        this._processed = 0;
         const k = toU8(key);
         const d = toU8(data);
         if (k.length !== 44) throw new Error("key size must be 44 bytes");
@@ -398,7 +362,7 @@ class AES1 {
             const decipher = deps.crypto.createDecipheriv('aes-256-gcm', aesKey, iv);
             decipher.setAuthTag(tag);
             const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-            this.processed = d.length;
+            this._processed = d.length;
             return new Uint8Array(plaintext);
 
         } else {
@@ -409,7 +373,7 @@ class AES1 {
                 const res = await deps.crypto.subtle.decrypt(
                     { name: "AES-GCM", iv: iv }, importedKey, d
                 ); // input is ciphertext + tag
-                this.processed = d.length;
+                this._processed = d.length;
                 return new Uint8Array(res);
             } catch (e) {
                 throw new Error("Decryption failed (MAC check failed)");
@@ -426,7 +390,7 @@ class AES1 {
      * @param {number} chunkSize 
      */
     async enAESGCMx(key, src, size, dst, chunkSize = 1048576) {
-        this.processed = 0;
+        this._processed = 0;
         const k = toU8(key);
         if (k.length !== 44) throw new Error("key size must be 44 bytes");
         const globalIV = k.slice(0, 12);
@@ -476,7 +440,7 @@ class AES1 {
 
             // E. Wait for Encryption to finish (CPU task)
             const encryptedData = await encryptedDataPromise;
-            this.processed += chunk.length;
+            this._processed += chunk.length;
 
             // F. Schedule Write (Write-Behind)
             writeChain = writeChain.then(() => dst.write(encryptedData));
@@ -495,7 +459,7 @@ class AES1 {
      * @param {number} chunkSize 
      */
     async deAESGCMx(key, src, size, dst, chunkSize = 1048576) {
-        this.processed = 0;
+        this._processed = 0;
         const k = toU8(key);
         if (k.length !== 44) throw new Error("key size must be 44 bytes");
         const globalIV = k.slice(0, 12);
@@ -557,7 +521,7 @@ class AES1 {
 
             // E. Wait for Decryption to finish (CPU task)
             const plaintext = await plaintextPromise;
-            this.processed += block.chunk.length + 16;
+            this._processed += block.chunk.length + 16;
 
             // E. Schedule Write
             writeChain = writeChain.then(() => dst.write(plaintext));
