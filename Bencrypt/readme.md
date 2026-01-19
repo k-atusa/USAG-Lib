@@ -30,7 +30,7 @@ class RSA1:
 class ECC1:
     def genkey() -> Tuple[bytes, bytes]
     def loadkey(public: bytes | None, private: bytes | None)
-    def encrypt(data: bytes, receiver: bytes) -> bytes
+    def encrypt(data: bytes) -> bytes
     def decrypt(data: bytes) -> bytes
     def sign(data: bytes) -> bytes
     def verify(data: bytes, signature: bytes) -> bool
@@ -68,7 +68,7 @@ class RSA1 {
 class ECC1 {
     async function genkey(): Promise<[Uint8Array, Uint8Array]>
     async function loadkey(pub, pri)
-    async function encrypt(data, receiver): Promise<Uint8Array>
+    async function encrypt(data): Promise<Uint8Array>
     async function decrypt(data): Promise<Uint8Array>
     async function sign(data): Promise<Uint8Array>
     async function verify(data, signature): Promise<boolean>
@@ -106,7 +106,7 @@ struct RSA1 {
 struct ECC1 {
     func Genkey() ([]byte, []byte, error)
     func Loadkey(public []byte, private []byte) error
-    func Encrypt(data []byte, receiver []byte) ([]byte, error)
+    func Encrypt(data []byte) ([]byte, error)
     func Decrypt(data []byte) ([]byte, error)
     func Sign(data []byte) ([]byte, error)
     func Verify(data []byte, signature []byte) bool
@@ -143,7 +143,7 @@ class Bencrypt {
     // ECC Functions
     byte[][] ECCgenkey()
     void ECCloadkey(byte[] pubBytes, byte[] priBytes)
-    byte[] ECCencrypt(byte[] data, byte[] receiver)
+    byte[] ECCencrypt(byte[] data)
     byte[] ECCdecrypt(byte[] data)
     byte[] ECCsign(byte[] data)
     boolean ECCverify(byte[] data, byte[] signature)
