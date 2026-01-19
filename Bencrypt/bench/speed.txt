@@ -1,0 +1,118 @@
+=== Bencrypt Performance Benchmark (Python) ===
+[Random] Gen: 2532.61 MiB/s
+[SHA3-256]    707.48 MiB/s
+[SHA3-512]    379.99 MiB/s
+----------------------------------------
+[PBKDF2]      50.69 ms/op (iter=100000)
+[Argon2id]    129.87 ms/op (m=256MB, t=3, p=4)
+----------------------------------------
+[AES-GCM] Mem Enc: 1057.05 MiB/s
+[AES-GCM] Mem Dec: 1052.91 MiB/s
+[AES-GCMx] Mem Enc: 334.91 MiB/s
+[AES-GCMx] Mem Dec: 336.17 MiB/s
+[AES-GCMx] File Enc: 699.07 MiB/s
+[AES-GCMx] File Dec: 705.72 MiB/s
+----------------------------------------
+[RSA-2048] GenKey : 599.12 ms/op
+[RSA-2048] Encrypt: 0.31 ms/op
+[RSA-2048] Decrypt: 2.07 ms/op
+[RSA-2048] Sign   : (Similar to Decrypt)
+[RSA-4096] GenKey : 1249.24 ms/op
+[RSA-4096] Encrypt: 1.12 ms/op
+[RSA-4096] Decrypt: 11.81 ms/op
+[RSA-4096] Sign   : (Similar to Decrypt)
+----------------------------------------
+[ECC-448]  GenKey : 0.71 ms/op
+[ECC-448]  Encrypt: 0.52 ms/op (Includes AES gen)
+[ECC-448]  Decrypt: 0.33 ms/op (Includes AES gen)
+
+
+
+=== Bencrypt Performance Benchmark (JS) ===
+Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0
+-------------------------------------------
+[Random] Gen: 2388.06 MiB/s
+[SHA3-256]    63.49 MiB/s
+[SHA3-512]    35.96 MiB/s
+----------------------------------------
+[PBKDF2]      31.84 ms/op (iter=100000)
+[Argon2id]    803.36 ms/op (m=256MB, t=3, p=4)
+----------------------------------------
+[AES-GCM] Mem Enc: 687.99 MiB/s
+[AES-GCM] Mem Dec: 696.03 MiB/s
+[AES-GCMx] Mem Enc: 471.63 MiB/s
+[AES-GCMx] Mem Dec: 430.76 MiB/s
+----------------------------------------
+[RSA-2048] GenKey : 57.19 ms/op
+[RSA-2048] Encrypt: 0.02 ms/op
+[RSA-2048] Decrypt: 0.39 ms/op
+[RSA-2048] Sign   : (Similar to Decrypt)
+[RSA-4096] GenKey : 624.50 ms/op
+[RSA-4096] Encrypt: 0.05 ms/op
+[RSA-4096] Decrypt: 2.70 ms/op
+[RSA-4096] Sign   : (Similar to Decrypt)
+----------------------------------------
+[ECC-448]  GenKey : 2.03 ms/op
+[ECC-448]  Encrypt: 3.05 ms/op (Includes AES gen)
+[ECC-448]  Decrypt: 1.52 ms/op (Includes AES gen)
+Done.
+
+
+
+=== Bencrypt Performance Benchmark (Java) ===
+[Random] Gen: 44.24 MiB/s
+[SHA3-256]    261.51 MiB/s
+[SHA3-512]    261.62 MiB/s
+----------------------------------------
+[PBKDF2]      75.93 ms/op (iter=100000)
+[Argon2id]    538.63 ms/op (m=256MB, t=3, p=4)
+----------------------------------------
+[AES-GCM] Mem Enc: 1600.08 MiB/s
+[AES-GCM] Mem Dec: 3029.96 MiB/s
+[AES-GCMx] Mem Enc: 2278.73 MiB/s
+[AES-GCMx] Mem Dec: 1806.74 MiB/s
+[AES-GCMx] File Enc: 1103.08 MiB/s
+[AES-GCMx] File Dec: 1116.25 MiB/s
+----------------------------------------
+[RSA-2048] GenKey : 51.75 ms/op
+[RSA-2048] Encrypt: 0.16 ms/op
+[RSA-2048] Decrypt: 0.70 ms/op
+[RSA-2048] Sign   : (Similar to Decrypt)
+[RSA-4096] GenKey : 352.11 ms/op
+[RSA-4096] Encrypt: 0.10 ms/op
+[RSA-4096] Decrypt: 4.19 ms/op
+[RSA-4096] Sign   : (Similar to Decrypt)
+----------------------------------------
+[ECC-448]  GenKey : 1.21 ms/op
+[ECC-448]  Encrypt: 0.51 ms/op (Includes AES gen)
+[ECC-448]  Decrypt: 0.25 ms/op (Includes AES gen)
+
+
+
+=== Bencrypt Performance Benchmark (Go) ===
+[Random] Gen: 3444.86 MiB/s
+[SHA3-256]    544.12 MiB/s
+[SHA3-512]    320.93 MiB/s
+----------------------------------------
+[PBKDF2]      34.60 ms/op (iter=100000)
+[Argon2id]    104.80 ms/op (m=256MB, t=3, p=4)
+----------------------------------------
+[AES-GCM] Mem Enc: 3489.46 MiB/s
+[AES-GCM] Mem Dec: 6189.20 MiB/s
+[AES-GCMx] Mem Enc: 2114.39 MiB/s
+[AES-GCMx] Mem Dec: 8604.58 MiB/s
+[AES-GCMx] File Enc: 3797.80 MiB/s
+[AES-GCMx] File Dec: 3519.34 MiB/s
+----------------------------------------
+[RSA-2048] GenKey : 31.50 ms/op
+[RSA-2048] Encrypt: 0.00 ms/op
+[RSA-2048] Decrypt: 0.54 ms/op
+[RSA-2048] Sign   : (Similar to Decrypt)
+[RSA-4096] GenKey : 432.50 ms/op
+[RSA-4096] Encrypt: 0.06 ms/op
+[RSA-4096] Decrypt: 3.62 ms/op
+[RSA-4096] Sign   : (Similar to Decrypt)
+----------------------------------------
+[ECC-448]  GenKey : 0.00 ms/op
+[ECC-448]  Encrypt: 0.20 ms/op (Includes AES gen)
+[ECC-448]  Decrypt: 0.00 ms/op (Includes AES gen)

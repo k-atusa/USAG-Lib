@@ -35,17 +35,17 @@ func b64d(s string) []byte {
 func main() {
 	// ===== basic test =====
 	fmt.Println("\n===== basic test =====")
-	print(Bencrypt.Random(16))
-	print(Bencrypt.Sha3256([]byte{}))
-	print(Bencrypt.Sha3512([]byte{}))
-	print(Bencrypt.Pbkdf2([]byte("0000"), []byte("0000000000000000"), 0, 0)) // 0 uses default iter/size
+	fmt.Println(Bencrypt.Random(16))
+	fmt.Println(Bencrypt.Sha3256([]byte{}))
+	fmt.Println(Bencrypt.Sha3512([]byte{}))
+	fmt.Println(Bencrypt.Pbkdf2([]byte("0000"), []byte("0000000000000000"), 0, 0)) // 0 uses default iter/size
 
 	t := Bencrypt.Argon2Hash([]byte("0000"), []byte("0000000000000000"))
 	fmt.Println(t)
 	fmt.Println(Bencrypt.Argon2Verify(t, []byte("0000")))
 
 	k, _ := Bencrypt.Genkey([]byte("0000000000000000"), "test", 16)
-	print(k)
+	fmt.Println(k)
 
 	// ===== aes test =====
 	fmt.Println("\n===== aes test =====")
@@ -62,7 +62,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	print(enc)
+	fmt.Println(enc)
 	fmt.Println(m.Processed())
 
 	// DeAESGCM
@@ -82,7 +82,7 @@ func main() {
 		panic(err)
 	}
 	tBytes := w.Bytes()
-	print(tBytes[0:16])
+	fmt.Println(tBytes[0:16])
 	fmt.Println(m.Processed())
 
 	// DeAESGCMx (Streaming)
@@ -157,7 +157,7 @@ func main() {
 	if err != nil {
 		fmt.Println("Decrypt Error:", err)
 	} else {
-		print(dec0)
+		fmt.Println(dec0)
 	}
 
 	// Compatibility Check (Verify sign0)
@@ -200,7 +200,7 @@ func main() {
 	if err != nil {
 		fmt.Println("Decrypt Error:", err)
 	} else {
-		print(dec1)
+		fmt.Println(dec1)
 	}
 
 	// Compatibility Check (Verify sign1)
