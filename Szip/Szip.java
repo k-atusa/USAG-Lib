@@ -83,11 +83,10 @@ public class Szip implements Closeable {
             try {
                 CRC32 crc = new CRC32();
                 long size = 0;
-                try (FileOutputStream fos = new FileOutputStream(temp);
-                    BufferedInputStream bis = new BufferedInputStream(inputStream)) {
+                try (FileOutputStream fos = new FileOutputStream(temp)) {
                     byte[] buffer = new byte[65536];
                     int len;
-                    while ((len = bis.read(buffer)) != -1) {
+                    while ((len = inputStream.read(buffer)) != -1) {
                         fos.write(buffer, 0, len);
                         crc.update(buffer, 0, len);
                         size += len;

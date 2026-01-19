@@ -41,7 +41,9 @@ public class Star implements Closeable {
     }
 
     public void write(String name, File data, int mode) throws IOException {
-        write(name, new FileInputStream(data), data.length(), mode, false);
+        try (FileInputStream fis = new FileInputStream(data)) {
+            write(name, fis, data.length(), mode, false);
+        }
     }
 
     public void write(String name, InputStream data, long size, int mode, boolean isDir) throws IOException {

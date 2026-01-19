@@ -94,17 +94,16 @@ func (z *ZipWriter) WriteBin(name string, data []byte) error {
 }
 
 func (z *ZipWriter) Close() ([]byte, error) {
-	err := z.zip.Close()
-	if err != nil {
-		return nil, err
-	}
+	e0 := z.zip.Close()
+	var e1 error = nil
+	var res []byte = nil
 	if z.isMem {
-		temp := z.buffer.Bytes()
+		res = z.buffer.Bytes()
 		z.buffer = nil
-		return temp, nil
 	} else {
-		return nil, z.file.Close()
+		e1 = z.file.Close()
 	}
+	return res, errors.Join(e0, e1)
 }
 
 // Zip64 Reader
