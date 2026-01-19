@@ -120,44 +120,37 @@ public class test {
 
 
             System.out.println("\n===== rsa test =====");
-            // Load pre-existing key (Interop)
-            Bencrypt youRSA = new Bencrypt();
-            youRSA.RSAloadkey(Base64.getDecoder().decode(pub0), Base64.getDecoder().decode(pri0));
-            
-            byte[] rsaEnc = youRSA.RSAencrypt(plain); // Hello world * 4
-            System.out.println(new String(youRSA.RSAdecrypt(rsaEnc), StandardCharsets.UTF_8));
+            Bencrypt me = new Bencrypt();
+            me.RSAgenkey(2048);
+            Bencrypt you = new Bencrypt();
+            you.RSAloadkey(Base64.getDecoder().decode(pub0), Base64.getDecoder().decode(pri0));
 
-            // Generate new key
-            Bencrypt meRSA = new Bencrypt();
-            meRSA.RSAgenkey(2048);
-            byte[] rsaSig = meRSA.RSAsign(plain);
-            System.out.println(meRSA.RSAverify(plain, rsaSig));
+            // encrypt, sign
+            byte[] rsaEnc = me.RSAencrypt(plain); // Hello world * 4
+            System.out.println(new String(me.RSAdecrypt(rsaEnc), StandardCharsets.UTF_8));
+            byte[] rsaSig = me.RSAsign(plain);
+            System.out.println(me.RSAverify(plain, rsaSig));
 
             // Interop: decrypt enc0, verify sign0
-            p(youRSA.RSAdecrypt(Base64.getDecoder().decode(enc0))); // Should be "0000" (48 48 48 48)
-            System.out.println(youRSA.RSAverify("0000".getBytes(), Base64.getDecoder().decode(sign0)));
+            p(you.RSAdecrypt(Base64.getDecoder().decode(enc0))); // Should be "0000" (48 48 48 48)
+            System.out.println(you.RSAverify("0000".getBytes(), Base64.getDecoder().decode(sign0)));
 
 
             System.out.println("\n===== ecc test =====");
-            // Load pre-existing key (Interop)
-            Bencrypt youECC = new Bencrypt();
-            youECC.ECCloadkey(Base64.getDecoder().decode(pub1), Base64.getDecoder().decode(pri1));
+            me = new Bencrypt();
+            me.ECCgenkey();
+            you = new Bencrypt();
+            you.ECCloadkey(Base64.getDecoder().decode(pub1), Base64.getDecoder().decode(pri1));
 
-            // Generate new key
-            Bencrypt meECC = new Bencrypt();
-            meECC.ECCgenkey();
-
-            // Encrypt using receiver's public key
-            byte[] eccEnc = meECC.ECCencrypt(plain, Base64.getDecoder().decode(pub1));
-            System.out.println(new String(youECC.ECCdecrypt(eccEnc), StandardCharsets.UTF_8));
-
-            // Sign
-            byte[] eccSig = meECC.ECCsign(plain); // Using meECC.private (ECCpri)
-            System.out.println(meECC.ECCverify(plain, eccSig));
+            // encrypt, sign
+            byte[] eccEnc = me.ECCencrypt(plain); // Hello world * 4
+            System.out.println(new String(me.ECCdecrypt(eccEnc), StandardCharsets.UTF_8));
+            byte[] eccSig = me.ECCsign(plain);
+            System.out.println(me.ECCverify(plain, eccSig));
 
             // Interop: decrypt enc1, verify sign1
-            p(youECC.ECCdecrypt(Base64.getDecoder().decode(enc1))); // Should be "0000"
-            System.out.println(youECC.ECCverify("0000".getBytes(), Base64.getDecoder().decode(sign1)));
+            p(you.ECCdecrypt(Base64.getDecoder().decode(enc1))); // Should be "0000"
+            System.out.println(you.ECCverify("0000".getBytes(), Base64.getDecoder().decode(sign1)));
 
         } catch (Exception e) {
             e.printStackTrace();

@@ -612,30 +612,23 @@ func (e *ECC1) Loadkey(public []byte, private []byte) error {
 	return nil
 }
 
-// Encrypt data using receiver's public key (Hybrid: ECDH + AES-GCM)
-func (e *ECC1) Encrypt(data []byte, receiver []byte) ([]byte, error) {
-	// 1. Get receiver X448 public key
-	if len(receiver) != 113 {
-		return nil, errors.New("invalid receiver key length")
-	}
-	var peerKey x448.Key
-	copy(peerKey[:], receiver[:56])
-
-	// 2. Generate temp ephemeral key
+// Encrypt data using public key (Hybrid: ECDH + AES-GCM)
+func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
+	// 1. Generate temp ephemeral key
 	var tempPub, tempPriv x448.Key
 	if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
 		return nil, err
 	}
 	x448.KeyGen(&tempPub, &tempPriv)
 
-	// 3. Get shared secret (ECDH)
+	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	ok := x448.Shared(&shared, &tempPriv, &peerKey)
+	ok := x448.Shared(&shared, &tempPriv, e.PubX)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed (bad public key)")
 	}
 
-	// 4. Derive Key & Encrypt with AES-GCM
+	// 3. Derive Key & Encrypt with AES-GCM
 	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
 	if err != nil {
 		return nil, err

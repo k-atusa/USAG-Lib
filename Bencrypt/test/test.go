@@ -124,85 +124,63 @@ func main() {
 
 	// ===== rsa test =====
 	fmt.Println("\n===== rsa test =====")
-	you := Bencrypt.RSA1{}
-	err = you.Loadkey(b64d(pub0), b64d(pri0))
-	if err != nil {
-		panic(err)
-	}
+	me0 := Bencrypt.RSA1{}
+	me0.Genkey(2048)
+	you0 := Bencrypt.RSA1{}
+	you0.Loadkey(b64d(pub0), b64d(pri0))
 
-	enc, err = you.Encrypt([]byte(strings.Repeat("Hello, world!", 4)))
+	enc, err = me0.Encrypt([]byte(strings.Repeat("Hello, world!", 4)))
 	if err != nil {
 		panic(err)
 	}
-	dec, err = you.Decrypt(enc)
+	dec, err = me0.Decrypt(enc)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(string(dec))
-
-	me := Bencrypt.RSA1{}
-	_, _, err = me.Genkey(0) // 0 for default bits
+	enc, err = me0.Sign([]byte(strings.Repeat("Hello, world!", 4)))
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println(me0.Verify([]byte(strings.Repeat("Hello, world!", 4)), enc))
 
-	enc, err = me.Sign([]byte(strings.Repeat("Hello, world!", 4)))
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(me.Verify([]byte(strings.Repeat("Hello, world!", 4)), enc))
-
-	// Compatibility Check (Decrypt enc0)
-	dec0, err := you.Decrypt(b64d(enc0))
+	// Compatibility Check (Decrypt enc0, Verify sign0)
+	dec, err = you0.Decrypt(b64d(enc0))
 	if err != nil {
 		fmt.Println("Decrypt Error:", err)
 	} else {
-		fmt.Println(dec0)
+		fmt.Println(dec)
 	}
-
-	// Compatibility Check (Verify sign0)
-	fmt.Println(you.Verify([]byte("0000"), b64d(sign0)))
+	fmt.Println(you0.Verify([]byte("0000"), b64d(sign0)))
 
 	// ===== ecc test =====
 	fmt.Println("\n===== ecc test =====")
-	youEcc := Bencrypt.ECC1{}
-	err = youEcc.Loadkey(b64d(pub1), b64d(pri1))
-	if err != nil {
-		panic(err)
-	}
+	me1 := Bencrypt.ECC1{}
+	me1.Genkey()
+	you1 := Bencrypt.ECC1{}
+	you1.Loadkey(b64d(pub1), b64d(pri1))
 
-	meEcc := Bencrypt.ECC1{}
-	_, _, err = meEcc.Genkey()
+	enc, err = me1.Encrypt([]byte(strings.Repeat("Hello, world!", 4)))
 	if err != nil {
 		panic(err)
 	}
-
-	// Encrypt
-	enc, err = meEcc.Encrypt([]byte(strings.Repeat("Hello, world!", 4)), b64d(pub1))
-	if err != nil {
-		panic(err)
-	}
-	dec, err = youEcc.Decrypt(enc)
+	dec, err = me1.Decrypt(enc)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(string(dec))
-
-	// Sign
-	enc, err = meEcc.Sign([]byte(strings.Repeat("Hello, world!", 4)))
+	enc, err = me1.Sign([]byte(strings.Repeat("Hello, world!", 4)))
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(meEcc.Verify([]byte(strings.Repeat("Hello, world!", 4)), enc))
+	fmt.Println(me1.Verify([]byte(strings.Repeat("Hello, world!", 4)), enc))
 
-	// Compatibility Check (Decrypt enc1)
-	dec1, err := youEcc.Decrypt(b64d(enc1))
+	// Compatibility Check (Decrypt enc1, Verify sign1)
+	dec, err = you1.Decrypt(b64d(enc1))
 	if err != nil {
 		fmt.Println("Decrypt Error:", err)
 	} else {
-		fmt.Println(dec1)
+		fmt.Println(dec)
 	}
-
-	// Compatibility Check (Verify sign1)
-	fmt.Println(youEcc.Verify([]byte("0000"), b64d(sign1)))
+	fmt.Println(you1.Verify([]byte("0000"), b64d(sign1)))
 }

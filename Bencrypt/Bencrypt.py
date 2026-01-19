@@ -209,14 +209,12 @@ class ECC1: # Curve448
             self.priX = x448.X448PrivateKey.from_private_bytes(private[:56])
             self.priEd = ed448.Ed448PrivateKey.from_private_bytes(private[56:])
 
-    def encrypt(self, data: bytes, receiver: bytes) -> bytes: # encrypt with receiver's public key
-        if len(receiver) != 113: raise ValueError("Invalid receiver key")
-        peerKey = x448.X448PublicKey.from_public_bytes(receiver[:56]) # 1. Get receiver X448 public key
-        tempKey = x448.X448PrivateKey.generate() # 2. Generate temp ephemeral key
+    def encrypt(self, data: bytes) -> bytes: # encrypt with public key
+        tempKey = x448.X448PrivateKey.generate() # 1. Generate temp ephemeral key
         tempPub = tempKey.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-        shared = tempKey.exchange(peerKey) # 3. Get shared secret (ECDH)
+        shared = tempKey.exchange(self.pubX) # 2. Get shared secret (ECDH)
         gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
-        enc = self.em.enAESGCM(gcmKey, data) # 4. Encrypt with AES-GCM
+        enc = self.em.enAESGCM(gcmKey, data) # 3. Encrypt with AES-GCM
         return len(tempPub).to_bytes(1, 'big') + tempPub + enc
 
     def decrypt(self, data: bytes) -> bytes:

@@ -802,26 +802,21 @@ class ECC1 {
     }
 
     /**
-     * encrypt with receiver's public key
+     * encrypt with public key
      * @param {Uint8Array} data
      * @param {Uint8Array} receiver
      * @returns {Promise<Uint8Array>}
      */
-    async encrypt(data, receiver) {
-        // check receiver
+    async encrypt(data) {
         const d = toU8(data);
-        const r = toU8(receiver);
-        if (r.length !== 113) throw new Error("Invalid receiver key");
-        const peerPubRaw = r.slice(0, 56); // Extract X448 public
         let sharedSecret, ephPubRaw;
-
         if (isNode) {
             // make temp key
             const ephKp = deps.crypto.generateKeyPairSync('x448');
             ephPubRaw = ephKp.publicKey.export({ format: 'raw', type: 'spki' });
             
             // get shared secret
-            const peerKeyObj = deps.crypto.createPublicKey({ key: peerPubRaw, format: 'raw', type: 'spki' });
+            const peerKeyObj = deps.crypto.createPublicKey({ key: this.pubX, format: 'raw', type: 'spki' });
             sharedSecret = deps.crypto.diffieHellman({
                 privateKey: ephKp.privateKey,
                 publicKey: peerKeyObj
@@ -831,7 +826,7 @@ class ECC1 {
             // make temp key, get shared secret
             const ephPri = deps.noble.x448.utils.randomPrivateKey();
             ephPubRaw = deps.noble.x448.getPublicKey(ephPri);
-            sharedSecret = deps.noble.x448.getSharedSecret(ephPri, peerPubRaw);
+            sharedSecret = deps.noble.x448.getSharedSecret(ephPri, this.pubX);
         }
 
         // encrypt

@@ -249,14 +249,11 @@ func main() {
 	dur = time.Since(start)
 	fmt.Printf("[ECC-448]  GenKey : %s\n", fmtTime(iterKeyGen, dur))
 
-	// Prepare
-	pubBytes, _, _ := ecc.Genkey()
-	var eccEnc []byte
-
 	// Encrypt
+	var eccEnc []byte
 	start = time.Now()
 	for i := 0; i < ITER_FAST; i++ {
-		eccEnc, err = ecc.Encrypt(payload, pubBytes)
+		eccEnc, err = ecc.Encrypt(payload)
 		if err != nil {
 			panic(err)
 		}

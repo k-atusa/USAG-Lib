@@ -489,32 +489,26 @@ public class Bencrypt {
         }
     }
 
-    // ECC encrypt with receiver's public key, output: [1B KeyLen][PubKey][Ciphertext]
-    public byte[] ECCencrypt(byte[] data, byte[] receiver) throws Exception {
-        if (receiver.length != 113) throw new IllegalArgumentException("Invalid receiver key");
-            
-        // 1. Parse Receiver X448 Public Key
-        byte[] peerPubRaw = Arrays.copyOfRange(receiver, 0, 56);
-        X448PublicKeyParameters peerPub = new X448PublicKeyParameters(peerPubRaw, 0);
-
-        // 2. Generate Ephemeral Key
+    // ECC encrypt with public key, output: [1B KeyLen][PubKey][Ciphertext]
+    public byte[] ECCencrypt(byte[] data) throws Exception {
+        // 1. Generate Temp Ephemeral Key
         X448KeyPairGenerator xGen = new X448KeyPairGenerator();
         xGen.init(new X448KeyGenerationParameters(new SecureRandom()));
         AsymmetricCipherKeyPair ephKp = xGen.generateKeyPair();
         X448PublicKeyParameters ephPub = (X448PublicKeyParameters) ephKp.getPublic();
         X448PrivateKeyParameters ephPri = (X448PrivateKeyParameters) ephKp.getPrivate();
 
-        // 3. ECDH Agreement
+        // 2. ECDH Agreement
         X448Agreement agreement = new X448Agreement();
         agreement.init(ephPri);
         byte[] sharedSecret = new byte[agreement.getAgreementSize()];
-        agreement.calculateAgreement(peerPub, sharedSecret, 0);
+        agreement.calculateAgreement(this.pubX, sharedSecret, 0);
 
-        // 4. KDF & Encrypt
+        // 3. KDF & Encrypt
         byte[] gcmKey = genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
         byte[] enc = enAESGCM(gcmKey, data);
 
-        // 5. Pack
+        // 4. Pack
         byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
         byte[] res = new byte[1 + ephPubRaw.length + enc.length];
         res[0] = (byte) ephPubRaw.length;

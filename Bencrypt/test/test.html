@@ -141,44 +141,44 @@
                 log(dec.length / 4, "#569cd6");
 
                 log("===== RSA Functions Test =====", "white");
-                // 3-1. RSA encrypt test
                 plain = new TextEncoder().encode("Hello, world!".repeat(4));
-                const you0 = new RSA1();
-                await you0.loadkey(fromBase64(pub0), fromBase64(pri0));
-                enc = await you0.encrypt(plain);
-                dec = await you0.decrypt(enc);
+                let me = new RSA1();
+                await me.genkey(2048);
+
+                // 3-1. RSA encrypt test
+                enc = await me.encrypt(plain);
+                dec = await me.decrypt(enc);
                 log("RSA: " + new TextDecoder().decode(dec), "#569cd6");
 
                 // 3-2. RSA sign test
-                const me0 = new RSA1();
-                await me0.genkey(2048);
-                enc = await me0.sign(plain);
-                dec = await me0.verify(plain, enc);
+                enc = await me.sign(plain);
+                dec = await me.verify(plain, enc);
                 log("RSA: " + dec, "#569cd6");
 
                 // 3-3. RSA external test
-                log(formatBytes( await you0.decrypt(fromBase64(enc0)) ), "#569cd6");
-                log(await you0.verify("0000", fromBase64(sign0)), "#569cd6");
+                let you = new RSA1();
+                await you.loadkey(fromBase64(pub0), fromBase64(pri0));
+                log(formatBytes( await you.decrypt(fromBase64(enc0)) ), "#569cd6");
+                log(await you.verify("0000", fromBase64(sign0)), "#569cd6");
 
                 log("===== ECC Functions Test =====", "white");
+                me = new ECC1();
+                await me.genkey();
                 // 4-1. ECC encrypt test
-                plain = new TextEncoder().encode("Hello, world!".repeat(4));
-                const you1 = new ECC1();
-                await you1.loadkey(fromBase64(pub1), fromBase64(pri1));
-                const me1 = new RSA1();
-                await me1.genkey();
-                enc = await me1.encrypt(plain, fromBase64(pub1));
-                dec = await me1.decrypt(enc);
+                enc = await me.encrypt(plain);
+                dec = await me.decrypt(enc);
                 log("ECC: " + new TextDecoder().decode(dec), "#569cd6");
 
                 // 4-2. ECC sign test
-                enc = await me1.sign(plain);
-                dec = await me1.verify(plain, enc);
+                enc = await me.sign(plain);
+                dec = await me.verify(plain, enc);
                 log("ECC: " + dec, "#569cd6");
 
                 // 4-3. ECC external test
-                log(formatBytes( await you1.decrypt(fromBase64(enc1)) ), "#569cd6");
-                log(await you1.verify("0000", fromBase64(sign1)), "#569cd6");
+                you = new ECC1();
+                you.loadkey(fromBase64(pub1), fromBase64(pri1));
+                log(formatBytes( await you.decrypt(fromBase64(enc1)) ), "#569cd6");
+                log(await you.verify("0000", fromBase64(sign1)), "#569cd6");
 
             } catch (e) {
                 console.error(e);

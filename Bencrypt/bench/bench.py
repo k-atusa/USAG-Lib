@@ -185,7 +185,7 @@ def main():
     # Encrypt
     start = time.perf_counter()
     for _ in range(ITER_FAST):
-        enc = ecc.encrypt(payload, pub[:56] + pub[56:]) # pass full pub key
+        enc = ecc.encrypt(payload)
     dur = time.perf_counter() - start
     print(f"[ECC-448]  Encrypt: {fmt_time(ITER_FAST, dur)} (Includes AES gen)")
 

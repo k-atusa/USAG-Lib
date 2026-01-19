@@ -251,15 +251,12 @@
                 }
                 dur = performance.now() - start;
                 log(`[ECC-448]  GenKey : ${fmt_time(ITER_KEYGEN, dur)}`);
-
-                // Prepare
-                const [pubFull, _] = await ecc.genkey();
                 
                 // Encrypt (Includes AES Gen + Enc)
                 let encEcc;
                 start = performance.now();
                 for(let i=0; i<ITER_FAST; i++) {
-                    encEcc = await ecc.encrypt(payload, pubFull);
+                    encEcc = await ecc.encrypt(payload);
                 }
                 dur = performance.now() - start;
                 log(`[ECC-448]  Encrypt: ${fmt_time(ITER_FAST, dur)} (Includes AES gen)`);

@@ -201,6 +201,7 @@ public class bench {
 
             // 8. ECC (Curve448)
             Bencrypt ecc = new Bencrypt();
+            byte[] eccEnc = null;
 
             // Key Gen
             start = System.nanoTime();
@@ -210,15 +211,10 @@ public class bench {
             end = System.nanoTime();
             System.out.println("[ECC-448]  GenKey : " + fmtTime(ITER_KEYGEN, end - start));
 
-            // Prepare
-            byte[][] keys = ecc.ECCgenkey(); // [0]=pub, [1]=pri
-            byte[] pubFull = keys[0];
-            byte[] eccEnc = null;
-
             // Encrypt (Includes AES Gen + Enc)
             start = System.nanoTime();
             for (int i = 0; i < ITER_FAST; i++) {
-                eccEnc = ecc.ECCencrypt(payload, pubFull);
+                eccEnc = ecc.ECCencrypt(payload);
             }
             end = System.nanoTime();
             System.out.println("[ECC-448]  Encrypt: " + fmtTime(ITER_FAST, end - start) + " (Includes AES gen)");
