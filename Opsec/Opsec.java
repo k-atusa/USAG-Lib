@@ -59,7 +59,7 @@ public class Opsec {
     }
 
     // ========== Helper Functions ==========
-    public static byte[] crc32(byte[] data) {
+    public byte[] crc32(byte[] data) {
         CRC32 crc = new CRC32();
         crc.update(data);
         long value = crc.getValue();
@@ -68,7 +68,7 @@ public class Opsec {
         return buf.array();
     }
 
-    private static byte[] encodeInt(long data, int size) {
+    public byte[] encodeInt(long data, int size) {
         ByteBuffer buf = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
         if (size == 1) buf.put((byte) data);
         else if (size == 2) buf.putShort((short) data);
@@ -77,7 +77,7 @@ public class Opsec {
         return buf.array();
     }
 
-    private static long decodeInt(byte[] data) {
+    public long decodeInt(byte[] data) {
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
         if (data.length == 1) return Byte.toUnsignedInt(buf.get());
         if (data.length == 2) return Short.toUnsignedInt(buf.getShort());
@@ -86,7 +86,7 @@ public class Opsec {
         return 0;
     }
 
-    private static byte[] concat(byte[]... arrays) {
+    private byte[] concat(byte[]... arrays) {
         int len = 0;
         for (byte[] a : arrays) len += a.length;
         byte[] res = new byte[len];
@@ -98,16 +98,16 @@ public class Opsec {
         return res;
     }
 
-    private static byte[] strToBytes(String s) {
+    private byte[] strToBytes(String s) {
         return s.getBytes(StandardCharsets.UTF_8);
     }
 
-    private static String bytesToStr(byte[] b) {
+    private String bytesToStr(byte[] b) {
         return new String(b, StandardCharsets.UTF_8);
     }
 
     // Config Encoding
-    public static byte[] encodeCfg(Map<String, byte[]> data) throws IOException {
+    public byte[] encodeCfg(Map<String, byte[]> data) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (Map.Entry<String, byte[]> entry : data.entrySet()) {
             byte[] keyBytes = strToBytes(entry.getKey());
@@ -132,7 +132,7 @@ public class Opsec {
     }
 
     // Config Decoding
-    public static Map<String, byte[]> decodeCfg(byte[] data) {
+    public Map<String, byte[]> decodeCfg(byte[] data) {
         Map<String, byte[]> result = new HashMap<>();
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
         while (buf.hasRemaining()) {
