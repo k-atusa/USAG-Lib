@@ -21,7 +21,7 @@ def encodeCfg(data: Dict[str, bytes]) -> bytes: # keysize max 127, datasize max 
         keyLen = len(keyBytes)
         dataLen = len(data)
         if keyLen > 127:
-            raise ValueError(f"Key length is too long: {keyLen}")
+            raise ValueError(f"Key length too long: {keyLen}")
         if dataLen > 65535:
             raise ValueError(f"Data size too big: {dataLen}")
         if dataLen > 255: # dataLen > 255, datasize is 2B
@@ -272,11 +272,7 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
 
         # decrypt header
         m = Bencrypt.AES1()
-        try:
-            decrypted_head = m.deAESGCM(hkey, self.encHeadData)
-        except Exception:
-            raise ValueError("AES decryption failed")
-        self._unwrapHead(decrypted_head)
+        self._unwrapHead(m.deAESGCM(hkey, self.encHeadData))
 
     def decpub(self, private: bytes, public: Union[bytes, None] = None): # verify sign if public is not None
         if self.headAlgo == "":
@@ -285,23 +281,17 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
             raise ValueError(f"Unsupported method: {self.headAlgo}")
         decrypted_head = b""
 
+        # decrypt header
         if self.headAlgo == "rsa1":
             rsa = Bencrypt.RSA1()
             aes = Bencrypt.AES1()
-            try:
-                rsa.loadkey(None, private)
-                hkey = rsa.decrypt(self.encHeadKey)
-                decrypted_head = aes.deAESGCM(hkey, self.encHeadData)
-            except Exception:
-                raise ValueError("RSA decryption failed")
-
+            rsa.loadkey(None, private)
+            hkey = rsa.decrypt(self.encHeadKey)
+            decrypted_head = aes.deAESGCM(hkey, self.encHeadData)
         elif self.headAlgo == "ecc1":
             ecc = Bencrypt.ECC1()
-            try:
-                ecc.loadkey(None, private)
-                decrypted_head = ecc.decrypt(self.encHeadData)
-            except Exception:
-                raise ValueError("ECC decryption failed")
+            ecc.loadkey(None, private)
+            decrypted_head = ecc.decrypt(self.encHeadData)
 
         # unwrap header, check sign
         self._unwrapHead(decrypted_head)

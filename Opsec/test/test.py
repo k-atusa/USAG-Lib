@@ -1,3 +1,4 @@
+import io
 import Bencrypt
 import Opsec
 
@@ -9,6 +10,13 @@ pub0, pri0 = m.genkey(2048)
 m = Bencrypt.ECC1()
 pub1, pri1 = m.genkey()
 m = Opsec.Opsec()
+
+# rw
+w = io.BytesIO()
+w.write(b"\x00" * 128 * 4)
+m.write(w, b"Hello, world!")
+r = io.BytesIO(w.getvalue())
+print(m.read(r).decode("utf-8"))
 
 # PBKDF2
 m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"

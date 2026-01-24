@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opsec Library Test</title>
+    <style>
+        body { font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 20px; }
+        #log { white-space: pre-wrap; word-wrap: break-word; }
+        .success { color: #4ec9b0; }
+        .error { color: #f44747; }
+        .info { color: #569cd6; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        .success { color: #4caf50; }
+        .info { color: #569cd6; }
+        .warn { color: #cca700; }
+        .error { color: #f44336; }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.8.0/src/sha3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js"></script>
+    <script type="module">
+        import { x448, ed448 } from 'https://esm.sh/@noble/curves@1.2.0/ed448';
+        window.noble = { x448, ed448 };
+    </script>
+
+    <script src="../../Bencrypt/Bencrypt.js"></script>
+    <script src="../Opsec.js"></script>
+</head>
+<body>
+    <h2>Opsec Library Test Output</h2>
+    <button onclick="runTest()">(Run Test)</button>
+    <div id="log">Ready...</div>
+
+    <script>
+        // logger
+        const logDiv = document.getElementById('log');
+        function print(msg, color = '') {
+            const span = document.createElement('span');
+            span.textContent = msg + '\n';
+            if (color) span.className = color;
+            logDiv.appendChild(span);
+        }
+
+        // test main
+        async function runTest() {
+            // initialize
+            InitBencrypt();
+            logDiv.textContent = "";
+            
+            try {
+                // CRC32 Test
+                const crc = crc32(strToU8("test"));
+                print(`CRC32(b"test"): ${crc.join(" ")}`, "success"); // Expected: 12 126 127 216
+                print("");
+
+                // Key Generation
+                print("[Setup] Generating Keys...", "info");
+                const rsa = new RSA1();
+                const [pub0, pri0] = await rsa.genkey(2048);
+                const ecc = new ECC1();
+                const [pub1, pri1] = await ecc.genkey();
+                const m = new Opsec();
+
+                // rw test
+                print("[Test] Read/Write", "info");
+                let w = new TestWriter();
+                await w.write(new Uint8Array(128 * 4));
+                await m.write(w, strToU8("Hello, world!"));
+                let r = new TestReader(w.getValue());
+                print(`Result: ${u8ToStr(await m.read(r))}`);
+
+                // PBKDF2 Test
+                print("\n[Test] PBKDF2 Mode", "info");
+                m.msg = "msg-test"; m.smsg = "smsg-test"; m.size = 1024; m.name = "name-test"; m.bodyAlgo = "gcm1"; m.contAlgo = "zip1";
+                const encPbk = await m.encpw("pbk1", "password", "keyfile");
+                m.view(encPbk);
+                await m.decpw("password", "keyfile");
+                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                m.reset();
+
+                // Argon2 Test
+                print("\n[Test] Argon2 Mode", "info");
+                m.msg = "msg-test"; m.smsg = "smsg-test";
+                const encArg = await m.encpw("arg1", "password");
+                m.view(encArg);
+                await m.decpw("password");
+                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                m.reset();
+
+                // RSA Test
+                print("\n[Test] RSA Mode", "info");
+                m.msg = "msg-test"; m.smsg = "smsg-test"; m.size = 1024; m.name = "name-test"; m.bodyAlgo = "gcm1"; m.contAlgo = "zip1";
+                const encRSA = await m.encpub("rsa1", pub0, pri0);
+                m.view(encRSA);
+                await m.decpub(pri0, pub0);
+                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                m.reset();
+
+                // ECC Test
+                print("\n[Test] ECC Mode", "info");
+                m.msg = "msg-test"; m.smsg = "smsg-test";
+                const encECC = await m.encpub("ecc1", pub1, pri1);
+                m.view(encECC);
+                await m.decpub(pri1, pub1);
+                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+
+                print("\n[Done] All tests finished successfully.", "success");
+            } catch (e) {
+                print(`\n[Exception] ${e.message}`, "error");
+                console.error(e);
+            }
+        }
+    </script>
+</body>
+</html>
