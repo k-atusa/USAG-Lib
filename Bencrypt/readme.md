@@ -164,8 +164,8 @@ class Bencrypt {
 #### AES-GCM
 
 키는 44바이트 고정으로, 앞 12바이트를 iv, 뒤 32바이트를 key로 사용합니다.
-GCM 모드는 결과로 태그가 붙은 암호문을 내보냅니다. 형식: `[CipherText][Tag 16B]`
-GCMx 모드는 입력은 1MiB로 나눠서 독립적인 iv(기본 iv[4:12] XOR counter)를 적용합니다. 출력에는 태그가 붙은 청크를 그대로 이어붙여 씁니다. 형식: `[CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`
+- GCM 모드는 결과로 태그가 붙은 암호문을 내보냅니다. 형식: `[CipherText][Tag 16B]`
+- GCMx 모드는 입력은 1MiB로 나눠서 독립적인 iv(기본 iv[4:12] XOR counter)를 적용합니다. 출력에는 태그가 붙은 청크를 그대로 이어붙여 씁니다. 형식: `[CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`
 
 #### RSA
 
