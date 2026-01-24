@@ -1,6 +1,7 @@
 # test794a : USAG-Lib opsec
 from typing import Dict, Union
 
+import io
 import zlib
 import Bencrypt
 
@@ -84,6 +85,36 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
         self.bodyAlgo: str = "" # body algorithm, [gcm1 gcmx1]
         self.contAlgo: str = "" # container algorithm, [zip1 tar1]
         self.sign: bytes = b"" # signature to bodyKey/smsg
+
+    def read(self, ins: io.IOBase, cut: int = 65535) -> bytes: # set cut to 0 to read all
+        c = 0
+        while True:
+            data = ins.read(4)
+            c += 4
+            if data == b"":
+                return b""
+            elif data == b"YAS2":
+                size = decodeInt(ins.read(2), False)
+                if size == 65535:
+                    size += decodeInt(ins.read(2), False)
+                return ins.read(size)
+            else:
+                ins.read(124)
+                c += 124
+            if cut > 0 and c > cut:
+                return b""
+
+    def write(self, outs: io.IOBase, head: bytes):
+        outs.write(b"YAS2")
+        size = len(head)
+        if size < 65535:
+            outs.write(encodeInt(size, 2, False))
+        elif size <= 65535 * 2:
+            outs.write(encodeInt(65535, 2, False))
+            outs.write(encodeInt(size - 65535, 2, False))
+        else:
+            raise ValueError(f"Data size too big: {size}")
+        outs.write(head)
 
     def _wrapHead(self) -> bytes:
         cfg: Dict[str, bytes] = {}
