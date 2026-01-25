@@ -77,7 +77,7 @@ func main() {
 	plainLarge := make([]byte, 100000000) // 100MB
 	r := bytes.NewReader(plainLarge)
 	w := new(bytes.Buffer)
-	err = m.EnAESGCMx(key, r, len(plainLarge), w, 0) // 0 for default chunk size
+	err = m.EnAESGCMx(key, r, int64(len(plainLarge)), w, 0) // 0 for default chunk size
 	if err != nil {
 		panic(err)
 	}
@@ -88,7 +88,7 @@ func main() {
 	// DeAESGCMx (Streaming)
 	r = bytes.NewReader(tBytes)
 	w = new(bytes.Buffer)
-	err = m.DeAESGCMx(key, r, len(tBytes), w, 0)
+	err = m.DeAESGCMx(key, r, int64(len(tBytes)), w, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -108,18 +108,18 @@ func main() {
 	tBytes = w.Bytes()
 	r = bytes.NewReader(tBytes)
 	w = new(bytes.Buffer)
-	m.DeAESGCMx(key, r, len(tBytes), w, 0)
+	m.DeAESGCMx(key, r, int64(len(tBytes)), w, 0)
 	fmt.Println(bytes.Equal(w.Bytes(), []byte{}))
 
 	// 4MiB Streaming
 	plain4MB := make([]byte, 1048576*4)
 	r = bytes.NewReader(plain4MB)
 	w = new(bytes.Buffer)
-	m.EnAESGCMx(key, r, len(plain4MB), w, 0)
+	m.EnAESGCMx(key, r, int64(len(plain4MB)), w, 0)
 	tBytes = w.Bytes()
 	r = bytes.NewReader(tBytes)
 	w = new(bytes.Buffer)
-	m.DeAESGCMx(key, r, len(tBytes), w, 0)
+	m.DeAESGCMx(key, r, int64(len(tBytes)), w, 0)
 	fmt.Println(bytes.Equal(w.Bytes(), plain4MB))
 
 	// ===== rsa test =====

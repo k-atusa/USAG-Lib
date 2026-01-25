@@ -129,7 +129,7 @@ type Opsec struct {
 
 	// Inner Layer
 	Smsg     string // secured message
-	Size     int    // full body size, flag for bodyKey generation
+	Size     int64  // full body size, flag for bodyKey generation
 	Name     string // body name
 	BodyKey  []byte // body key
 	BodyAlgo string // body algorithm, [gcm1 gcmx1]
@@ -269,7 +269,7 @@ func (o *Opsec) unwrapHead(data []byte) {
 		o.Smsg = string(v)
 	}
 	if v, ok := cfg["sz"]; ok {
-		o.Size = int(DecodeInt(v))
+		o.Size = int64(DecodeInt(v))
 	}
 	if v, ok := cfg["nm"]; ok {
 		o.Name = string(v)

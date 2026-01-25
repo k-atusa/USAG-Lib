@@ -33,12 +33,12 @@ func (tw *TarWriter) Init(output string) error {
 	return nil
 }
 
-func (tw *TarWriter) pad(size int) []byte {
+func (tw *TarWriter) pad(size int64) []byte {
 	padSize := (512 - (size % 512)) % 512
 	return make([]byte, padSize)
 }
 
-func (tw *TarWriter) tarHeader(name string, size int, mode int, mtime int64, flag byte) []byte {
+func (tw *TarWriter) tarHeader(name string, size int64, mode int, mtime int64, flag byte) []byte {
 	var h [512]byte
 
 	// Name (100)
@@ -80,7 +80,7 @@ func (tw *TarWriter) tarHeader(name string, size int, mode int, mtime int64, fla
 	return h[:]
 }
 
-func (tw *TarWriter) paxHeader(name string, size int) []byte {
+func (tw *TarWriter) paxHeader(name string, size int64) []byte {
 	// Pax elements
 	records := ""
 	data := [][]string{{"path", name}, {"size", fmt.Sprintf("%d", size)}}
@@ -100,13 +100,13 @@ func (tw *TarWriter) paxHeader(name string, size int) []byte {
 	// Build PAX header block
 	paxData := []byte(records)
 	paxName := "PaxHeader/" + name
-	header := tw.tarHeader(paxName, len(paxData), 0644, time.Now().Unix(), 'x')
+	header := tw.tarHeader(paxName, int64(len(paxData)), 0644, time.Now().Unix(), 'x')
 
 	// Join: Header + Data + Pad
 	buf := make([]byte, 0, 1024)
 	buf = append(buf, header...)
 	buf = append(buf, paxData...)
-	buf = append(buf, tw.pad(len(paxData))...)
+	buf = append(buf, tw.pad(int64(len(paxData)))...)
 	return buf
 }
 
@@ -115,7 +115,7 @@ func (tw *TarWriter) WriteFile(name string, path string, mode int) error {
 	if err != nil {
 		return err
 	}
-	size := int(info.Size())
+	size := info.Size()
 
 	// PAX check, Write Header
 	if len(name) > 99 || size > 077777777777 {
@@ -149,7 +149,7 @@ func (tw *TarWriter) WriteDir(name string, mode int) error {
 }
 
 func (tw *TarWriter) WriteBin(name string, data []byte, mode int) error {
-	size := len(data)
+	size := int64(len(data))
 	if len(name) > 99 || size > 077777777777 {
 		tw.out.Write(tw.paxHeader(name, size))
 	}
@@ -181,7 +181,7 @@ type TarReader struct {
 
 	// Metadata
 	Name  string
-	Size  int
+	Size  int64
 	Mode  int
 	IsDir bool
 	IsEOF bool
@@ -211,7 +211,7 @@ func (tr *TarReader) Init(input interface{}) error {
 	return nil
 }
 
-func (tr *TarReader) unpad(size int) {
+func (tr *TarReader) unpad(size int64) {
 	pad := (512 - (size % 512)) % 512
 	if pad > 0 {
 		io.CopyN(io.Discard, tr.in, int64(pad))
@@ -240,8 +240,7 @@ func (tr *TarReader) parse(data []byte) {
 		if key == "path" {
 			tr.Name = value
 		} else if key == "size" {
-			s, _ := strconv.ParseInt(value, 10, 64)
-			tr.Size = int(s)
+			tr.Size, _ = strconv.ParseInt(value, 10, 64)
 		}
 	}
 }
@@ -271,8 +270,7 @@ func (tr *TarReader) Next() bool {
 	ti, _ := strconv.ParseInt(modeStr, 8, 64)
 	tr.Mode = int(ti)
 	sizeStr := string(bytes.Trim(h[124:136], "\x00 "))
-	ti, _ = strconv.ParseInt(sizeStr, 8, 64)
-	tr.Size = int(ti)
+	tr.Size, _ = strconv.ParseInt(sizeStr, 8, 64)
 	typeFlag := h[156]
 	tr.IsDir = (typeFlag == '5')
 
@@ -312,7 +310,7 @@ func (tr *TarReader) Mkfile(path string) error {
 	defer f.Close()
 
 	// Copy chunked
-	remaining := int64(tr.Size)
+	remaining := tr.Size
 	var buf [32 * 1024]byte
 	for remaining > 0 {
 		toRead := int64(len(buf))
@@ -333,7 +331,7 @@ func (tr *TarReader) Mkfile(path string) error {
 }
 
 func (tr *TarReader) Skip() {
-	io.CopyN(io.Discard, tr.in, int64(tr.Size))
+	io.CopyN(io.Discard, tr.in, tr.Size)
 	tr.unpad(tr.Size)
 }
 

@@ -150,7 +150,7 @@ type AES1 struct {
 
 func (a *AES1) Init() { a.processed = 0 }
 
-func (a *AES1) Processed() int { return int(atomic.LoadInt64(&a.processed)) }
+func (a *AES1) Processed() int64 { return atomic.LoadInt64(&a.processed) }
 
 // AES-GCM encryption, 44B key (12B IV + 32B AES Key)
 func (a *AES1) EnAESGCM(key [44]byte, data []byte) ([]byte, error) {
@@ -205,7 +205,7 @@ func (a *AES1) DeAESGCM(key [44]byte, data []byte) ([]byte, error) {
 }
 
 // AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
-func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, chunkSize int) error {
+func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int64, dst io.Writer, chunkSize int) error {
 	// basic setup
 	a.processed = 0
 	if chunkSize <= 0 {
@@ -273,7 +273,7 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 	loopCtrl := true
 	for loopCtrl {
 		// get buffer
-		toRead := min(remaining, chunkSize)
+		toRead := min(remaining, int64(chunkSize))
 		buf := memPool.Get().([]byte)
 		if cap(buf) < int(toRead) {
 			buf = make([]byte, toRead)
@@ -331,7 +331,7 @@ func (a *AES1) EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 }
 
 // AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
-func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, chunkSize int) error {
+func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int64, dst io.Writer, chunkSize int) error {
 	// basic setup
 	a.processed = 0
 	if chunkSize <= 0 {
@@ -398,7 +398,7 @@ func (a *AES1) DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, c
 	remaining := size
 	for remaining >= 16 {
 		// get buffer
-		toRead := min(chunkSize+16, remaining)
+		toRead := min(int64(chunkSize+16), remaining)
 		buf := memPool.Get().([]byte)
 		if cap(buf) < int(toRead) {
 			buf = make([]byte, toRead)

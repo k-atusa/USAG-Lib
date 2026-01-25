@@ -114,7 +114,7 @@ type ZipReader struct {
 
 	files []*zip.File
 	Names []string
-	Sizes []int
+	Sizes []int64
 }
 
 func (z *ZipReader) Init(input interface{}) error {
@@ -156,10 +156,10 @@ func (z *ZipReader) Init(input interface{}) error {
 	}
 	z.files = z.zipReader.File
 	z.Names = make([]string, len(z.files))
-	z.Sizes = make([]int, len(z.files))
+	z.Sizes = make([]int64, len(z.files))
 	for i, f := range z.files {
 		z.Names[i] = f.Name
-		z.Sizes[i] = int(f.UncompressedSize64)
+		z.Sizes[i] = int64(f.UncompressedSize64)
 	}
 	return nil
 }

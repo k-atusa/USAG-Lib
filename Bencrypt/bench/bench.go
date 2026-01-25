@@ -124,7 +124,7 @@ func main() {
 	dst.Reset()
 
 	start = time.Now()
-	err = aes.DeAESGCMx(key, src, len(encStreamData), dst, 0)
+	err = aes.DeAESGCMx(key, src, int64(len(encStreamData)), dst, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -163,7 +163,7 @@ func main() {
 
 	// Decrypt File
 	fEncInfo, _ := os.Stat(fDstPath)
-	encSize := int(fEncInfo.Size())
+	encSize := fEncInfo.Size()
 
 	fDstRead, _ := os.Open(fDstPath)
 	fDec, _ := os.Create(fDecPath)
