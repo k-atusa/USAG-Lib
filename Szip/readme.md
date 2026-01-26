@@ -3,6 +3,9 @@
 간단화한 Zip64 컨테이너 형식을 읽고 쓰는 모듈입니다. Zip64는 압축이 가능하지만 형식이 복잡하여 일부 경우에는 안정성이 떨어질 수 있습니다.
 데이터를 로드하면 전체 파일의 이름과 크기가 필드에 저장됩니다. 이후 n번째 파일을 읽거나 열어 사용합니다.
 
+Module for reading and writing a simplified Zip64 container format. Zip64 supports compression, but its complex format may reduce stability in some cases.
+Loading data stores the names and sizes of all files in fields. You can then read or open the n-th file.
+
 #### python
 ```py
 class ZipWriter:
