@@ -3,6 +3,9 @@
 간단화한 TAR-PAX 컨테이너 형식을 읽고 쓰는 모듈입니다. 안정성과 호환성을 위해 외부 라이브러리 없이 동작합니다.
 스트림 형태로 입력받기 때문에, 데이터 로드 후 `헤더 탐색, 필드에 저장된 값 확인, 읽기 혹은 지나가기`를 반복하여 사용합니다.
 
+Module for reading and writing a simplified TAR-PAX container format. Operates without external libraries for stability and compatibility.
+Since it accepts input as a stream, it is used by repeating the process of header search, checking field values, reading or skipping after loading data.
+
 #### python
 ```py
 class TarWriter:
