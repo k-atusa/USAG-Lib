@@ -89,7 +89,7 @@ type Opsec struct {
     EncHeadKey  []byte
     EncHeadData []byte
     Smsg        string
-    Size        int
+    Size        int64
     Name        string
     BodyKey     []byte
     BodyAlgo    string
