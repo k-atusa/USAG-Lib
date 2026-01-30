@@ -58,7 +58,7 @@ struct TarWriter {
 
 struct TarReader {
     Name  string
-    Size  int
+    Size  int64
     Mode  int
     IsDir bool
     IsEOF bool
