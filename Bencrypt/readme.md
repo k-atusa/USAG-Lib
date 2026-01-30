@@ -89,11 +89,11 @@ func Genkey(data []byte, lbl string, size int) ([]byte, error)
 
 struct AES1 {
     func Init()
-    func Processed() int
+    func Processed() int64
     func EnAESGCM(key [44]byte, data []byte) ([]byte, error)
     func DeAESGCM(key [44]byte, data []byte) ([]byte, error)
-    func EnAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, chunkSize int) error
-    func DeAESGCMx(key [44]byte, src io.Reader, size int, dst io.Writer, chunkSize int) error
+    func EnAESGCMx(key [44]byte, src io.Reader, size int64, dst io.Writer, chunkSize int) error
+    func DeAESGCMx(key [44]byte, src io.Reader, size int64, dst io.Writer, chunkSize int) error
 }
 
 struct RSA1 {
