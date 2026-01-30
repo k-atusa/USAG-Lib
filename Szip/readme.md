@@ -53,7 +53,7 @@ struct ZipWriter {
 
 struct ZipReader {
     Names []string
-    Sizes []int
+    Sizes []int64
     func Init(input interface{}) error
     func Read(idx int) ([]byte, error)
     func Open(idx int) (io.ReadCloser, error)
