@@ -45,3 +45,77 @@ Handles basic encryption functions.
 
 복합 암호화 기능과 암호파일 형식화를 담당합니다.
 Handles complex encryption functions and encrypted file formatting.
+
+# Setup Env in Windows
+
+Windows OS is independent from programming language setup.
+
+### python
+
+- delete old version
+- install new version with "add to PATH" option
+- `py --version`
+
+### golang
+
+- install new version (old version will be deleted automatically)
+- `go version`
+
+# Setup Env in Linux
+
+Linux OS can be dependent of programming language setup. Root and user privileges use different library spaces.
+
+### python
+
+Remove the existing Python and add a private repository to download it.
+
+```bash
+sudo apt update
+sudo apt upgrade
+sudo apt autoremove
+apt update
+apt upgrade
+apt autoremove
+
+sudo apt install software-properties-common
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+
+sudo apt remove python3.12
+apt remove python3.12
+rm ~/pip3.12 # /home/%%user%%/.local/bin
+
+sudo apt install python3.15
+curl -sS https://bootstrap.pypa.io/get-pip.py | python3.15
+
+echo "export PATH=$PATH:/home/%%user%%/.local/bin" >> ~/.profile
+source ~/.profile
+
+python --version
+python3.15 --version
+pip --version
+pip3.15 --version
+
+sudo apt install python3.13-venv
+python3.15 -m venv .venv
+source .venv/bin/activate
+sudo apt-get install python3.15-dev
+sudo apt-get install python3.15-tk
+```
+
+### golang
+
+Remove the existing Golang and unzip it directly to a local folder.
+
+```bash
+apt remove golang
+sudo apt remove golang
+sudo rm -rf /usr/local/go
+
+sudo tar -C /usr/local/ -xzf go1.25.7.linux-amd64.tar.gz # download from go.dev
+
+echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.profile
+source ~/.profile
+
+go version
+```
