@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -343,4 +344,67 @@ func (tr *TarReader) Close() {
 	if tr.memBuf != nil {
 		tr.memBuf = nil
 	}
+}
+
+func Pack(srcs []string, dst string) error {
+	tw := new(TarWriter)
+	if err := tw.Init(dst); err != nil {
+		return err
+	}
+	defer tw.Close()
+
+	for _, src := range srcs {
+		info, err := os.Stat(src)
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			if err := tw.WriteFile(info.Name(), src, 0644); err != nil {
+				return err
+			}
+			continue
+		}
+
+		parent := filepath.Dir(src)
+		err = filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, _ := filepath.Rel(parent, path)
+			rel = strings.ReplaceAll(rel, "\\", "/")
+
+			if info.IsDir() {
+				return tw.WriteDir(rel, 0755)
+			}
+			return tw.WriteFile(rel, path, 0644)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Unpack(src string, dst string) error {
+	tr := new(TarReader)
+	if err := tr.Init(src); err != nil {
+		return err
+	}
+	defer tr.Close()
+
+	for tr.Next() {
+		target := filepath.Join(dst, tr.Name)
+
+		// ZipSlip Protection
+		rel, err := filepath.Rel(dst, target)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("illegal file path: %s", tr.Name)
+		}
+
+		if err := tr.Mkfile(target); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-type Icons struct {}
+type Icons struct{}
 
 func (i *Icons) Zip_png() ([]byte, error) {
 	parts := []string{
@@ -292,4 +292,21 @@ func (i *Icons) Cloud_webp() ([]byte, error) {
 		"bOAAA63NvFB9ngAAEat5vFUgAAAAAA==",
 	}
 	return base64.StdEncoding.DecodeString(strings.Join(parts, ""))
+}
+
+var ZipPng []byte
+var ZipWebp []byte
+var AesPng []byte
+var AesWebp []byte
+var CloudPng []byte
+var CloudWebp []byte
+
+func init() {
+	i := new(Icons)
+	ZipPng, _ = i.Zip_png()
+	ZipWebp, _ = i.Zip_webp()
+	AesPng, _ = i.Aes_png()
+	AesWebp, _ = i.Aes_webp()
+	CloudPng, _ = i.Cloud_png()
+	CloudWebp, _ = i.Cloud_webp()
 }

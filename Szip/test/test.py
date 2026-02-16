@@ -14,3 +14,10 @@ m.close()
 m = Szip.ZipReader("test.zip")
 print(m.names, m.sizes, m.read(0))
 m.close()
+
+# pack/unpack
+os.mkdir("pack")
+with open("pack/test.txt", "wb") as f:
+    f.write(b"Hello, world!")
+Szip.Pack("pack", "t.zip")
+Szip.Unpack("t.zip", "pack")

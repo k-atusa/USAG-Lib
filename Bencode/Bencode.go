@@ -155,3 +155,13 @@ func (e *Bencode) decodeUnicode(runes []rune) ([]byte, error) {
 	}
 	return ba.Bytes(), nil
 }
+
+func Encode(data []byte) string {
+	var e Bencode
+	return e.Encode(data, true)
+}
+
+func Decode(data string) ([]byte, error) {
+	var e Bencode
+	return e.Decode(data)
+}

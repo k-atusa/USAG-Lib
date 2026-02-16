@@ -30,3 +30,10 @@ print(f"Name: {m.name}, Size: {m.size}, IsDir: {m.isDir}")
 print("Data:", m.read())
 
 m.close()
+
+# pack/unpack
+os.mkdir("pack")
+with open("pack/test.txt", "wb") as f:
+    f.write(b"Hello, world!")
+Star.Pack("pack", "t.tar")
+Star.Unpack("t.tar", "pack")

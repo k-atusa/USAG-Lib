@@ -1,16 +1,12 @@
-// go mod init example.com
-// go mod tidy
-// go run test.go
-
-package main
+// go test
+package Bencode
 
 import (
 	"fmt"
-
-	Bencode "github.com/k-atusa/USAG-Lib/Bencode"
+	"testing"
 )
 
-func main() {
+func TestMain(t *testing.T) {
 	text := []byte("안녕하세요, 카투사 프로그래밍 클럽 라이브러리 테스트입니다. Hello, world!")
 	dataList := [][]byte{
 		{},
@@ -20,7 +16,7 @@ func main() {
 		{0xff, 0xee, 0xff, 0xff, 0xff, 0xdc, 0xff, 0xff},
 		{0xff, 0x00, 0x00, 0x01, 0xff, 0x00, 0x00, 0x01, 0x10},
 	}
-	var m Bencode.Bencode
+	var m Bencode
 	m.Init()
 
 	// Base64 Encode/Decode
@@ -39,4 +35,9 @@ func main() {
 		decoded, _ = m.Decode(testStr)
 		fmt.Printf("%s : %x\n", testStr, decoded)
 	}
+
+	// Basic Encode
+	testStr = Encode(text)
+	decoded, _ = Decode(testStr)
+	fmt.Printf("%s : %s\n", testStr, string(decoded))
 }

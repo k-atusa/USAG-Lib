@@ -35,5 +35,10 @@ public class test {
             byte[] decoded = m.decode(encoded);
             System.out.println(encoded + " : " + Arrays.toString(decoded));
         }
+
+        // Basic Encode
+        testUnicode = m.Encode(text);
+        decodedUnicode = m.Decode(testUnicode);
+        System.out.println(testUnicode + " : " + new String(decodedUnicode, StandardCharsets.UTF_8));
     }
 }

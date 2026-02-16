@@ -282,4 +282,12 @@ public class Icons {
         return Base64.getDecoder().decode(sb.toString());
     }
 
+    private static final Icons LOADER = new Icons();
+
+    public static final byte[] ZipPng = LOADER.zip_png();
+    public static final byte[] ZipWebp = LOADER.zip_webp();
+    public static final byte[] AesPng = LOADER.aes_png();
+    public static final byte[] AesWebp = LOADER.aes_webp();
+    public static final byte[] CloudPng = LOADER.cloud_png();
+    public static final byte[] CloudWebp = LOADER.cloud_webp();
 }

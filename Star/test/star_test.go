@@ -1,18 +1,14 @@
-// go mod init example.com
-// go mod tidy
-// go run test.go
-
-package main
+// go test
+package Star
 
 import (
 	"fmt"
 	"os"
 	"strings"
-
-	Szip "github.com/k-atusa/USAG-Lib/Star"
+	"testing"
 )
 
-func main() {
+func TestMain(t *testing.T) {
 	// Create dummy file for test
 	dummyName := "small.bin"
 	if _, err := os.Stat(dummyName); os.IsNotExist(err) {
@@ -26,7 +22,7 @@ func main() {
 	fmt.Println("--- Start Go Test ---")
 
 	// TarWriter
-	var mw Szip.TarWriter
+	var mw TarWriter
 	mw.Init("") // memory output
 
 	mw.WriteDir("test/", 0755) // Dir
@@ -39,7 +35,7 @@ func main() {
 	fmt.Println("Created test.tar")
 
 	// TarReader
-	var mr Szip.TarReader
+	var mr TarReader
 	mr.Init("test.tar")
 	defer mr.Close()
 	for mr.Next() {
@@ -52,4 +48,10 @@ func main() {
 			mr.Mkfile("output.bin")
 		}
 	}
+
+	// pack/unpack
+	os.Mkdir("pack", 0755)
+	os.WriteFile("pack/test.txt", []byte("Hello, world!"), 0644)
+	Pack([]string{"pack"}, "t.tar")
+	Unpack("t.tar", "pack")
 }

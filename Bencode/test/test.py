@@ -11,4 +11,5 @@ for i in range(len(data)):
     test = m.encode(data[i], False)
     print(f"{test} : {m.decode(test)}")
 
-
+print(Bencode.Encode(b"Hello"))
+print(Bencode.Decode("0123"))

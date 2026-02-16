@@ -81,6 +81,11 @@
                     log(`${test} : ${formatBytes(decoded)}`);
                 }
 
+                // Basic Encode
+                test = m.Encode(text);
+                decoded = m.Decode(test);
+                log(`${test} : ${new TextDecoder().decode(decoded)}`);
+
             } catch (e) {
                 console.error(e);
                 log(`ERROR: ${e.message}`, "red");

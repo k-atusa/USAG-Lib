@@ -6,8 +6,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // Zip64 Writer
@@ -187,6 +190,103 @@ func (z *ZipReader) Open(idx int) (io.ReadCloser, error) {
 func (z *ZipReader) Close() error {
 	if z.file != nil {
 		return z.file.Close()
+	}
+	return nil
+}
+
+func Pack(srcs []string, dst string) error {
+	zw := new(ZipWriter)
+	if err := zw.Init(dst, true); err != nil {
+		return err
+	}
+	defer zw.Close()
+
+	for _, src := range srcs {
+		info, err := os.Stat(src)
+		if err != nil {
+			return err
+		}
+
+		// Case 1: Source is a single file
+		if !info.IsDir() {
+			name := filepath.Base(src)
+			if err := zw.WriteFile(name, src); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Case 2: Source is a directory
+		parent := filepath.Dir(filepath.Clean(src))
+		err = filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(parent, path)
+			if err != nil {
+				return err
+			}
+			rel = filepath.ToSlash(rel)
+
+			if info.IsDir() {
+				if !strings.HasSuffix(rel, "/") {
+					rel += "/"
+				}
+				return zw.WriteBin(rel, []byte{})
+			}
+			return zw.WriteFile(rel, path)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Unpack(src string, dst string) error {
+	zr := new(ZipReader)
+	if err := zr.Init(src); err != nil {
+		return err
+	}
+	defer zr.Close()
+
+	for i, name := range zr.Names {
+		// Normalize path separators
+		relPath := filepath.ToSlash(name)
+		target := filepath.Join(dst, relPath)
+
+		// ZipSlip Protection
+		rel, err := filepath.Rel(dst, target)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("illegal file path: %s", name)
+		}
+
+		if strings.HasSuffix(relPath, "/") { // Create directory
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
+
+		} else { // Create file
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
+			fOut, err := os.Create(target)
+			if err != nil {
+				return err
+			}
+			rc, err := zr.Open(i)
+			if err != nil {
+				fOut.Close()
+				return err
+			}
+
+			_, err = io.Copy(fOut, rc)
+			fOut.Close()
+			rc.Close()
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

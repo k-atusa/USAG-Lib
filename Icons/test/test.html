@@ -37,21 +37,20 @@
 
     <script src="../Icons.js"></script>
     <script>
-        const iconInst = new Icons();
-        const imageFunctions = [
-            { funcName: 'zip_png', mime: 'image/png' },
-            { funcName: 'zip_webp', mime: 'image/webp' },
-            { funcName: 'aes_png', mime: 'image/png' },
-            { funcName: 'aes_webp', mime: 'image/webp' },
-            { funcName: 'cloud_png', mime: 'image/png' },
-            { funcName: 'cloud_webp', mime: 'image/webp' }
+        const images = [
+            { Name: 'ZipPng', mime: 'image/png' },
+            { Name: 'ZipWebp', mime: 'image/webp' },
+            { Name: 'AesPng', mime: 'image/png' },
+            { Name: 'AesWebp', mime: 'image/webp' },
+            { Name: 'CloudPng', mime: 'image/png' },
+            { Name: 'CloudWebp', mime: 'image/webp' }
         ];
 
         const container = document.getElementById('container');
 
-        imageFunctions.forEach(item => {
+        images.forEach(item => {
             try {
-                const imageData = iconInst[item.funcName]();
+                const imageData = Icons[item.Name];
                 const blob = new Blob([imageData], { type: item.mime });
                 const url = URL.createObjectURL(blob);
 
@@ -62,7 +61,7 @@
                 img.alt = item.funcName;
 
                 const caption = document.createElement('p');
-                caption.textContent = `Function: ${item.funcName}`;
+                caption.textContent = `Name: ${item.Name}`;
 
                 div.appendChild(img);
                 div.appendChild(caption);

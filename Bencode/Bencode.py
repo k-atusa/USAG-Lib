@@ -93,3 +93,11 @@ class Bencode: # Base-N encoder
             acc = 0 if bits == 0 else acc & ((1 << bits) - 1)
             ba.append(byte_val)
         return bytes(ba)
+
+def Encode(data: bytes) -> str:
+    e = Bencode()
+    return e.encode(data, True)
+
+def Decode(data: str) -> bytes:
+    e = Bencode()
+    return e.decode(data)

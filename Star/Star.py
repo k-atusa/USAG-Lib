@@ -184,3 +184,38 @@ class TarReader:
 
     def close(self):
         self.stream.close()
+
+def Pack(srcs: str | list[str], dst: str) -> None:
+    if type(srcs) == str: srcs = [srcs]
+    tw = TarWriter(dst)
+    try:
+        for src in srcs:
+            if os.path.isfile(src):
+                tw.writeFile(os.path.basename(src), src)
+            elif os.path.isdir(src):
+                parent = os.path.dirname(os.path.normpath(src))
+                for root, dirs, files in os.walk(src):
+                    rel_dir = os.path.relpath(root, parent).replace("\\", "/")
+                    tw.writeDir(rel_dir)
+                    for f in files:
+                        path = os.path.join(root, f)
+                        rel = os.path.relpath(path, parent).replace("\\", "/")
+                        tw.writeFile(rel, path)
+    finally:
+        tw.close()
+
+def Unpack(src: str, dst: str) -> None:
+    tr = TarReader(src)
+    try:
+        while tr.next():
+            rel_path = tr.name.replace("\\", "/")
+            dest_path = os.path.join(dst, rel_path)
+            
+            # ZipSlip Protection
+            base = os.path.join(os.path.abspath(dst), "")
+            if not os.path.abspath(dest_path).startswith(base):
+                raise Exception(f"illegal file path: {rel_path}")
+
+            tr.mkfile(dest_path)
+    finally:
+        tr.close()

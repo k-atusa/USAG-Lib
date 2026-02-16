@@ -1,18 +1,14 @@
-// go mod init example.com
-// go mod tidy
-// go run test.go
-
-package main
+// go test
+package Szip
 
 import (
 	"fmt"
 	"log"
 	"os"
-
-	Szip "github.com/k-atusa/USAG-Lib/Szip"
+	"testing"
 )
 
-func main() {
+func TestMain(t *testing.M) {
 	// make big file
 	if _, err := os.Stat("big.bin"); os.IsNotExist(err) {
 		f, err := os.Create("big.bin")
@@ -32,7 +28,7 @@ func main() {
 	}
 
 	// ZipWriter
-	m := &Szip.ZipWriter{}
+	var m ZipWriter
 	if err := m.Init("test.zip", true); err != nil {
 		log.Fatal(err)
 	}
@@ -47,7 +43,7 @@ func main() {
 	}
 
 	// ZipReader
-	r := &Szip.ZipReader{}
+	var r ZipReader
 	if err := r.Init("test.zip"); err != nil {
 		log.Fatal(err)
 	}
@@ -57,4 +53,10 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("%v %v %s\n", r.Names, r.Sizes, string(data))
+
+	// pack/unpack
+	os.Mkdir("pack", 0755)
+	os.WriteFile("pack/test.txt", []byte("Hello, world!"), 0644)
+	Pack([]string{"pack"}, "t.zip")
+	Unpack("t.zip", "pack")
 }

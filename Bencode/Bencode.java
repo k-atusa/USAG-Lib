@@ -128,4 +128,7 @@ public class Bencode {
 
         return ba.toByteArray();
     }
+
+    public String Encode(byte[] data) { return this.encode(data, true); }
+    public byte[] Decode(String data) { return this.decode(data); }
 }

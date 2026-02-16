@@ -1,4 +1,4 @@
-## Icons v0.1
+## Icons v1.0.0
 
 아이콘 이미지 바이너리를 생성하는 함수입니다.
 Functions that generate icon image binaries.
@@ -12,6 +12,13 @@ class Icons:
     def aes_webp() -> bytes
     def cloud_png() -> bytes
     def cloud_webp() -> bytes
+
+ZipPng: bytes
+ZipWebp: bytes
+AesPng: bytes
+AesWebp: bytes
+CloudPng: bytes
+CloudWebp: bytes
 ```
 
 #### javascript
@@ -23,6 +30,13 @@ class Icons {
     function aes_webp(): byte[]
     function cloud_png(): byte[]
     function cloud_webp(): byte[]
+
+    ZipPng: byte[]
+    ZipWebp: byte[]
+    AesPng: byte[]
+    AesWebp: byte[]
+    CloudPng: byte[]
+    CloudWebp: byte[]
 }
 ```
 
@@ -36,6 +50,13 @@ struct Icons {
     func Cloud_png() ([]byte, error)
     func Cloud_webp() ([]byte, error)
 }
+
+ZipPng []bytes
+ZipWebp []bytes
+AesPng []bytes
+AesWebp []bytes
+CloudPng []bytes
+CloudWebp []bytes
 ```
 
 #### java
@@ -47,5 +68,12 @@ class Icons {
     byte[] aes_webp()
     byte[] cloud_png()
     byte[] cloud_webp()
+
+    byte[] ZipPng
+    byte[] ZipWebp
+    byte[] AesPng
+    byte[] AesWebp
+    byte[] CloudPng
+    byte[] CloudWebp
 }
 ```

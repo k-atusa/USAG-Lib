@@ -1,15 +1,14 @@
 import Icons
 
-t = Icons.Icons()
 with open("zip.png", "wb") as f:
-    f.write(t.zip_png())
+    f.write(Icons.ZipPng)
 with open("zip.webp", "wb") as f:
-    f.write(t.zip_webp())
+    f.write(Icons.ZipWebp)
 with open("aes.png", "wb") as f:
-    f.write(t.aes_png())
+    f.write(Icons.AesPng)
 with open("aes.webp", "wb") as f:
-    f.write(t.aes_webp())
+    f.write(Icons.AesWebp)
 with open("cloud.png", "wb") as f:
-    f.write(t.cloud_png())
+    f.write(Icons.CloudPng)
 with open("cloud.webp", "wb") as f:
-    f.write(t.cloud_webp())
+    f.write(Icons.CloudWebp)

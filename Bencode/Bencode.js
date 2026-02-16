@@ -155,4 +155,13 @@ class Bencode { // Base-N encoder
         deBit();
         return new Uint8Array(ba);
     }
+
+    Encode(data) { return this.encode(data, true); }
+    Decode(data) { return this.decode(data); }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Bencode;
+} else if (typeof window !== 'undefined') {
+    window.Bencode = Bencode;
 }

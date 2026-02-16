@@ -287,3 +287,10 @@ class Icons:
             'bOAAA63NvFB9ngAAEat5vFUgAAAAAA=='
         )
         return base64.b64decode(data)
+
+ZipPng: bytes = Icons.zip_png()
+ZipWebp: bytes = Icons.zip_webp()
+AesPng: bytes = Icons.aes_png()
+AesWebp: bytes = Icons.aes_webp()
+CloudPng: bytes = Icons.cloud_png()
+CloudWebp: bytes = Icons.cloud_webp()

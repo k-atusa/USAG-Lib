@@ -1,6 +1,7 @@
 # test790a : USAG-Lib szip
 
 import io
+import os
 import zipfile
 
 class ZipWriter: # zip64 writer
@@ -41,3 +42,50 @@ class ZipReader: # zip64 reader
     def close(self):
         self.zip.close()
         self.input.close()
+
+def Pack(srcs: str | list[str], dst: str) -> None:
+    if type(srcs) == str: srcs = [srcs]
+    zw = ZipWriter(dst, True)
+    try:
+        for src in srcs:
+            if os.path.isfile(src):
+                zw.writefile(os.path.basename(src), src)
+            elif os.path.isdir(src):
+                parent = os.path.dirname(os.path.normpath(src))
+                for root, dirs, files in os.walk(src):
+                    rel_dir = os.path.relpath(root, parent).replace("\\", "/")
+                    zw.writebin(rel_dir + "/", b"") # write directory entry
+                    for f in files:
+                        path = os.path.join(root, f)
+                        rel = os.path.relpath(path, parent).replace("\\", "/")
+                        zw.writefile(rel, path)
+    finally:
+        zw.close()
+
+def Unpack(src: str, dst: str) -> None:
+    zr = ZipReader(src)
+    try:
+        for i, name in enumerate(zr.names):
+            rel_path = name.replace("\\", "/")
+            dest_path = os.path.join(dst, rel_path)
+            
+            # ZipSlip Protection
+            base = os.path.join(os.path.abspath(dst), "")
+            if not os.path.abspath(dest_path).startswith(base):
+                raise Exception(f"illegal file path: {rel_path}")
+
+            if rel_path.endswith('/'):
+                os.makedirs(dest_path, exist_ok=True)
+            else:
+                parent = os.path.dirname(dest_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+                
+                with open(dest_path, "wb") as f_out:
+                    with zr.open(i) as f_in:
+                        while True:
+                            chunk = f_in.read(65536)
+                            if not chunk: break
+                            f_out.write(chunk)
+    finally:
+        zr.close()

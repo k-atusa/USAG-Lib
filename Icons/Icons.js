@@ -366,6 +366,16 @@ class Icons {
 
 }
 
+(function() {
+    const loader = new Icons();
+    Icons.ZipPng = loader.zip_png();
+    Icons.ZipWebp = loader.zip_webp();
+    Icons.AesPng = loader.aes_png();
+    Icons.AesWebp = loader.aes_webp();
+    Icons.CloudPng = loader.cloud_png();
+    Icons.CloudWebp = loader.cloud_webp();
+})();
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Icons;
 } else if (typeof window !== 'undefined') {
