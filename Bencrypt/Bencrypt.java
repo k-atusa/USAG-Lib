@@ -557,4 +557,196 @@ public class Bencrypt {
             return false;
         }
     }
+
+    // ========== Master Class ==========
+    public static class SymMaster {
+        private String algo;
+        private byte[] key;
+        private Bencrypt worker;
+
+        /**
+         * @param algo "gcm1" or "gcmx1"
+         * @param key 44 bytes (12B IV + 32B Key)
+         */
+        public SymMaster(String algo, byte[] key) {
+            if (!algo.equals("gcm1") && !algo.equals("gcmx1")) {
+                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
+            }
+            if (key.length != 44) {
+                throw new IllegalArgumentException("Key length must be 44 bytes (12B IV + 32B Key)");
+            }
+            this.algo = algo;
+            this.key = key;
+            this.worker = new Bencrypt();
+        }
+
+        /**
+         * Calculate expected output size
+         */
+        public long aftersize(long size) {
+            if (this.algo.equals("gcm1")) {
+                return size + 16;
+            } else if (this.algo.equals("gcmx1")) {
+                long chunkSize = 1048576;
+                long c = size / chunkSize + 1;
+                if (size != 0 && size % chunkSize == 0) {
+                    c -= 1;
+                }
+                return size + (16 * c);
+            }
+            return 0;
+        }
+
+        public long processed() {
+            return this.worker.Processed();
+        }
+
+        /**
+         * Encrypt binary data (Memory)
+         */
+        public byte[] enBin(byte[] data) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                return this.worker.enAESGCM(this.key, data);
+            } else {
+                java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                this.worker.enAESGCMx(this.key, in, data.length, out, 1048576);
+                return out.toByteArray();
+            }
+        }
+
+        /**
+         * Decrypt binary data (Memory)
+         */
+        public byte[] deBin(byte[] data) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                return this.worker.deAESGCM(this.key, data);
+            } else {
+                java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                this.worker.deAESGCMx(this.key, in, data.length, out, 1048576);
+                return out.toByteArray();
+            }
+        }
+
+        /**
+         * Encrypt Stream/File
+         */
+        public void enFile(InputStream src, long size, OutputStream dst) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                byte[] buf = new byte[(int)size];
+                int offset = 0;
+                while (offset < size) {
+                    int read = src.read(buf, offset, (int)size - offset);
+                    if (read == -1) break;
+                    offset += read;
+                }
+                byte[] enc = this.worker.enAESGCM(this.key, buf);
+                dst.write(enc);
+            } else {
+                this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
+            }
+        }
+
+        /**
+         * Decrypt Stream/File
+         */
+        public void deFile(InputStream src, long size, OutputStream dst) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                byte[] buf = new byte[(int)size];
+                int offset = 0;
+                while (offset < size) {
+                    int read = src.read(buf, offset, (int)size - offset);
+                    if (read == -1) break;
+                    offset += read;
+                }
+                byte[] dec = this.worker.deAESGCM(this.key, buf);
+                dst.write(dec);
+            } else {
+                this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
+            }
+        }
+    }
+
+    public static class AsymMaster {
+        private String algo;
+        private Bencrypt worker;
+
+        /**
+         * @param algo "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"
+         */
+        public AsymMaster(String algo) {
+            String[] valid = {"rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"};
+            boolean isValid = false;
+            for (String v : valid) {
+                if (v.equals(algo)) {
+                    isValid = true;
+                    break;
+                }
+            }
+            if (!isValid) {
+                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
+            }
+
+            this.algo = algo;
+            this.worker = new Bencrypt(); // Bencrypt instance holds keys
+        }
+
+        /**
+         * Generate key pair
+         * @return byte[][] {public, private}
+         */
+        public byte[][] genkey() throws Exception {
+            if (this.algo.equals("rsa1") || this.algo.equals("rsa1-2k")) {
+                return this.worker.RSAgenkey(2048);
+            } else if (this.algo.equals("rsa1-3k")) {
+                return this.worker.RSAgenkey(3072);
+            } else if (this.algo.equals("rsa1-4k")) {
+                return this.worker.RSAgenkey(4096);
+            } else if (this.algo.equals("ecc1")) {
+                return this.worker.ECCgenkey();
+            }
+            return null;
+        }
+
+        public void loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
+            if (this.algo.startsWith("rsa1")) {
+                this.worker.RSAloadkey(publicBuf, privateBuf);
+            } else if (this.algo.equals("ecc1")) {
+                this.worker.ECCloadkey(publicBuf, privateBuf);
+            }
+        }
+
+        public byte[] encrypt(byte[] data) throws Exception {
+            if (this.algo.startsWith("rsa1")) {
+                return this.worker.RSAencrypt(data);
+            } else {
+                return this.worker.ECCencrypt(data);
+            }
+        }
+
+        public byte[] decrypt(byte[] data) throws Exception {
+            if (this.algo.startsWith("rsa1")) {
+                return this.worker.RSAdecrypt(data);
+            } else {
+                return this.worker.ECCdecrypt(data);
+            }
+        }
+
+        public byte[] sign(byte[] data) throws Exception {
+            if (this.algo.startsWith("rsa1")) {
+                return this.worker.RSAsign(data);
+            } else {
+                return this.worker.ECCsign(data);
+            }
+        }
+
+        public boolean verify(byte[] data, byte[] signature) {
+            if (this.algo.startsWith("rsa1")) {
+                return this.worker.RSAverify(data, signature);
+            } else {
+                return this.worker.ECCverify(data, signature);
+            }
+        }
+    }
 }

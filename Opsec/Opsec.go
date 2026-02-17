@@ -5,6 +5,7 @@ package Opsec
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"hash/crc32"
 	"io"
@@ -13,11 +14,11 @@ import (
 )
 
 // ========== Helper Functions ==========
-func Crc32(data []byte) []byte {
+func Crc32(data []byte) string {
 	checksum := crc32.ChecksumIEEE(data)
 	buf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(buf, checksum)
-	return buf
+	return hex.EncodeToString(buf)
 }
 
 func EncodeInt(data uint64, size int) []byte {
@@ -121,11 +122,11 @@ header: (smsg), (size), (name), (bodyKey), (bodyAlgo), (contAlgo), (sign)
 type Opsec struct {
 	// Outer Layer
 	Msg         string // non-secured message
-	HeadAlgo    string // header algorithm, [arg1 pbk1 rsa1 ecc1]
-	Salt        []byte // salt
-	PwHash      []byte // pw hash
-	EncHeadKey  []byte // encrypted header key
-	EncHeadData []byte // encrypted header data
+	headAlgo    string // header algorithm, [arg1 pbk1 rsa1 ecc1]
+	salt        []byte // salt
+	pwHash      []byte // pw hash
+	encHeadKey  []byte // encrypted header key
+	encHeadData []byte // encrypted header data
 
 	// Inner Layer
 	Smsg     string // secured message
@@ -134,17 +135,17 @@ type Opsec struct {
 	BodyKey  []byte // body key
 	BodyAlgo string // body algorithm, [gcm1 gcmx1]
 	ContAlgo string // container algorithm, [zip1 tar1]
-	Sign     []byte // signature to bodyKey/smsg
+	sign     []byte // signature to bodyKey/smsg
 }
 
 // Reset all fields
 func (o *Opsec) Reset() {
 	o.Msg = ""
-	o.HeadAlgo = ""
-	o.Salt = []byte{}
-	o.PwHash = []byte{}
-	o.EncHeadKey = []byte{}
-	o.EncHeadData = []byte{}
+	o.headAlgo = ""
+	o.salt = []byte{}
+	o.pwHash = []byte{}
+	o.encHeadKey = []byte{}
+	o.encHeadData = []byte{}
 
 	o.Smsg = ""
 	o.Size = -1
@@ -152,7 +153,7 @@ func (o *Opsec) Reset() {
 	o.BodyKey = []byte{}
 	o.BodyAlgo = ""
 	o.ContAlgo = ""
-	o.Sign = []byte{}
+	o.sign = []byte{}
 }
 
 // Read opsec header from stream, set cut to 0 to read all
@@ -257,8 +258,8 @@ func (o *Opsec) wrapHead() ([]byte, error) {
 	if o.ContAlgo != "" {
 		cfg["contal"] = []byte(o.ContAlgo)
 	}
-	if len(o.Sign) > 0 {
-		cfg["sgn"] = o.Sign
+	if len(o.sign) > 0 {
+		cfg["sgn"] = o.sign
 	}
 	return EncodeCfg(cfg)
 }
@@ -284,7 +285,7 @@ func (o *Opsec) unwrapHead(data []byte) {
 		o.ContAlgo = string(v)
 	}
 	if v, ok := cfg["sgn"]; ok {
-		o.Sign = v
+		o.sign = v
 	}
 }
 
@@ -294,8 +295,8 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	if method != "arg1" && method != "pbk1" {
 		return nil, errors.New("unsupported method: " + method)
 	}
-	o.HeadAlgo = method
-	o.Salt = Bencrypt.Random(16)
+	o.headAlgo = method
+	o.salt = Bencrypt.Random(16)
 	if o.Size >= 0 {
 		o.BodyKey = Bencrypt.Random(44)
 	}
@@ -310,11 +311,11 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	var err error
 	switch method {
 	case "arg1":
-		mkey = []byte(Bencrypt.Argon2Hash(combinedPw, o.Salt))
-		o.PwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_ARGON2", 32)
+		mkey = []byte(Bencrypt.Argon2Hash(combinedPw, o.salt))
+		o.pwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_ARGON2", 32)
 	case "pbk1":
-		mkey = Bencrypt.Pbkdf2(combinedPw, o.Salt, 1000000, 64)
-		o.PwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32)
+		mkey = Bencrypt.Pbkdf2(combinedPw, o.salt, 1000000, 64)
+		o.pwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32)
 	}
 	if err != nil {
 		return nil, err
@@ -339,8 +340,9 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := new(Bencrypt.AES1)
-	o.EncHeadData, err = m.EnAESGCM(hkey, headData)
+	sm := new(Bencrypt.SymMaster)
+	sm.Init("gcm1", hkey[:])
+	o.encHeadData, err = sm.EnBin(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -350,10 +352,10 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	if o.Msg != "" {
 		cfg["msg"] = []byte(o.Msg)
 	}
-	cfg["headal"] = []byte(o.HeadAlgo)
-	cfg["salt"] = o.Salt
-	cfg["pwh"] = o.PwHash
-	cfg["ehd"] = o.EncHeadData
+	cfg["headal"] = []byte(o.headAlgo)
+	cfg["salt"] = o.salt
+	cfg["pwh"] = o.pwHash
+	cfg["ehd"] = o.encHeadData
 	return EncodeCfg(cfg)
 }
 
@@ -363,9 +365,18 @@ func (o *Opsec) Encpub(method string, public []byte, private []byte) ([]byte, er
 	if method != "rsa1" && method != "ecc1" {
 		return nil, errors.New("unsupported method: " + method)
 	}
-	o.HeadAlgo = method
+	o.headAlgo = method
 	if o.Size >= 0 {
 		o.BodyKey = Bencrypt.Random(44)
+	}
+
+	// Init AsymMaster
+	am := new(Bencrypt.AsymMaster)
+	if err := am.Init(method); err != nil {
+		return nil, err
+	}
+	if err := am.Loadkey(public, private); err != nil {
+		return nil, err
 	}
 
 	// Sign if private key is not nil
@@ -375,20 +386,7 @@ func (o *Opsec) Encpub(method string, public []byte, private []byte) ([]byte, er
 			s = []byte(o.Smsg)
 		}
 		var err error
-		switch method {
-		case "rsa1":
-			m := new(Bencrypt.RSA1)
-			if err := m.Loadkey(nil, private); err != nil {
-				return nil, err
-			}
-			o.Sign, err = m.Sign(s)
-		case "ecc1":
-			m := new(Bencrypt.ECC1)
-			if err := m.Loadkey(nil, private); err != nil {
-				return nil, err
-			}
-			o.Sign, err = m.Sign(s)
-		}
+		o.sign, err = am.Sign(s)
 		if err != nil {
 			return nil, err
 		}
@@ -399,44 +397,40 @@ func (o *Opsec) Encpub(method string, public []byte, private []byte) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
+	var encHeadData []byte
 	switch method {
 	case "rsa1":
-		m := new(Bencrypt.RSA1)
-		if err := m.Loadkey(public, nil); err != nil {
-			return nil, err
-		}
+		// RSA Hybrid: Encrypt Key with RSA, Data with AES
 		var hkey [44]byte
 		copy(hkey[:], Bencrypt.Random(44))
-		o.EncHeadKey, err = m.Encrypt(hkey[:])
+		o.encHeadKey, err = am.Encrypt(hkey[:])
 		if err != nil {
 			return nil, err
 		}
-		aes := new(Bencrypt.AES1)
-		o.EncHeadData, err = aes.EnAESGCM(hkey, headData)
+		sm := new(Bencrypt.SymMaster)
+		sm.Init("gcm1", hkey[:])
+		encHeadData, err = sm.EnBin(headData)
 		if err != nil {
 			return nil, err
 		}
 	case "ecc1":
-		m := new(Bencrypt.ECC1)
-		if err := m.Loadkey(public, nil); err != nil {
-			return nil, err
-		}
-		o.EncHeadData, err = m.Encrypt(headData)
+		encHeadData, err = am.Encrypt(headData)
 		if err != nil {
 			return nil, err
 		}
 	}
+	o.encHeadData = encHeadData
 
 	// wrap header
 	cfg := make(map[string][]byte)
 	if o.Msg != "" {
 		cfg["msg"] = []byte(o.Msg)
 	}
-	cfg["headal"] = []byte(o.HeadAlgo)
-	if len(o.EncHeadKey) > 0 {
-		cfg["ehk"] = o.EncHeadKey
+	cfg["headal"] = []byte(o.headAlgo)
+	if len(o.encHeadKey) > 0 {
+		cfg["ehk"] = o.encHeadKey
 	}
-	cfg["ehd"] = o.EncHeadData
+	cfg["ehd"] = o.encHeadData
 	return EncodeCfg(cfg)
 }
 
@@ -448,29 +442,29 @@ func (o *Opsec) View(data []byte) {
 		o.Msg = string(v)
 	}
 	if v, ok := cfg["headal"]; ok {
-		o.HeadAlgo = string(v)
+		o.headAlgo = string(v)
 	}
 	if v, ok := cfg["salt"]; ok {
-		o.Salt = v
+		o.salt = v
 	}
 	if v, ok := cfg["pwh"]; ok {
-		o.PwHash = v
+		o.pwHash = v
 	}
 	if v, ok := cfg["ehk"]; ok {
-		o.EncHeadKey = v
+		o.encHeadKey = v
 	}
 	if v, ok := cfg["ehd"]; ok {
-		o.EncHeadData = v
+		o.encHeadData = v
 	}
 }
 
 // Decrypt with password
 func (o *Opsec) Decpw(pw []byte, kf []byte) error {
-	if o.HeadAlgo == "" {
+	if o.headAlgo == "" {
 		return errors.New("call View() first")
 	}
-	if o.HeadAlgo != "arg1" && o.HeadAlgo != "pbk1" {
-		return errors.New("unsupported method: " + o.HeadAlgo)
+	if o.headAlgo != "arg1" && o.headAlgo != "pbk1" {
+		return errors.New("unsupported method: " + o.headAlgo)
 	}
 
 	// Combine pw + kf
@@ -481,14 +475,14 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	// Generate password hash
 	var mkey []byte
 	var verifyLbl, keygenLbl string
-	switch o.HeadAlgo {
+	switch o.headAlgo {
 	case "arg1":
-		hashStr := Bencrypt.Argon2Hash(combinedPw, o.Salt)
+		hashStr := Bencrypt.Argon2Hash(combinedPw, o.salt)
 		mkey = []byte(hashStr)
 		verifyLbl = "PWHASH_OPSEC_ARGON2"
 		keygenLbl = "KEYGEN_OPSEC_ARGON2"
 	case "pbk1":
-		mkey = Bencrypt.Pbkdf2(combinedPw, o.Salt, 1000000, 64)
+		mkey = Bencrypt.Pbkdf2(combinedPw, o.salt, 1000000, 64)
 		verifyLbl = "PWHASH_OPSEC_PBKDF2"
 		keygenLbl = "KEYGEN_OPSEC_PBKDF2"
 	}
@@ -498,7 +492,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(calcHash, o.PwHash) {
+	if !bytes.Equal(calcHash, o.pwHash) {
 		return errors.New("incorrect password")
 	}
 
@@ -509,10 +503,11 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	}
 	var hkey [44]byte
 	copy(hkey[:], hkey_t)
-	m := new(Bencrypt.AES1)
-	decryptedHead, err := m.DeAESGCM(hkey, o.EncHeadData)
+	sm := new(Bencrypt.SymMaster)
+	sm.Init("gcm1", hkey[:])
+	decryptedHead, err := sm.DeBin(o.encHeadData)
 	if err != nil {
-		return err
+		return errors.New("AES decryption failed")
 	}
 	o.unwrapHead(decryptedHead)
 	return nil
@@ -520,39 +515,41 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 
 // Decrypt with private key, verify if public key is not nil
 func (o *Opsec) Decpub(private []byte, public []byte) error {
-	if o.HeadAlgo == "" {
+	if o.headAlgo == "" {
 		return errors.New("call View() first")
 	}
-	if o.HeadAlgo != "rsa1" && o.HeadAlgo != "ecc1" {
-		return errors.New("unsupported method: " + o.HeadAlgo)
+	if o.headAlgo != "rsa1" && o.headAlgo != "ecc1" {
+		return errors.New("unsupported method: " + o.headAlgo)
+	}
+
+	// Init AsymMaster
+	am := new(Bencrypt.AsymMaster)
+	if err := am.Init(o.headAlgo); err != nil {
+		return err
+	}
+	if err := am.Loadkey(public, private); err != nil {
+		return err
 	}
 
 	// Decrypt header
 	var decryptedHead []byte
 	var err error
-	switch o.HeadAlgo {
+	switch o.headAlgo {
 	case "rsa1":
-		rsa := new(Bencrypt.RSA1)
-		if err := rsa.Loadkey(nil, private); err != nil {
-			return err
-		}
-		hkey_t, err := rsa.Decrypt(o.EncHeadKey)
+		hkey_t, err := am.Decrypt(o.encHeadKey)
 		if err != nil {
 			return errors.New("RSA decryption failed")
 		}
 		var hkey [44]byte
 		copy(hkey[:], hkey_t)
-		aes := new(Bencrypt.AES1)
-		decryptedHead, err = aes.DeAESGCM(hkey, o.EncHeadData)
+		sm := new(Bencrypt.SymMaster)
+		sm.Init("gcm1", hkey[:])
+		decryptedHead, err = sm.DeBin(o.encHeadData)
 		if err != nil {
 			return errors.New("AES decryption failed")
 		}
 	case "ecc1":
-		ecc := new(Bencrypt.ECC1)
-		if err := ecc.Loadkey(nil, private); err != nil {
-			return err
-		}
-		decryptedHead, err = ecc.Decrypt(o.EncHeadData)
+		decryptedHead, err = am.Decrypt(o.encHeadData)
 		if err != nil {
 			return errors.New("ECC decryption failed")
 		}
@@ -565,22 +562,7 @@ func (o *Opsec) Decpub(private []byte, public []byte) error {
 		if len(s) == 0 && o.Smsg != "" {
 			s = []byte(o.Smsg)
 		}
-		valid := false
-		switch o.HeadAlgo {
-		case "rsa1":
-			m := new(Bencrypt.RSA1)
-			if err := m.Loadkey(public, nil); err != nil {
-				return err
-			}
-			valid = m.Verify(s, o.Sign)
-		case "ecc1":
-			m := new(Bencrypt.ECC1)
-			if err := m.Loadkey(public, nil); err != nil {
-				return err
-			}
-			valid = m.Verify(s, o.Sign)
-		}
-		if !valid {
+		if !am.Verify(s, o.sign) {
 			return errors.New("signature verification failed")
 		}
 	}

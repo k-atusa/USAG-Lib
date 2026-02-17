@@ -1,8 +1,5 @@
-// go mod init example.com
-// go mod tidy
-// go run test.go
-
-package main
+// go test
+package Opsec
 
 import (
 	"bytes"
@@ -10,16 +7,11 @@ import (
 	"log"
 
 	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
-	Opsec "github.com/k-atusa/USAG-Lib/Opsec"
 )
 
 func main() {
 	// 1. CRC32 Test
-	crc := Opsec.Crc32([]byte("test"))
-	for _, b := range crc {
-		fmt.Printf("%d ", b)
-	}
-	fmt.Println() // Expected: 12 126 127 216
+	fmt.Println(Crc32([]byte("test"))) // Expected: 0c7e7fd8
 
 	// 2. Key Generation
 	rsa := new(Bencrypt.RSA1)
@@ -124,9 +116,8 @@ func main() {
 
 // Helper to print object status
 func printStatus(m *Opsec.Opsec) {
-	fmt.Printf("%s %s %s %d %s %s %s %d\n",
+	fmt.Printf("%s %s %d %s %s %s %d\n",
 		m.Msg,
-		m.HeadAlgo,
 		m.Smsg,
 		m.Size,
 		m.Name,

@@ -20,11 +20,7 @@ public class test {
     public static void main(String[] args) {
         try {
             // 1. CRC32 Test
-            byte[] crc = Opsec.crc32("test".getBytes(StandardCharsets.UTF_8));
-            for (byte b : crc) {
-                System.out.print(Byte.toUnsignedInt(b) + " ");
-            }
-            System.out.println(); // Expected output: 12 126 127 216
+            System.out.println(Opsec.crc32("test".getBytes(StandardCharsets.UTF_8))); // Expected output: 0c7e7fd8
 
             // 2. Key Generation
             Bencrypt b = new Bencrypt();
@@ -100,7 +96,6 @@ public class test {
     private static void printStatus(Opsec m) {
         System.out.println(
             m.msg + " " +
-            m.headAlgo + " " +
             m.smsg + " " +
             m.size + " " +
             m.name + " " +

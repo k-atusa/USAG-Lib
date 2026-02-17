@@ -240,3 +240,95 @@ class ECC1: # Curve448
             return True
         except:
             return False
+        
+# ========== Master Class ==========
+class SymMaster:
+    def __init__(self, algo: str, key: bytes):
+        if algo not in ["gcm1", "gcmx1"]:
+            raise ValueError(f"Unsupported algorithm: {algo}")
+        self.algo = algo
+        if len(key) != 44:
+            raise ValueError("Key length must be 44 bytes (12B IV + 32B Key)")
+        self.key = key
+        if self.algo == 'gcm1':
+            self.worker = AES1()
+        elif self.algo == 'gcmx1':
+            self.worker = AES1()
+
+    def aftersize(self, size: int) -> int:
+        if self.algo == "gcm1":
+            return size + 16 # tag size
+        elif self.algo == "gcmx1":
+            c = size // 1048576 + 1
+            if size != 0 and size % 1048576 == 0:
+                c -= 1
+            return size + 16 * c
+        
+    def processed(self) -> int:
+        return self.worker.processed()
+
+    def enBin(self, data: bytes) -> bytes:
+        if self.algo == "gcm1":
+            return self.worker.enAESGCM(self.key, data)
+        elif self.algo == "gcmx1":
+            wr = io.BytesIO()
+            self.worker.enAESGCMx(self.key, io.BytesIO(data), len(data), wr)
+            return wr.getvalue()
+
+    def deBin(self, data: bytes) -> bytes:
+        if self.algo == "gcm1":
+            return self.worker.deAESGCM(self.key, data)
+        elif self.algo == "gcmx1":
+            wr = io.BytesIO()
+            self.worker.deAESGCMx(self.key, io.BytesIO(data), len(data), wr)
+            return wr.getvalue()
+
+    def enFile(self, src: io.IOBase, size: int, dst: io.IOBase):
+        if self.algo == "gcm1":
+            data = self.worker.enAESGCM(self.key, src.read(size))
+            dst.write(data)
+        elif self.algo == "gcmx1":
+            self.worker.enAESGCMx(self.key, src, size, dst)
+
+    def deFile(self, src: io.IOBase, size: int, dst: io.IOBase):
+        if self.algo == "gcm1":
+            data = self.worker.deAESGCM(self.key, src.read(size))
+            dst.write(data)
+        elif self.algo == "gcmx1":
+            self.worker.deAESGCMx(self.key, src, size, dst)
+
+
+class AsymMaster:
+    def __init__(self, algo: str):
+        if algo not in ["rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"]:
+            raise ValueError(f"Unsupported algorithm: {algo}")
+        self.algo = algo
+        if self.algo == 'rsa1' or self.algo == 'rsa1-2k' or self.algo == 'rsa1-3k' or self.algo == 'rsa1-4k':
+            self.worker = RSA1()
+        elif self.algo == 'ecc1':
+            self.worker = ECC1()
+
+    def genkey(self) -> Tuple[bytes, bytes]:
+        if self.algo == 'rsa1' or self.algo == 'rsa1-2k':
+            return self.worker.genkey(2048)
+        elif self.algo == 'rsa1-3k':
+            return self.worker.genkey(3072)
+        elif self.algo == 'rsa1-4k':
+            return self.worker.genkey(4096)
+        elif self.algo == 'ecc1':
+            return self.worker.genkey()
+
+    def loadkey(self, public: bytes|None, private: bytes|None):
+        self.worker.loadkey(public, private)
+
+    def encrypt(self, data: bytes) -> bytes:
+        return self.worker.encrypt(data)
+
+    def decrypt(self, data: bytes) -> bytes:
+        return self.worker.decrypt(data)
+
+    def sign(self, data: bytes) -> bytes:
+        return self.worker.sign(data)
+
+    def verify(self, data: bytes, signature: bytes) -> bool:
+        return self.worker.verify(data, signature)

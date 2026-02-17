@@ -4,9 +4,16 @@ Bencrypt에 기반하는 보안 파일 컨테이너와 지원 함수들입니다
 
 Secure file container and helper functions based on Bencrypt. Supports password-based mode and public-key-based mode. This module handles header data only; archiving and encryption of body data must be performed separately using the body key.
 
+#### Supported Methods
+
+- pbk1
+- arg1
+- rsa1
+- ecc1
+
 #### python
 ```py
-def crc32(data: bytes) -> bytes
+def crc32(data: bytes) -> str
 def encodeInt(data: int, size: int, signed: bool) -> bytes
 def decodeInt(data: bytes, signed: bool) -> int
 def encodeCfg(data: Dict[str, bytes]) -> bytes
@@ -14,18 +21,12 @@ def decodeCfg(data: bytes) -> Dict[str, bytes]
 
 class Opsec:
     msg: str           # Non-secured message
-    headAlgo: str      # Header algorithm [arg1, pbk1, rsa1, ecc1]
-    salt: bytes        # Salt
-    pwHash: bytes      # Password hash
-    encHeadKey: bytes  # Encrypted header key (RSA)
-    encHeadData: bytes # Encrypted header data
     smsg: str          # Secured message
     size: int          # Body size (-1: no body key)
     name: str          # Body name
     bodyKey: bytes     # Body key
     bodyAlgo: str      # Body algorithm
     contAlgo: str      # Container algorithm
-    sign: bytes        # Signature
     
     def reset()
     def read(ins: io.IOBase, cut: int = 65535) -> bytes
@@ -40,7 +41,7 @@ class Opsec:
 
 #### javascript
 ```js
-function crc32(data: Uint8Array | string): Uint8Array
+function crc32(data: Uint8Array | string): string
 function encodeInt(data: number, size: number): Uint8Array
 function decodeInt(data: Uint8Array): number
 function encodeCfg(data: Object): Uint8Array
@@ -48,18 +49,12 @@ function decodeCfg(data: Uint8Array): Object
 
 class Opsec {
     msg: String
-    headAlgo: String
-    salt: Uint8Array
-    pwHash: Uint8Array
-    encHeadKey: Uint8Array
-    encHeadData: Uint8Array
     smsg: String
     size: Number
     name: String
     bodyKey: Uint8Array
     bodyAlgo: String
     contAlgo; : String
-    sign: Uint8Array
     
     reset()
     async function read(ins, cut): Promise<Uint8Array>
@@ -75,7 +70,7 @@ class Opsec {
 
 #### golang
 ```go
-func Crc32(data []byte) []byte
+func Crc32(data []byte) string
 func EncodeInt(data uint64, size int) []byte
 func DecodeInt(data []byte) uint64
 func EncodeCfg(data map[string][]byte) ([]byte, error)
@@ -83,18 +78,12 @@ func DecodeCfg(data []byte) map[string][]byte
 
 type Opsec struct {
     Msg         string
-    HeadAlgo    string
-    Salt        []byte
-    PwHash      []byte
-    EncHeadKey  []byte
-    EncHeadData []byte
     Smsg        string
     Size        int64
     Name        string
     BodyKey     []byte
     BodyAlgo    string
     ContAlgo    string
-    Sign        []byte
 
     func Reset()
     func Read(r io.Reader, cut int) ([]byte, error)
@@ -111,25 +100,19 @@ type Opsec struct {
 #### java
 ```java
 public class Opsec {
-    public byte[] crc32(byte[] data)
+    public String crc32(byte[] data)
     public byte[] encodeInt(long data, int size)
     public long decodeInt(byte[] data)
     public byte[] encodeCfg(Map<String, byte[]> data) throws IOException
     public Map<String, byte[]> decodeCfg(byte[] data)
     
     public String msg;
-    public String headAlgo;
-    public byte[] salt;
-    public byte[] pwHash;
-    public byte[] encHeadKey;
-    public byte[] encHeadData;
     public String smsg;
     public long size;
     public String name;
     public byte[] bodyKey;
     public String bodyAlgo;
     public String contAlgo;
-    public byte[] sign;
 
     public void reset()
     public byte[] read(InputStream ins, int cut) throws IOException

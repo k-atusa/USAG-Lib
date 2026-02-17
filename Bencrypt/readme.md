@@ -1,4 +1,4 @@
-## Bencrypt v0.1
+## Bencrypt
 
 AES, RSA, ECC를 지원하는 암호화 모듈입니다. 현재 표준 권장 알고리즘보다 더 높은 보안 여유를 가지고 있습니다.
 
@@ -6,6 +6,24 @@ Encryption module supporting AES, RSA, and ECC. It has a higher security margin 
 
 #### python
 ```py
+class SymMaster:
+    def __init__(algo: str, key: bytes) -> None
+    def aftersize(size: int) -> int
+    def processed() -> int
+    def enBin(data: bytes) -> bytes
+    def deBin(data: bytes) -> bytes
+    def enFile(src: io.IOBase, size: int, dst: io.IOBase) -> None
+    def deFile(src: io.IOBase, size: int, dst: io.IOBase) -> None
+
+class AsymMaster:
+    def __init__(algo: str) -> None
+    def genkey() -> Tuple[bytes, bytes]
+    def loadkey(public: bytes | None, private: bytes | None)
+    def encrypt(data: bytes) -> bytes
+    def decrypt(data: bytes) -> bytes
+    def sign(data: bytes) -> bytes
+    def verify(data: bytes, signature: bytes) -> bool
+
 def random(size: int) -> bytes
 def sha3256(data: bytes) -> bytes
 def sha3512(data: bytes) -> bytes
@@ -41,6 +59,26 @@ class ECC1:
 #### javascript
 ```js
 function InitBencrypt() // Initialize (Required)
+
+class SymMaster {
+    constructor(algo: string, key: Uint8Array)
+    aftersize(size: number): number
+    processed(): number
+    async function enBin(data): Promise<Uint8Array>
+    async function deBin(data): Promise<Uint8Array>
+    async function enFile(src, size, dst)
+    async function deFile(src, size, dst)
+}
+
+class AsymMaster {
+    constructor(algo: string)
+    async function genkey(): Promise<[Uint8Array, Uint8Array]>
+    async function loadkey(pub, pri)
+    async function encrypt(data): Promise<Uint8Array>
+    async function decrypt(data): Promise<Uint8Array>
+    async function sign(data): Promise<Uint8Array>
+    async function verify(data, signature): Promise<boolean>
+}
 
 function random(size: number): Uint8Array
 function sha3256(data: Uint8Array | string): Uint8Array
@@ -79,6 +117,26 @@ class ECC1 {
 
 #### golang
 ```go
+struct SymMaster {
+    func Init(algo string, key []byte)
+    func AfterSize(size int64) int64
+    func Processed() int64
+    func EnBin(data []byte) ([]byte, error)
+    func DeBin(data []byte) ([]byte, error)
+    func EnFile(src io.Reader, size int64, dst io.Writer, chunkSize int) error
+    func DeFile(src io.Reader, size int64, dst io.Writer, chunkSize int) error
+}
+
+struct AsymMaster {
+    func Init(algo string)
+    func Genkey() ([]byte, []byte, error)
+    func Loadkey(public []byte, private []byte) error
+    func Encrypt(data []byte) ([]byte, error)
+    func Decrypt(data []byte) ([]byte, error)
+    func Sign(data []byte) ([]byte, error)
+    func Verify(data []byte, signature []byte) bool
+}
+
 func Random(size int) []byte
 func Sha3256(data []byte) []byte
 func Sha3512(data []byte) []byte
@@ -118,6 +176,26 @@ struct ECC1 {
 #### java
 ```java
 class Bencrypt {
+    class SymMaster {
+        SymMaster(String algo, byte[] key)
+        long aftersize(long size)
+        long processed()
+        byte[] enBin(byte[] data)
+        byte[] deBin(byte[] data)
+        void enFile(InputStream src, long size, OutputStream dst, int chunkSize)
+        void deFile(InputStream src, long size, OutputStream dst, int chunkSize)
+    }
+
+    class AsymMaster {
+        AsymMaster(String algo)
+        byte[][] genkey()
+        void loadkey(byte[] pubBytes, byte[] priBytes)
+        byte[] encrypt(byte[] data)
+        byte[] decrypt(byte[] data)
+        byte[] sign(byte[] data)
+        boolean verify(byte[] data, byte[] signature)
+    }
+
     // Basic Functions
     byte[] random(int size)
     byte[] sha3256(byte[] data)

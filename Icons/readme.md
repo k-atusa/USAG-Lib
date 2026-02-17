@@ -1,4 +1,4 @@
-## Icons v1.0.0
+## Icons
 
 아이콘 이미지 바이너리를 생성하는 함수입니다.
 Functions that generate icon image binaries.

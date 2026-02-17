@@ -903,3 +903,168 @@ class ECC1 {
         }
     }
 }
+
+// ========== Master Classe ==========
+class SymMaster {
+    /**
+     * @param {string} algo - "gcm1" or "gcmx1"
+     * @param {Uint8Array} key - 44 bytes (12B IV + 32B Key)
+     */
+    constructor(algo, key) {
+        if (algo !== "gcm1" && algo !== "gcmx1") {
+            throw new Error(`Unsupported algorithm: ${algo}`);
+        }
+        this.algo = algo;
+        
+        this.key = toU8(key);
+        if (this.key.length !== 44) {
+            throw new Error("Key length must be 44 bytes (12B IV + 32B Key)");
+        }
+        
+        this.worker = new AES1();
+    }
+
+    /**
+     * Calculate expected output size
+     * @param {number} size 
+     * @returns {number}
+     */
+    aftersize(size) {
+        if (this.algo === "gcm1") {
+            return size + 16;
+        } else if (this.algo === "gcmx1") {
+            const chunkSize = 1048576;
+            let c = Math.floor(size / chunkSize) + 1;
+            if (size !== 0 && size % chunkSize === 0) {
+                c -= 1;
+            }
+            return size + (16 * c);
+        }
+        return 0;
+    }
+
+    processed() {
+        return this.worker.processed();
+    }
+
+    /**
+     * Encrypt binary data (Memory)
+     * @param {Uint8Array} data 
+     * @returns {Promise<Uint8Array>}
+     */
+    async enBin(data) {
+        const d = toU8(data);
+        if (this.algo === "gcm1") {
+            return await this.worker.enAESGCM(this.key, d);
+        } else if (this.algo === "gcmx1") {
+            const reader = new TestReader(d);
+            const writer = new TestWriter();
+            await this.worker.enAESGCMx(this.key, reader, d.length, writer, 1048576);
+            return writer.getValue();
+        }
+    }
+
+    /**
+     * Decrypt binary data (Memory)
+     * @param {Uint8Array} data 
+     * @returns {Promise<Uint8Array>}
+     */
+    async deBin(data) {
+        const d = toU8(data);
+        if (this.algo === "gcm1") {
+            return await this.worker.deAESGCM(this.key, d);
+        } else if (this.algo === "gcmx1") {
+            const reader = new TestReader(d);
+            const writer = new TestWriter();
+            await this.worker.deAESGCMx(this.key, reader, d.length, writer, 1048576);
+            return writer.getValue();
+        }
+    }
+
+    /**
+     * Encrypt Stream/File
+     * @param {Object} src - Must have async read(size)
+     * @param {number} size - Total size
+     * @param {Object} dst - Must have async write(chunk)
+     */
+    async enFile(src, size, dst) {
+        if (this.algo === "gcm1") {
+            const data = await src.read(size);
+            const enc = await this.worker.enAESGCM(this.key, data);
+            await dst.write(enc);
+        } else if (this.algo === "gcmx1") {
+            await this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
+        }
+    }
+
+    /**
+     * Decrypt Stream/File
+     * @param {Object} src - Must have async read(size)
+     * @param {number} size - Total size
+     * @param {Object} dst - Must have async write(chunk)
+     */
+    async deFile(src, size, dst) {
+        if (this.algo === "gcm1") {
+            const data = await src.read(size);
+            const dec = await this.worker.deAESGCM(this.key, data);
+            await dst.write(dec);
+        } else if (this.algo === "gcmx1") {
+            await this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
+        }
+    }
+}
+
+class AsymMaster {
+    /**
+     * @param {string} algo - "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"
+     */
+    constructor(algo) {
+        const validAlgos = ["rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"];
+        if (!validAlgos.includes(algo)) {
+            throw new Error(`Unsupported algorithm: ${algo}`);
+        }
+        this.algo = algo;
+
+        if (this.algo.startsWith("rsa1")) {
+            this.worker = new RSA1();
+        } else if (this.algo === "ecc1") {
+            this.worker = new ECC1();
+        }
+    }
+
+    /**
+     * Generate key pair
+     * @returns {Promise<[Uint8Array, Uint8Array]>} [pub, pri]
+     */
+    async genkey() {
+        if (this.algo === "rsa1" || this.algo === "rsa1-2k") {
+            return await this.worker.genkey(2048);
+        } else if (this.algo === "rsa1-3k") {
+            return await this.worker.genkey(3072);
+        } else if (this.algo === "rsa1-4k") {
+            return await this.worker.genkey(4096);
+        } else if (this.algo === "ecc1") {
+            return await this.worker.genkey();
+        }
+    }
+
+    async loadkey(publicBuf, privateBuf) {
+        await this.worker.loadkey(publicBuf, privateBuf);
+    }
+
+    async encrypt(data) {
+        return await this.worker.encrypt(data);
+    }
+
+    async decrypt(data) {
+        return await this.worker.decrypt(data);
+    }
+
+    async sign(data) {
+        return await this.worker.sign(data);
+    }
+
+    async verify(data, signature) {
+        return await this.worker.verify(data, signature);
+    }
+}

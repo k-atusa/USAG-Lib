@@ -49,10 +49,8 @@ function crc32(data) {
     }
     crc = (crc ^ (-1)) >>> 0;
     
-    // Return as 4 bytes Little Endian
-    const view = new DataView(new ArrayBuffer(4));
-    view.setUint32(0, crc, true);
-    return new Uint8Array(view.buffer);
+    // Return as Hex String (8 chars)
+    return crc.toString(16).padStart(8, '0');
 }
 
 /**
@@ -167,11 +165,11 @@ class Opsec {
     reset() {
         // Outer Layer
         this.msg = "";                        // non-secured message
-        this.headAlgo = "";                   // header algorithm, [arg1 pbk1 rsa1 ecc1]
-        this.salt = new Uint8Array(0);        // salt
-        this.pwHash = new Uint8Array(0);      // pw hash
-        this.encHeadKey = new Uint8Array(0);  // encrypted header key
-        this.encHeadData = new Uint8Array(0); // encrypted header data
+        this._headAlgo = "";                   // header algorithm, [arg1 pbk1 rsa1 ecc1]
+        this._salt = new Uint8Array(0);        // salt
+        this._pwHash = new Uint8Array(0);      // pw hash
+        this._encHeadKey = new Uint8Array(0);  // encrypted header key
+        this._encHeadData = new Uint8Array(0); // encrypted header data
 
         // Inner Layer
         this.smsg = "";                   // secured message
@@ -180,7 +178,7 @@ class Opsec {
         this.bodyKey = new Uint8Array(0); // body key
         this.bodyAlgo = "";               // body algorithm, [gcm1 gcmx1]
         this.contAlgo = "";               // container algorithm, [zip1 tar1]
-        this.sign = new Uint8Array(0);    // signature
+        this._sign = new Uint8Array(0);    // signature
     }
 
     /**
@@ -244,7 +242,7 @@ class Opsec {
         if (this.bodyKey.length > 0) cfg["bkey"] = this.bodyKey;
         if (this.bodyAlgo !== "") cfg["bodyal"] = this.bodyAlgo;
         if (this.contAlgo !== "") cfg["contal"] = this.contAlgo;
-        if (this.sign.length > 0) cfg["sgn"] = this.sign;
+        if (this._sign.length > 0) cfg["sgn"] = this._sign;
         return encodeCfg(cfg);
     }
 
@@ -256,7 +254,7 @@ class Opsec {
         if (cfg["bkey"]) this.bodyKey = cfg["bkey"];
         if (cfg["bodyal"]) this.bodyAlgo = u8ToStr(cfg["bodyal"]);
         if (cfg["contal"]) this.contAlgo = u8ToStr(cfg["contal"]);
-        if (cfg["sgn"]) this.sign = cfg["sgn"];
+        if (cfg["sgn"]) this._sign = cfg["sgn"];
     }
 
     /**
@@ -271,8 +269,8 @@ class Opsec {
         if (method !== "arg1" && method !== "pbk1") {
             throw new Error(`Unsupported method: ${method}`);
         }
-        this.headAlgo = method;
-        this.salt = random(16);
+        this._headAlgo = method;
+        this._salt = random(16);
         if (this.size >= 0) {
             this.bodyKey = random(44);
         }
@@ -283,28 +281,28 @@ class Opsec {
         // get master key, make pwHash, hkey
         let mkey, hkey;
         if (method === "arg1") {
-            const mkeyHashStr = await argon2Hash(combinedPw, this.salt);
+            const mkeyHashStr = await argon2Hash(combinedPw, this._salt);
             mkey = strToU8(mkeyHashStr);
-            this.pwHash = genkey(mkey, "PWHASH_OPSEC_ARGON2", 32);
+            this._pwHash = genkey(mkey, "PWHASH_OPSEC_ARGON2", 32);
             hkey = genkey(mkey, "KEYGEN_OPSEC_ARGON2", 44);
         } else if (method === "pbk1") {
-            mkey = await pbkdf2(combinedPw, this.salt);
-            this.pwHash = genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32);
+            mkey = await pbkdf2(combinedPw, this._salt);
+            this._pwHash = genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32);
             hkey = genkey(mkey, "KEYGEN_OPSEC_PBKDF2", 44);
         }
 
         // encrypt header
         const headData = this._wrapHead();
-        const m = new AES1();
-        this.encHeadData = await m.enAESGCM(hkey, headData);
+        const sm = new SymMaster("gcm1", hkey);
+        this._encHeadData = await sm.enBin(headData);
 
         // wrap message
         const cfg = {};
         if (this.msg !== "") cfg["msg"] = this.msg;
-        cfg["headal"] = this.headAlgo;
-        cfg["salt"] = this.salt;
-        cfg["pwh"] = this.pwHash;
-        cfg["ehd"] = this.encHeadData;
+        cfg["headal"] = this._headAlgo;
+        cfg["salt"] = this._salt;
+        cfg["pwh"] = this._pwHash;
+        cfg["ehd"] = this._encHeadData;
         return encodeCfg(cfg);
     }
 
@@ -319,48 +317,38 @@ class Opsec {
         if (method !== "rsa1" && method !== "ecc1") {
             throw new Error(`Unsupported method: ${method}`);
         }
-        this.headAlgo = method;
+        this._headAlgo = method;
         if (this.size >= 0) {
             this.bodyKey = random(44);
         }
 
-        // Sign if private key exists
+        // Init Master & Sign
+        const am = new AsymMaster(method);
+        await am.loadkey(publicBytes, privateBytes);
         if (privateBytes !== null) {
-            if (method === "rsa1") {
-                const m = new RSA1();
-                await m.loadkey(null, privateBytes);
-                if (this.bodyKey.length > 0) this.sign = await m.sign(this.bodyKey);
-                else if (this.smsg !== "") this.sign = await m.sign(strToU8(this.smsg));
-            } else {
-                const m = new ECC1();
-                await m.loadkey(null, privateBytes);
-                if (this.bodyKey.length > 0) this.sign = await m.sign(this.bodyKey);
-                else if (this.smsg !== "") this.sign = await m.sign(strToU8(this.smsg));
-            }
+            if (this.bodyKey.length > 0) this._sign = await am.sign(this.bodyKey);
+            else if (this.smsg !== "") this._sign = await am.sign(strToU8(this.smsg));
         }
 
         // Encrypt Header
         const headData = this._wrapHead();
         if (method === "rsa1") {
-            const m = new RSA1();
-            await m.loadkey(publicBytes, null);
+            // RSA Hybrid: Encrypt Key with RSA, Data with AES
             const hkey = random(44);
-            this.encHeadKey = await m.encrypt(hkey);
-            
-            const aes = new AES1();
-            this.encHeadData = await aes.enAESGCM(hkey, headData);
+            this._encHeadKey = await am.encrypt(hkey);
+            const sm = new SymMaster("gcm1", hkey);
+            this._encHeadData = await sm.enBin(headData);
         } else if (method === "ecc1") {
-            const m = new ECC1();
-            await m.loadkey(publicBytes, null);
-            this.encHeadData = await m.encrypt(headData);
+            // ECC Hybrid: Handled internally by ECC1 class
+            this._encHeadData = await am.encrypt(headData);
         }
 
         // wrap message
         const cfg = {};
         if (this.msg !== "") cfg["msg"] = this.msg;
-        cfg["headal"] = this.headAlgo;
-        if (this.encHeadKey.length > 0) cfg["ehk"] = this.encHeadKey;
-        cfg["ehd"] = this.encHeadData;
+        cfg["headal"] = this._headAlgo;
+        if (this._encHeadKey.length > 0) cfg["ehk"] = this._encHeadKey;
+        cfg["ehd"] = this._encHeadData;
         return encodeCfg(cfg);
     }
 
@@ -372,11 +360,11 @@ class Opsec {
         this.reset();
         const cfg = decodeCfg(data);
         if (cfg["msg"]) this.msg = u8ToStr(cfg["msg"]);
-        if (cfg["headal"]) this.headAlgo = u8ToStr(cfg["headal"]);
-        if (cfg["salt"]) this.salt = cfg["salt"];
-        if (cfg["pwh"]) this.pwHash = cfg["pwh"];
-        if (cfg["ehk"]) this.encHeadKey = cfg["ehk"];
-        if (cfg["ehd"]) this.encHeadData = cfg["ehd"];
+        if (cfg["headal"]) this._headAlgo = u8ToStr(cfg["headal"]);
+        if (cfg["salt"]) this._salt = cfg["salt"];
+        if (cfg["pwh"]) this._pwHash = cfg["pwh"];
+        if (cfg["ehk"]) this._encHeadKey = cfg["ehk"];
+        if (cfg["ehd"]) this._encHeadData = cfg["ehd"];
     }
 
     /**
@@ -385,9 +373,9 @@ class Opsec {
      * @param {Uint8Array} kf 
      */
     async decpw(pw, kf = new Uint8Array(0)) {
-        if (this.headAlgo === "") throw new Error("Call view() first");
-        if (this.headAlgo !== "arg1" && this.headAlgo !== "pbk1") {
-             throw new Error(`Unsupported method: ${this.headAlgo}`);
+        if (this._headAlgo === "") throw new Error("Call view() first");
+        if (this._headAlgo !== "arg1" && this._headAlgo !== "pbk1") {
+             throw new Error(`Unsupported method: ${this._headAlgo}`);
         }
         const pwBytes = (typeof pw === 'string') ? strToU8(pw) : pw;
         const kfBytes = (typeof kf === 'string') ? strToU8(kf) : kf;
@@ -397,28 +385,28 @@ class Opsec {
         let mkey;
         let verify_lbl = "";
         let keygen_lbl = "";
-        if (this.headAlgo === "arg1") {
-            const mkeyHashStr = await argon2Hash(combinedPw, this.salt);
+        if (this._headAlgo === "arg1") {
+            const mkeyHashStr = await argon2Hash(combinedPw, this._salt);
             mkey = strToU8(mkeyHashStr);
             verify_lbl = "PWHASH_OPSEC_ARGON2";
             keygen_lbl = "KEYGEN_OPSEC_ARGON2";
         } else {
-            mkey = await pbkdf2(combinedPw, this.salt);
+            mkey = await pbkdf2(combinedPw, this._salt);
             verify_lbl = "PWHASH_OPSEC_PBKDF2";
             keygen_lbl = "KEYGEN_OPSEC_PBKDF2";
         }
 
         // check password
         const calc_hash = genkey(mkey, verify_lbl, 32);
-        if (calc_hash.length !== this.pwHash.length) throw new Error("Incorrect password");
+        if (calc_hash.length !== this._pwHash.length) throw new Error("Incorrect password");
         let diff = 0;
-        for(let i=0; i<calc_hash.length; i++) diff |= calc_hash[i] ^ this.pwHash[i];
+        for(let i=0; i<calc_hash.length; i++) diff |= calc_hash[i] ^ this._pwHash[i];
         if (diff !== 0) throw new Error("Incorrect password");
 
         // decrypt header
         const hkey = genkey(mkey, keygen_lbl, 44);
-        const m = new AES1();
-        this._unwrapHead(await m.deAESGCM(hkey, this.encHeadData));
+        const sm = new SymMaster("gcm1", hkey);
+        this._unwrapHead(await sm.deBin(this._encHeadData));
     }
 
     /**
@@ -427,23 +415,21 @@ class Opsec {
      * @param {Uint8Array|null} publicBytes // verify sign if publicBytes is not null
      */
     async decpub(privateBytes, publicBytes = null) {
-        if (this.headAlgo === "") throw new Error("Call view() first");
-        if (this.headAlgo !== "rsa1" && this.headAlgo !== "ecc1") {
-             throw new Error(`Unsupported method: ${this.headAlgo}`);
+        if (this._headAlgo === "") throw new Error("Call view() first");
+        if (this._headAlgo !== "rsa1" && this._headAlgo !== "ecc1") {
+             throw new Error(`Unsupported method: ${this._headAlgo}`);
         }
+        const am = new AsymMaster(this._headAlgo);
+        await am.loadkey(publicBytes, privateBytes);
+        let decrypted_head;
 
         // decrypt header
-        let decrypted_head;
-        if (this.headAlgo === "rsa1") {
-            const rsa = new RSA1();
-            const aes = new AES1();
-            await rsa.loadkey(null, privateBytes);
-            const hkey = await rsa.decrypt(this.encHeadKey);
-            decrypted_head = await aes.deAESGCM(hkey, this.encHeadData);
+        if (this._headAlgo === "rsa1") {
+            const hkey = await am.decrypt(this._encHeadKey);
+            const sm = new SymMaster("gcm1", hkey);
+            decrypted_head = await sm.deBin(this._encHeadData);
         } else {
-            const ecc = new ECC1();
-            await ecc.loadkey(null, privateBytes);
-            decrypted_head = await ecc.decrypt(this.encHeadData);
+            decrypted_head = await am.decrypt(this._encHeadData);
         }
         this._unwrapHead(decrypted_head);
 
@@ -452,18 +438,8 @@ class Opsec {
             let s = new Uint8Array(0);
             if (this.bodyKey.length > 0) s = this.bodyKey;
             else if (this.smsg !== "") s = strToU8(this.smsg);
-
-            let verified = false;
-            if (this.headAlgo === "rsa1") {
-                const m = new RSA1();
-                await m.loadkey(publicBytes, null);
-                verified = await m.verify(s, this.sign);
-            } else {
-                const m = new ECC1();
-                await m.loadkey(publicBytes, null);
-                verified = await m.verify(s, this.sign);
-            }
-            if (!verified) throw new Error(`${this.headAlgo.toUpperCase()} signature verification failed`);
+            const verified = await am.verify(s, this._sign);
+            if (!verified) throw new Error(`${this._headAlgo.toUpperCase()} signature verification failed`);
         }
     }
 }

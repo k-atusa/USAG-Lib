@@ -22,11 +22,11 @@ header: (smsg), (size), (name), (bodyKey), (bodyAlgo), (contAlgo), (sign)
 public class Opsec {
     // Outer Layer
     public String msg; // non-secured message
-    public String headAlgo; // header algorithm, [arg1 pbk1 rsa1 ecc1]
-    public byte[] salt; // salt
-    public byte[] pwHash; // pw hash
-    public byte[] encHeadKey; // encrypted header key
-    public byte[] encHeadData; // encrypted header data
+    private String headAlgo; // header algorithm, [arg1 pbk1 rsa1 ecc1]
+    private byte[] salt; // salt
+    private byte[] pwHash; // pw hash
+    private byte[] encHeadKey; // encrypted header key
+    private byte[] encHeadData; // encrypted header data
 
     // Inner Layer
     public String smsg; // secured message
@@ -35,7 +35,7 @@ public class Opsec {
     public byte[] bodyKey; // body key
     public String bodyAlgo; // body algorithm, [gcm1 gcmx1]
     public String contAlgo; // container algorithm, [zip1 tar1]
-    public byte[] sign; // signature to bodyKey/smsg
+    private byte[] sign; // signature to bodyKey/smsg
 
     public Opsec() {
         reset();
@@ -59,13 +59,11 @@ public class Opsec {
     }
 
     // ========== Helper Functions ==========
-    public byte[] crc32(byte[] data) {
+    public static String crc32(byte[] data) {
         CRC32 crc = new CRC32();
         crc.update(data);
         long value = crc.getValue();
-        ByteBuffer buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-        buf.putInt((int) value);
-        return buf.array();
+        return String.format("%02x%02x%02x%02x", (value & 0xFF), (value >> 8) & 0xFF, (value >> 16) & 0xFF, (value >> 24) & 0xFF); // 8 chars hex string
     }
 
     public byte[] encodeInt(long data, int size) {
@@ -238,14 +236,14 @@ public class Opsec {
 
     // encrypt with password
     public byte[] encpw(String method, byte[] pw, byte[] kf) throws Exception {
+        Bencrypt worker = new Bencrypt();
         if (!method.equals("arg1") && !method.equals("pbk1")) {
             throw new IllegalArgumentException("Unsupported method: " + method);
         }
-        this.headAlgo = method;
-        Bencrypt b = new Bencrypt();
-        this.salt = b.random(16);
-        if (this.size >= 0) {
-            this.bodyKey = b.random(44);
+        headAlgo = method;
+        salt = worker.random(16);
+        if (size >= 0) {
+            bodyKey = worker.random(44);
         }
         byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
         byte[] mkey;
@@ -253,19 +251,22 @@ public class Opsec {
 
         // generate password hash, encrypt header
         if (method.equals("arg1")) {
-            String hashStr = b.argon2Hash(combinedPw, this.salt);
+            String hashStr = worker.argon2Hash(combinedPw, salt);
             mkey = strToBytes(hashStr);
             verifyLbl = "PWHASH_OPSEC_ARGON2";
             keygenLbl = "KEYGEN_OPSEC_ARGON2";
         } else {
-            mkey = b.pbkdf2(combinedPw, this.salt, 1000000, 64); // default values from readme
+            mkey = worker.pbkdf2(combinedPw, salt, 1000000, 64);
             verifyLbl = "PWHASH_OPSEC_PBKDF2";
             keygenLbl = "KEYGEN_OPSEC_PBKDF2";
         }
-        this.pwHash = b.genkey(mkey, verifyLbl, 32);
-        byte[] hkey = b.genkey(mkey, keygenLbl, 44);
+        pwHash = worker.genkey(mkey, verifyLbl, 32);
+        byte[] hkey = worker.genkey(mkey, keygenLbl, 44);
+        
+        // Encrypt Header using SymMaster
         byte[] headData = wrapHead();
-        this.encHeadData = b.enAESGCM(hkey, headData);
+        Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
+        encHeadData = sm.enBin(headData);
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
@@ -279,40 +280,36 @@ public class Opsec {
 
     // encrypt with public key, sign if private key is not null
     public byte[] encpub(String method, byte[] publicBytes, byte[] privateBytes) throws Exception {
+        Bencrypt worker = new Bencrypt();
         if (!method.equals("rsa1") && !method.equals("ecc1")) {
             throw new IllegalArgumentException("Unsupported method: " + method);
         }
-        this.headAlgo = method;
-        Bencrypt b = new Bencrypt();
-        if (this.size >= 0) {
-            this.bodyKey = b.random(44);
+        headAlgo = method;
+        if (size >= 0) {
+            bodyKey = worker.random(44);
         }
 
-        // sign if private key is not null
+        // Init Master & Sign
+        Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(method);
+        am.loadkey(publicBytes, privateBytes);
+        
         if (privateBytes != null) {
-            Bencrypt signer = new Bencrypt();
             byte[] s = (bodyKey.length > 0) ? bodyKey : strToBytes(smsg);
-            if (method.equals("rsa1")) {
-                signer.RSAloadkey(null, privateBytes);
-                this.sign = signer.RSAsign(s);
-            } else {
-                signer.ECCloadkey(null, privateBytes);
-                this.sign = signer.ECCsign(s);
-            }
+            sign = am.sign(s);
         }
 
         // encrypt header
         byte[] headData = wrapHead();
         if (method.equals("rsa1")) {
-            Bencrypt rsa = new Bencrypt();
-            rsa.RSAloadkey(publicBytes, null);
-            byte[] hkey = b.random(44);
-            this.encHeadKey = rsa.RSAencrypt(hkey);
-            this.encHeadData = b.enAESGCM(hkey, headData);
+            // RSA Hybrid: Encrypt Key with RSA, Data with AES
+            byte[] hkey = worker.random(44);
+            encHeadKey = am.encrypt(hkey);
+            
+            Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
+            encHeadData = sm.enBin(headData);
         } else {
-            Bencrypt ecc = new Bencrypt();
-            ecc.ECCloadkey(publicBytes, null);
-            this.encHeadData = ecc.ECCencrypt(headData);
+            // ECC Hybrid: Handled internally by ECC1 class
+            encHeadData = am.encrypt(headData);
         }
 
         // wrap header
@@ -338,54 +335,55 @@ public class Opsec {
 
     // decrypt with password
     public void decpw(byte[] pw, byte[] kf) throws Exception {
+        Bencrypt worker = new Bencrypt();
         if (headAlgo.isEmpty()) throw new IllegalStateException("Call view() first");
         if (!headAlgo.equals("arg1") && !headAlgo.equals("pbk1")) {
             throw new IllegalArgumentException("Unsupported method: " + headAlgo);
         }
         byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
-        Bencrypt b = new Bencrypt();
         byte[] mkey;
         String verifyLbl, keygenLbl;
 
         // check password
         if (headAlgo.equals("arg1")) {
-            String hashStr = b.argon2Hash(combinedPw, salt);
+            String hashStr = worker.argon2Hash(combinedPw, salt);
             mkey = strToBytes(hashStr);
             verifyLbl = "PWHASH_OPSEC_ARGON2";
             keygenLbl = "KEYGEN_OPSEC_ARGON2";
         } else {
-            mkey = b.pbkdf2(combinedPw, salt, 1000000, 64);
+            mkey = worker.pbkdf2(combinedPw, salt, 1000000, 64);
             verifyLbl = "PWHASH_OPSEC_PBKDF2";
             keygenLbl = "KEYGEN_OPSEC_PBKDF2";
         }
-        byte[] calcHash = b.genkey(mkey, verifyLbl, 32);
+        byte[] calcHash = worker.genkey(mkey, verifyLbl, 32);
         if (!Arrays.equals(calcHash, pwHash)) throw new SecurityException("Incorrect password");
 
         // decrypt header
-        byte[] hkey = b.genkey(mkey, keygenLbl, 44);
-        byte[] decryptedHead = b.deAESGCM(hkey, encHeadData);
+        byte[] hkey = worker.genkey(mkey, keygenLbl, 44);
+        Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
+        byte[] decryptedHead = sm.deBin(encHeadData);
         if (decryptedHead == null) throw new SecurityException("AES decryption failed");
         unwrapHead(decryptedHead);
     }
 
     // decrypt with private key, verify if public key is not null
     public void decpub(byte[] privateBytes, byte[] publicBytes) throws Exception {
+        Bencrypt worker = new Bencrypt();
         if (headAlgo.isEmpty()) throw new IllegalStateException("Call view() first");
         if (!headAlgo.equals("rsa1") && !headAlgo.equals("ecc1")) {
             throw new IllegalArgumentException("Unsupported method: " + headAlgo);
         }
-
+        Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(headAlgo);
+        am.loadkey(publicBytes, privateBytes);
+        
         // decrypt header
         byte[] decryptedHead;
         if (headAlgo.equals("rsa1")) {
-            Bencrypt rsa = new Bencrypt();
-            rsa.RSAloadkey(null, privateBytes);
-            byte[] hkey = rsa.RSAdecrypt(encHeadKey);
-            decryptedHead = rsa.deAESGCM(hkey, encHeadData);
+            byte[] hkey = am.decrypt(encHeadKey);
+            Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
+            decryptedHead = sm.deBin(encHeadData);
         } else {
-            Bencrypt ecc = new Bencrypt();
-            ecc.ECCloadkey(null, privateBytes);
-            decryptedHead = ecc.ECCdecrypt(encHeadData);
+            decryptedHead = am.decrypt(encHeadData);
         }
         if (decryptedHead == null) throw new SecurityException("Decryption failed");
         unwrapHead(decryptedHead);
@@ -393,17 +391,9 @@ public class Opsec {
         // verify if public key is not null
         if (publicBytes != null) {
             byte[] s = (bodyKey.length > 0) ? bodyKey : strToBytes(smsg);
-            boolean verified;
-            if (headAlgo.equals("rsa1")) {
-                Bencrypt rsa = new Bencrypt();
-                rsa.RSAloadkey(publicBytes, null);
-                verified = rsa.RSAverify(s, sign);
-            } else {
-                Bencrypt ecc = new Bencrypt();
-                ecc.ECCloadkey(publicBytes, null);
-                verified = ecc.ECCverify(s, sign);
+            if (!am.verify(s, sign)) {
+                throw new SecurityException("Signature verification failed");
             }
-            if (!verified) throw new SecurityException("Signature verification failed");
         }
     }
 }

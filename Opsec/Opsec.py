@@ -5,8 +5,8 @@ import io
 import zlib
 import Bencrypt
 
-def crc32(data: bytes) -> bytes:
-    return zlib.crc32(data).to_bytes(4, 'little')
+def crc32(data: bytes) -> str:
+    return zlib.crc32(data).to_bytes(4, 'little').hex()
 
 def encodeInt(data: int, size: int, signed: bool) -> bytes:
     return data.to_bytes(size, 'little', signed=signed)
@@ -72,11 +72,11 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
         self.reset()
     def reset(self):
         self.msg: str = "" # non-secured message
-        self.headAlgo: str = "" # header algorithm, [arg1 pbk1 rsa1 ecc1]
-        self.salt: bytes = b"" # salt
-        self.pwHash: bytes = b"" # pw hash
-        self.encHeadKey: bytes = b"" # encrypted header key
-        self.encHeadData: bytes = b"" # encrypted header data
+        self._headAlgo: str = "" # header algorithm, [arg1 pbk1 rsa1 ecc1]
+        self._salt: bytes = b"" # salt
+        self._pwHash: bytes = b"" # pw hash
+        self._encHeadKey: bytes = b"" # encrypted header key
+        self._encHeadData: bytes = b"" # encrypted header data
 
         self.smsg: str = "" # secured message
         self.size: int = -1 # full body size, flag for bodyKey generation
@@ -84,7 +84,7 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
         self.bodyKey: bytes = b"" # body key
         self.bodyAlgo: str = "" # body algorithm, [gcm1 gcmx1]
         self.contAlgo: str = "" # container algorithm, [zip1 tar1]
-        self.sign: bytes = b"" # signature to bodyKey/smsg
+        self._sign: bytes = b"" # signature to bodyKey/smsg
 
     def read(self, ins: io.IOBase, cut: int = 65535) -> bytes: # set cut to 0 to read all
         c = 0
@@ -135,8 +135,8 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
             cfg["bodyal"] = self.bodyAlgo.encode('utf-8')
         if self.contAlgo != "":
             cfg["contal"] = self.contAlgo.encode('utf-8')
-        if self.sign != b"":
-            cfg["sgn"] = self.sign
+        if self._sign != b"":
+            cfg["sgn"] = self._sign
         return encodeCfg(cfg)
     
     def _unwrapHead(self, data: bytes):
@@ -154,79 +154,80 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
         if "contal" in cfg:
             self.contAlgo = cfg["contal"].decode('utf-8')
         if "sgn" in cfg:
-            self.sign = cfg["sgn"]
+            self._sign = cfg["sgn"]
 
     def encpw(self, method: str, pw: bytes, kf: bytes = b"") -> bytes:
         # set basic parameters
         if method not in ["arg1", "pbk1"]:
             raise ValueError(f"Unsupported method: {method}")
-        self.headAlgo = method
-        self.salt = Bencrypt.random(16)
+        self._headAlgo = method
+        self._salt = Bencrypt.random(16)
         if self.size >= 0:
             self.bodyKey = Bencrypt.random(44)
 
         # get master key, make pwHash, hkey
         if method == "arg1":
-            mkey = Bencrypt.argon2Hash(pw + kf, self.salt).encode('utf-8')
-            self.pwHash = Bencrypt.genkey(mkey, "PWHASH_OPSEC_ARGON2", 32)
+            mkey = Bencrypt.argon2Hash(pw + kf, self._salt).encode('utf-8')
+            self._pwHash = Bencrypt.genkey(mkey, "PWHASH_OPSEC_ARGON2", 32)
             hkey = Bencrypt.genkey(mkey, "KEYGEN_OPSEC_ARGON2", 44)
         elif method == "pbk1":
-            mkey = Bencrypt.pbkdf2(pw + kf, self.salt)
-            self.pwHash = Bencrypt.genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32)
+            mkey = Bencrypt.pbkdf2(pw + kf, self._salt)
+            self._pwHash = Bencrypt.genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32)
             hkey = Bencrypt.genkey(mkey, "KEYGEN_OPSEC_PBKDF2", 44)
 
         # encrypt header
         headData = self._wrapHead()
-        m = Bencrypt.AES1()
-        self.encHeadData = m.enAESGCM(hkey, headData)
+        sm = Bencrypt.SymMaster("gcm1", hkey)
+        self._encHeadData = sm.enBin(headData)
 
         # warp message
         cfg: Dict[str, bytes] = {}
         if self.msg != "":
             cfg["msg"] = self.msg.encode('utf-8')
-        cfg["headal"] = self.headAlgo.encode('utf-8')
-        cfg["salt"] = self.salt
-        cfg["pwh"] = self.pwHash
-        cfg["ehd"] = self.encHeadData
+        cfg["headal"] = self._headAlgo.encode('utf-8')
+        cfg["salt"] = self._salt
+        cfg["pwh"] = self._pwHash
+        cfg["ehd"] = self._encHeadData
         return encodeCfg(cfg)
     
     def encpub(self, method: str, public: bytes, private: Union[bytes, None] = None) -> bytes: # sign if private is not None
         # set basic parameters
         if method not in ["rsa1", "ecc1"]:
             raise ValueError(f"Unsupported method: {method}")
-        self.headAlgo = method
+        self._headAlgo = method
         if self.size >= 0:
             self.bodyKey = Bencrypt.random(44)
+        
+        # Init Master & Sign
+        am = Bencrypt.AsymMaster(method)
+        am.loadkey(public, private)
+        
         if private != None:
-            m = Bencrypt.RSA1() if method == "rsa1" else Bencrypt.ECC1()
-            m.loadkey(None, private)
             if self.bodyKey != b"":
-                self.sign = m.sign(self.bodyKey)
+                self._sign = am.sign(self.bodyKey)
             elif self.smsg != "":
-                self.sign = m.sign(self.smsg.encode('utf-8'))
+                self._sign = am.sign(self.smsg.encode('utf-8'))
         
         # encrypt header
         headData = self._wrapHead()
         if method == "rsa1":
-            m = Bencrypt.RSA1()
-            m.loadkey(public, None)
+            # RSA Hybrid: Encrypt Key with RSA, Data with AES
             hkey = Bencrypt.random(44)
-            self.encHeadKey = m.encrypt(hkey)
-            m = Bencrypt.AES1()
-            self.encHeadData = m.enAESGCM(hkey, headData)
+            self._encHeadKey = am.encrypt(hkey)
+            sm = Bencrypt.SymMaster("gcm1", hkey)
+            self._encHeadData = sm.enBin(headData)
         elif method == "ecc1":
-            m = Bencrypt.ECC1()
-            m.loadkey(public, None)
-            self.encHeadData = m.encrypt(headData)
+            # ECC Hybrid: Handled internally by ECC1 class
+            self._encHeadData = am.encrypt(headData)
 
         # warp message
         cfg: Dict[str, bytes] = {}
         if self.msg != "":
             cfg["msg"] = self.msg.encode('utf-8')
-        cfg["headal"] = self.headAlgo.encode('utf-8')
-        if self.encHeadKey != b"":
-            cfg["ehk"] = self.encHeadKey
-        cfg["ehd"] = self.encHeadData
+        cfg["headal"] = self._headAlgo.encode('utf-8')
+        if self._encHeadKey != b"":
+            cfg["ehk"] = self._encHeadKey
+        cfg["ehd"] = self._encHeadData
         return encodeCfg(cfg)
         
     def view(self, data: bytes):
@@ -235,63 +236,62 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
         if "msg" in cfg:
             self.msg = cfg["msg"].decode('utf-8')
         if "headal" in cfg:
-            self.headAlgo = cfg["headal"].decode('utf-8')
+            self._headAlgo = cfg["headal"].decode('utf-8')
         if "salt" in cfg:
-            self.salt = cfg["salt"]
+            self._salt = cfg["salt"]
         if "pwh" in cfg:
-            self.pwHash = cfg["pwh"]
+            self._pwHash = cfg["pwh"]
         if "ehk" in cfg:
-            self.encHeadKey = cfg["ehk"]
+            self._encHeadKey = cfg["ehk"]
         if "ehd" in cfg:
-            self.encHeadData = cfg["ehd"]
+            self._encHeadData = cfg["ehd"]
 
     def decpw(self, pw: bytes, kf: bytes = b""):
-        if self.headAlgo == "":
+        if self._headAlgo == "":
             raise ValueError("Call view() first")
-        if self.headAlgo not in ["arg1", "pbk1"]:
-            raise ValueError(f"Unsupported method: {self.headAlgo}")
+        if self._headAlgo not in ["arg1", "pbk1"]:
+            raise ValueError(f"Unsupported method: {self._headAlgo}")
         mkey = b""
         verify_lbl = ""
         keygen_lbl = ""
 
         # generate master key
-        if self.headAlgo == "arg1":
-            mkey = Bencrypt.argon2Hash(pw + kf, self.salt).encode('utf-8')
+        if self._headAlgo == "arg1":
+            mkey = Bencrypt.argon2Hash(pw + kf, self._salt).encode('utf-8')
             verify_lbl = "PWHASH_OPSEC_ARGON2"
             keygen_lbl = "KEYGEN_OPSEC_ARGON2"
-        elif self.headAlgo == "pbk1":
-            mkey = Bencrypt.pbkdf2(pw + kf, self.salt)
+        elif self._headAlgo == "pbk1":
+            mkey = Bencrypt.pbkdf2(pw + kf, self._salt)
             verify_lbl = "PWHASH_OPSEC_PBKDF2"
             keygen_lbl = "KEYGEN_OPSEC_PBKDF2"
 
         # check password, generate header key
         calc_hash = Bencrypt.genkey(mkey, verify_lbl, 32)
-        if calc_hash != self.pwHash:
+        if calc_hash != self._pwHash:
             raise ValueError("Incorrect password")
         hkey = Bencrypt.genkey(mkey, keygen_lbl, 44)
 
         # decrypt header
-        m = Bencrypt.AES1()
-        self._unwrapHead(m.deAESGCM(hkey, self.encHeadData))
+        sm = Bencrypt.SymMaster("gcm1", hkey)
+        self._unwrapHead(sm.deBin(self._encHeadData))
 
     def decpub(self, private: bytes, public: Union[bytes, None] = None): # verify sign if public is not None
-        if self.headAlgo == "":
+        if self._headAlgo == "":
             raise ValueError("Call view() first")
-        if self.headAlgo not in ["rsa1", "ecc1"]:
-            raise ValueError(f"Unsupported method: {self.headAlgo}")
+        if self._headAlgo not in ["rsa1", "ecc1"]:
+            raise ValueError(f"Unsupported method: {self._headAlgo}")
+        
+        am = Bencrypt.AsymMaster(self._headAlgo)
+        am.loadkey(public, private)
         decrypted_head = b""
 
         # decrypt header
-        if self.headAlgo == "rsa1":
-            rsa = Bencrypt.RSA1()
-            aes = Bencrypt.AES1()
-            rsa.loadkey(None, private)
-            hkey = rsa.decrypt(self.encHeadKey)
-            decrypted_head = aes.deAESGCM(hkey, self.encHeadData)
-        elif self.headAlgo == "ecc1":
-            ecc = Bencrypt.ECC1()
-            ecc.loadkey(None, private)
-            decrypted_head = ecc.decrypt(self.encHeadData)
+        if self._headAlgo == "rsa1":
+            hkey = am.decrypt(self._encHeadKey)
+            sm = Bencrypt.SymMaster("gcm1", hkey)
+            decrypted_head = sm.deBin(self._encHeadData)
+        elif self._headAlgo == "ecc1":
+            decrypted_head = am.decrypt(self._encHeadData)
 
         # unwrap header, check sign
         self._unwrapHead(decrypted_head)
@@ -301,13 +301,6 @@ class Opsec: # !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
                 s = self.bodyKey
             elif self.smsg != "":
                 s = self.smsg.encode('utf-8')
-            if self.headAlgo == "rsa1":
-                m = Bencrypt.RSA1()
-                m.loadkey(public, None)
-                if not m.verify(s, self.sign):
-                    raise ValueError("RSA signature verification failed")
-            elif self.headAlgo == "ecc1":
-                ecc = Bencrypt.ECC1()
-                ecc.loadkey(public, None)
-                if not ecc.verify(s, self.sign):
-                    raise ValueError("ECC signature verification failed")
+            
+            if not am.verify(s, self._sign):
+                raise ValueError(f"{self._headAlgo.upper()} signature verification failed")

@@ -51,7 +51,7 @@
             try {
                 // CRC32 Test
                 const crc = crc32(strToU8("test"));
-                print(`CRC32(b"test"): ${crc.join(" ")}`, "success"); // Expected: 12 126 127 216
+                print(`CRC32(b"test"): ${crc}`, "success"); // Expected: 0c7e7fd8
                 print("");
 
                 // Key Generation
@@ -76,7 +76,7 @@
                 const encPbk = await m.encpw("pbk1", "password", "keyfile");
                 m.view(encPbk);
                 await m.decpw("password", "keyfile");
-                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
                 m.reset();
 
                 // Argon2 Test
@@ -85,7 +85,7 @@
                 const encArg = await m.encpw("arg1", "password");
                 m.view(encArg);
                 await m.decpw("password");
-                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
                 m.reset();
 
                 // RSA Test
@@ -94,7 +94,7 @@
                 const encRSA = await m.encpub("rsa1", pub0, pri0);
                 m.view(encRSA);
                 await m.decpub(pri0, pub0);
-                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
                 m.reset();
 
                 // ECC Test
@@ -103,7 +103,7 @@
                 const encECC = await m.encpub("ecc1", pub1, pri1);
                 m.view(encECC);
                 await m.decpub(pri1, pub1);
-                print(`Result: ${m.msg}, ${m.headAlgo}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
+                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
 
                 print("\n[Done] All tests finished successfully.", "success");
             } catch (e) {

@@ -3,6 +3,7 @@
 package Bencrypt
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
@@ -694,4 +695,205 @@ func (e *ECC1) Verify(data []byte, signature []byte) bool {
 		return false
 	}
 	return ed448.Verify(e.PubEd, data, signature, "")
+}
+
+// ========== Master Class ==========
+type SymMaster struct {
+	Algo string
+	Key  [44]byte
+	aes  *AES1
+}
+
+func (sm *SymMaster) Init(algo string, key []byte) error {
+	if algo != "gcm1" && algo != "gcmx1" {
+		return errors.New("unsupported algorithm: " + algo)
+	}
+	if len(key) != 44 {
+		return errors.New("key length must be 44 bytes")
+	}
+	sm.Algo = algo
+	copy(sm.Key[:], key)
+	sm.aes = new(AES1)
+	return nil
+}
+
+func (sm *SymMaster) AfterSize(size int64) int64 {
+	switch sm.Algo {
+	case "gcm1":
+		return size + 16
+	case "gcmx1":
+		chunkSize := int64(1048576)
+		c := size/chunkSize + 1
+		if size != 0 && size%chunkSize == 0 {
+			c -= 1
+		}
+		return size + (16 * c)
+	default:
+		return 0
+	}
+}
+
+func (sm *SymMaster) Processed() int64 {
+	return sm.aes.Processed()
+}
+
+func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
+	switch sm.Algo {
+	case "gcm1":
+		return sm.aes.EnAESGCM(sm.Key, data)
+	case "gcmx1":
+		in := bytes.NewReader(data)
+		out := new(bytes.Buffer)
+		err := sm.aes.EnAESGCMx(sm.Key, in, int64(len(data)), out, 1048576)
+		if err != nil {
+			return nil, err
+		}
+		return out.Bytes(), nil
+	default:
+		return nil, errors.New("algorithm not set")
+	}
+}
+
+func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
+	switch sm.Algo {
+	case "gcm1":
+		return sm.aes.DeAESGCM(sm.Key, data)
+	case "gcmx1":
+		in := bytes.NewReader(data)
+		out := new(bytes.Buffer)
+		err := sm.aes.DeAESGCMx(sm.Key, in, int64(len(data)), out, 1048576)
+		if err != nil {
+			return nil, err
+		}
+		return out.Bytes(), nil
+	default:
+		return nil, errors.New("algorithm not set")
+	}
+}
+
+func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
+	switch sm.Algo {
+	case "gcm1":
+		data, err := io.ReadAll(src)
+		if err != nil {
+			return err
+		}
+		enc, err := sm.aes.EnAESGCM(sm.Key, data)
+		if err != nil {
+			return err
+		}
+		_, err = dst.Write(enc)
+		return err
+	case "gcmx1":
+		return sm.aes.EnAESGCMx(sm.Key, src, size, dst, 1048576)
+	}
+	return errors.New("algorithm not set")
+}
+
+func (sm *SymMaster) DeFile(src io.Reader, size int64, dst io.Writer) error {
+	switch sm.Algo {
+	case "gcm1":
+		data, err := io.ReadAll(src)
+		if err != nil {
+			return err
+		}
+		dec, err := sm.aes.DeAESGCM(sm.Key, data)
+		if err != nil {
+			return err
+		}
+		_, err = dst.Write(dec)
+		return err
+	case "gcmx1":
+		return sm.aes.DeAESGCMx(sm.Key, src, size, dst, 1048576)
+	}
+	return errors.New("algorithm not set")
+}
+
+type AsymMaster struct {
+	Algo string // algo: "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"
+	rsa  *RSA1
+	ecc  *ECC1
+}
+
+func (am *AsymMaster) Init(algo string) error {
+	valid := false
+	switch algo {
+	case "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k":
+		am.rsa = new(RSA1)
+		valid = true
+	case "ecc1":
+		am.ecc = new(ECC1)
+		valid = true
+	}
+
+	if !valid {
+		return errors.New("unsupported algorithm: " + algo)
+	}
+	am.Algo = algo
+	return nil
+}
+
+// Generate key pair
+func (am *AsymMaster) Genkey() ([]byte, []byte, error) {
+	switch am.Algo {
+	case "rsa1", "rsa1-2k":
+		return am.rsa.Genkey(2048)
+	case "rsa1-3k":
+		return am.rsa.Genkey(3072)
+	case "rsa1-4k":
+		return am.rsa.Genkey(4096)
+	case "ecc1":
+		return am.ecc.Genkey()
+	}
+	return nil, nil, errors.New("algorithm not set")
+}
+
+func (am *AsymMaster) Loadkey(public []byte, private []byte) error {
+	switch {
+	case strings.HasPrefix(am.Algo, "rsa1"):
+		return am.rsa.Loadkey(public, private)
+	case am.Algo == "ecc1":
+		return am.ecc.Loadkey(public, private)
+	}
+	return errors.New("algorithm not set")
+}
+
+func (am *AsymMaster) Encrypt(data []byte) ([]byte, error) {
+	switch {
+	case strings.HasPrefix(am.Algo, "rsa1"):
+		return am.rsa.Encrypt(data)
+	case am.Algo == "ecc1":
+		return am.ecc.Encrypt(data)
+	}
+	return nil, errors.New("algorithm not set")
+}
+
+func (am *AsymMaster) Decrypt(data []byte) ([]byte, error) {
+	switch {
+	case strings.HasPrefix(am.Algo, "rsa1"):
+		return am.rsa.Decrypt(data)
+	case am.Algo == "ecc1":
+		return am.ecc.Decrypt(data)
+	}
+	return nil, errors.New("algorithm not set")
+}
+
+func (am *AsymMaster) Sign(data []byte) ([]byte, error) {
+	switch {
+	case strings.HasPrefix(am.Algo, "rsa1"):
+		return am.rsa.Sign(data)
+	case am.Algo == "ecc1":
+		return am.ecc.Sign(data)
+	}
+	return nil, errors.New("algorithm not set")
+}
+
+func (am *AsymMaster) Verify(data []byte, signature []byte) bool {
+	switch {
+	case strings.HasPrefix(am.Algo, "rsa1"):
+		return am.rsa.Verify(data, signature)
+	case am.Algo == "ecc1":
+		return am.ecc.Verify(data, signature)
+	}
+	return false
 }
