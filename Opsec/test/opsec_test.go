@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"testing"
 
 	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
 )
 
-func main() {
+func TestMain(t *testing.T) {
 	// 1. CRC32 Test
 	fmt.Println(Crc32([]byte("test"))) // Expected: 0c7e7fd8
 
@@ -24,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	m := new(Opsec.Opsec)
+	m := new(Opsec)
 
 	// 3. Read/Write Test
 	var w bytes.Buffer
@@ -115,7 +116,7 @@ func main() {
 }
 
 // Helper to print object status
-func printStatus(m *Opsec.Opsec) {
+func printStatus(m *Opsec) {
 	fmt.Printf("%s %s %d %s %s %s %d\n",
 		m.Msg,
 		m.Smsg,
