@@ -54,7 +54,7 @@ class Opsec {
     name: String
     bodyKey: Uint8Array
     bodyAlgo: String
-    contAlgo; : String
+    contAlgo: String
     
     reset()
     async function read(ins, cut): Promise<Uint8Array>

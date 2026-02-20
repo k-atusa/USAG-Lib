@@ -120,9 +120,13 @@ func (tw *TarWriter) WriteFile(name string, path string, mode int) error {
 
 	// PAX check, Write Header
 	if len(name) > 99 || size > 077777777777 {
-		tw.out.Write(tw.paxHeader(name, size))
+		if _, err := tw.out.Write(tw.paxHeader(name, size)); err != nil {
+			return err
+		}
 	}
-	tw.out.Write(tw.tarHeader(name, size, mode, info.ModTime().Unix(), '0'))
+	if _, err := tw.out.Write(tw.tarHeader(name, size, mode, info.ModTime().Unix(), '0')); err != nil {
+		return err
+	}
 
 	// Write Content
 	f, err := os.Open(path)
@@ -133,7 +137,9 @@ func (tw *TarWriter) WriteFile(name string, path string, mode int) error {
 	if _, err := io.Copy(tw.out, f); err != nil {
 		return err
 	}
-	tw.out.Write(tw.pad(size)) // Pad
+	if _, err := tw.out.Write(tw.pad(size)); err != nil { // Pad
+		return err
+	}
 	return nil
 }
 
@@ -143,36 +149,53 @@ func (tw *TarWriter) WriteDir(name string, mode int) error {
 		name += "/"
 	}
 	if len(name) > 99 { // PAX needed
-		tw.out.Write(tw.paxHeader(name, 0))
+		if _, err := tw.out.Write(tw.paxHeader(name, 0)); err != nil {
+			return err
+		}
 	}
-	tw.out.Write(tw.tarHeader(name, 0, mode, time.Now().Unix(), '5')) // ustar header
+	if _, err := tw.out.Write(tw.tarHeader(name, 0, mode, time.Now().Unix(), '5')); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (tw *TarWriter) WriteBin(name string, data []byte, mode int) error {
 	size := int64(len(data))
 	if len(name) > 99 || size > 077777777777 {
-		tw.out.Write(tw.paxHeader(name, size))
+		if _, err := tw.out.Write(tw.paxHeader(name, size)); err != nil {
+			return err
+		}
 	}
-	tw.out.Write(tw.tarHeader(name, size, mode, time.Now().Unix(), '0'))
-	tw.out.Write(data)
-	tw.out.Write(tw.pad(size))
+	if _, err := tw.out.Write(tw.tarHeader(name, size, mode, time.Now().Unix(), '0')); err != nil {
+		return err
+	}
+	if _, err := tw.out.Write(data); err != nil {
+		return err
+	}
+	if _, err := tw.out.Write(tw.pad(size)); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (tw *TarWriter) Close() []byte {
+func (tw *TarWriter) Close() ([]byte, error) {
 	zeroes := make([]byte, 1024)
-	tw.out.Write(zeroes) // write two empty blocks
+	if _, err := tw.out.Write(zeroes); err != nil { // write two empty blocks
+		return nil, err
+	}
 	var res []byte = nil
 	if tw.memBuf != nil {
 		res = tw.memBuf.Bytes()
 		tw.memBuf = nil
 	}
 	if tw.file != nil {
-		tw.file.Close()
+		err := tw.file.Close()
 		tw.file = nil
+		if err != nil {
+			return nil, err
+		}
 	}
-	return res
+	return res, nil
 }
 
 type TarReader struct {
@@ -320,7 +343,9 @@ func (tr *TarReader) Mkfile(path string) error {
 		}
 		n, err := tr.in.Read(buf[:toRead])
 		if n > 0 {
-			f.Write(buf[:n])
+			if _, err := f.Write(buf[:n]); err != nil {
+				return err
+			}
 			remaining -= int64(n)
 		}
 		if err != nil {

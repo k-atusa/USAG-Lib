@@ -80,28 +80,29 @@ func Unpack(src string, dst string) error
 
 #### java
 ```java
-class Star implements Closeable {
-    // Writer
-    void openWriter(OutputStream out)
-    void write(String name, byte[] data, int mode)
-    void write(String name, File file, int mode)
-    void write(String name, InputStream data, long size, int mode, boolean isDir)
-    byte[] closeTar()
+class Star {
+    static class TarWriter implements Closeable {
+        void open(OutputStream out)
+        void write(String name, byte[] data, int mode)
+        void write(String name, File file, int mode)
+        void write(String name, InputStream data, long size, int mode, boolean isDir)
+        byte[] closeTar()
+        void close()
+    }
 
-    // Reader
-    String name;
-    long size;
-    int mode;
-    boolean isDir;
-    
-    void openReader(InputStream in)
-    boolean next()
-    byte[] read()
-    void mkfile(OutputStream dst)
-    void skip()
-
-    // Common
-    byte[] closeTar()
-    void close()
+    static class TarReader implements Closeable {
+        String name;
+        long size;
+        int mode;
+        boolean isDir;
+        
+        void open(InputStream in)
+        boolean next()
+        byte[] read()
+        void mkfile(OutputStream dst)
+        void skip()
+        byte[] closeTar()
+        void close()
+    }
 }
 ```

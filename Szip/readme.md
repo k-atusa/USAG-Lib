@@ -70,23 +70,25 @@ func Unpack(src string, dst string) error
 #### java
 ```java
 class Szip {
-    // Writer
-    void openWriter(File file, boolean compress)
-    void write(String name, byte[] data)
-    void write(String name, File file)
-    void write(String name, InputStream inputStream)
-    byte[] closeZip()
+    static class ZipWriter implements Closeable {
+        void openWriter(File file, boolean compress)
+        void write(String name, byte[] data)
+        void write(String name, File file)
+        void write(String name, InputStream inputStream)
+        byte[] closeZip()
+        void close()
+    }
 
-    // Reader
-    List<String> names
-    List<Long> sizes
-    void openReader(File file)
-    void openReader(byte[] data)
-    byte[] read(int idx)
-    InputStream open(int idx)
-
-    // Common
-    byte[] closeZip()
-    void close()
+    static class ZipReader implements Closeable {
+        List<String> names
+        List<Long> sizes
+        
+        void open(File file)
+        void open(byte[] data)
+        byte[] read(int idx)
+        InputStream open(int idx)
+        byte[] closeZip()
+        void close()
+    }
 }
 ```

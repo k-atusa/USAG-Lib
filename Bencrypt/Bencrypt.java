@@ -24,7 +24,6 @@ import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.agreement.X448Agreement;
 import org.bouncycastle.crypto.signers.Ed448Signer;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -57,21 +56,10 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
 public class Bencrypt {
-    public Bencrypt() {
-        this.randSrc = new SecureRandom();
-        this.processed = new AtomicLong(0);
-        this.RSApub = null;
-        this.RSApri = null;
-        this.pubX = null;
-        this.priX = null;
-        this.pubEd = null;
-        this.priEd = null;
-    }
-
     // ========== Basic Functions ==========
-    private final SecureRandom randSrc;
+    private final SecureRandom randSrc = new SecureRandom();
 
-    private byte[] mkiv(byte[] g, long c) {
+    private static byte[] mkiv(byte[] g, long c) {
         byte[] iv = Arrays.copyOf(g, 12); // base IV 12B
         byte[] counterBytes = ByteBuffer.allocate(8) // counter 8B little endian
                 .order(ByteOrder.LITTLE_ENDIAN)
@@ -83,11 +71,12 @@ public class Bencrypt {
         return iv;
     }
 
-    private byte[] decodeB64(String src) {
+    private static byte[] decodeB64(String src) {
         String padded = src;
         int pad = src.length() % 4;
         if (pad > 0) {
-            for (int i = 0; i < 4 - pad; i++) padded += "=";
+            for (int i = 0; i < 4 - pad; i++)
+                padded += "=";
         }
         return Base64.getDecoder().decode(padded);
     }
@@ -98,7 +87,7 @@ public class Bencrypt {
         return bytes;
     }
 
-    public byte[] sha3256(byte[] data) {
+    public static byte[] sha3256(byte[] data) {
         SHA3Digest digest = new SHA3Digest(256);
         byte[] result = new byte[digest.getDigestSize()];
         digest.update(data, 0, data.length);
@@ -106,7 +95,7 @@ public class Bencrypt {
         return result;
     }
 
-    public byte[] sha3512(byte[] data) {
+    public static byte[] sha3512(byte[] data) {
         SHA3Digest digest = new SHA3Digest(512);
         byte[] result = new byte[digest.getDigestSize()];
         digest.update(data, 0, data.length);
@@ -115,16 +104,19 @@ public class Bencrypt {
     }
 
     // set iter, outsize to 0 for default (1000000, 64)
-    public byte[] pbkdf2(byte[] pw, byte[] salt, int iter, int outsize) {
-        if (iter <= 0) iter = 1000000;
-        if (outsize <= 0) outsize = 64;
+    public static byte[] pbkdf2(byte[] pw, byte[] salt, int iter, int outsize) {
+        if (iter <= 0)
+            iter = 1000000;
+        if (outsize <= 0)
+            outsize = 64;
         PKCS5S2ParametersGenerator gen = new PKCS5S2ParametersGenerator(new SHA512Digest());
         gen.init(pw, salt, iter);
         KeyParameter params = (KeyParameter) gen.generateDerivedParameters(outsize * 8); // byte -> bit
         return params.getKey();
     }
 
-    // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4, Len=32, Salt=16
+    // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4,
+    // Len=32, Salt=16
     public String argon2Hash(byte[] pw, byte[] salt) {
         if (salt == null) {
             salt = this.random(16);
@@ -150,8 +142,10 @@ public class Bencrypt {
         try {
             // make simple parser
             String[] parts = hashed.split("\\$");
-            if (parts.length != 6) return false;
-            if (!parts[1].equals("argon2id")) return false;
+            if (parts.length != 6)
+                return false;
+            if (!parts[1].equals("argon2id"))
+                return false;
 
             // get parameters
             String[] params = parts[3].split(",");
@@ -159,9 +153,12 @@ public class Bencrypt {
             for (String p : params) {
                 String[] kv = p.split("=");
                 int val = Integer.parseInt(kv[1]);
-                if (kv[0].equals("m")) memory = val;
-                else if (kv[0].equals("t")) iterations = val;
-                else if (kv[0].equals("p")) parallelism = val;
+                if (kv[0].equals("m"))
+                    memory = val;
+                else if (kv[0].equals("t"))
+                    iterations = val;
+                else if (kv[0].equals("p"))
+                    parallelism = val;
             }
             byte[] salt = decodeB64(parts[4]);
             byte[] originalHash = decodeB64(parts[5]);
@@ -186,11 +183,11 @@ public class Bencrypt {
     }
 
     // HMAC-SHA3-512
-    public byte[] genkey(byte[] data, String lbl, int size) {
+    public static byte[] genkey(byte[] data, String lbl, int size) {
         HMac hmac = new HMac(new SHA3Digest(512));
         byte[] key = lbl.getBytes(StandardCharsets.UTF_8);
         hmac.init(new KeyParameter(data)); // Key is data
-        hmac.update(key, 0, key.length);   // Message is label
+        hmac.update(key, 0, key.length); // Message is label
         byte[] result = new byte[hmac.getMacSize()];
         hmac.doFinal(result, 0);
         if (size > result.length) {
@@ -200,361 +197,368 @@ public class Bencrypt {
     }
 
     // ========== AES1 Functions ==========
-    private final AtomicLong processed;
+    public static class AES1 {
+        private final AtomicLong processed = new AtomicLong(0);
 
-    private byte[] inlineEnc(byte[] key, byte[] iv, byte[] data) throws Exception {
-        SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
-        GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, keySpec, gcmSpec);
-        return cipher.doFinal(data);
-    }
-
-    private byte[] inlineDec(byte[] key, byte[] iv, byte[] data) throws Exception {
-        SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
-        GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec);
-        return cipher.doFinal(data);
-    }
-
-    private byte[] readBytes(InputStream in, int len) throws IOException {
-        byte[] b = new byte[len];
-        int total = 0;
-        while (total < len) {
-            int result = in.read(b, total, len - total);
-            if (result == -1) break;
-            total += result;
+        private byte[] inlineEnc(byte[] key, byte[] iv, byte[] data) throws Exception {
+            SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, keySpec, gcmSpec);
+            return cipher.doFinal(data);
         }
-        return b;
-    }
 
-    // get processed bytes
-    public long Processed() {
-        return this.processed.get();
-    }
+        private byte[] inlineDec(byte[] key, byte[] iv, byte[] data) throws Exception {
+            SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
+            GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec);
+            return cipher.doFinal(data);
+        }
 
-    // encrypt single block with 44B key, output: [Ciphertext][Tag 16B]
-    public byte[] enAESGCM(byte[] key, byte[] data) throws Exception {
-        this.processed.set(0);
-        if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
-        byte[] iv = Arrays.copyOfRange(key, 0, 12);
-        byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
-        byte[] result = inlineEnc(keyBytes, iv, data);
-        this.processed.set(data.length);
-        return result;
-    }
+        // get processed bytes
+        public long Processed() {
+            return this.processed.get();
+        }
 
-    // decrypt single block with 44B key
-    public byte[] deAESGCM(byte[] key, byte[] data) throws Exception {
-        this.processed.set(0);
-        if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
-        if (data.length < 16) throw new IllegalArgumentException("data size must be at least 16 bytes");
-        byte[] iv = Arrays.copyOfRange(key, 0, 12);
-        byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
-        byte[] result = inlineDec(keyBytes, iv, data);
-        this.processed.set(data.length);
-        return result;
-    }
+        // encrypt single block with 44B key, output: [Ciphertext][Tag 16B]
+        public byte[] enAESGCM(byte[] key, byte[] data) throws Exception {
+            this.processed.set(0);
+            if (key.length != 44)
+                throw new IllegalArgumentException("key size must be 44 bytes");
+            byte[] iv = Arrays.copyOfRange(key, 0, 12);
+            byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
+            byte[] result = inlineEnc(keyBytes, iv, data);
+            this.processed.set(data.length);
+            return result;
+        }
 
-    // encrypt stream with 44B key, default chunkSize=1048576
-    public void enAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize) throws Exception {
-        this.processed.set(0);
-        if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
-        if (chunkSize <= 0) chunkSize = 1048576;
-        byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
-        byte[] globalKey = Arrays.copyOfRange(key, 12, 44);
+        // decrypt single block with 44B key
+        public byte[] deAESGCM(byte[] key, byte[] data) throws Exception {
+            this.processed.set(0);
+            if (key.length != 44)
+                throw new IllegalArgumentException("key size must be 44 bytes");
+            if (data.length < 16)
+                throw new IllegalArgumentException("data size must be at least 16 bytes");
+            byte[] iv = Arrays.copyOfRange(key, 0, 12);
+            byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
+            byte[] result = inlineDec(keyBytes, iv, data);
+            this.processed.set(data.length);
+            return result;
+        }
 
-        // 1. Generate Thread x8 Pool
-        ExecutorService executor = Executors.newFixedThreadPool(8);
-        LinkedList<Future<byte[]>> futures = new LinkedList<>();
-        long counter = 0;
-        long remaining = size;
+        // encrypt stream with 44B key, default chunkSize=1048576
+        public void enAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize)
+                throws Exception {
+            this.processed.set(0);
+            if (key.length != 44)
+                throw new IllegalArgumentException("key size must be 44 bytes");
+            if (chunkSize <= 0)
+                chunkSize = 1048576;
+            byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
+            byte[] globalKey = Arrays.copyOfRange(key, 12, 44);
 
-        try {
-            while (true) {
-                // 2. Read Chunk
-                long toRead = Math.min(chunkSize, remaining);
-                byte[] buffer = readBytes(src, (int) toRead);
-                remaining -= toRead;
+            // 1. Generate Thread x8 Pool
+            ExecutorService executor = Executors.newFixedThreadPool(8);
+            LinkedList<Future<byte[]>> futures = new LinkedList<>();
+            long counter = 0;
+            long remaining = size;
 
-                // 3. Submit Task
-                final long ctr = counter++;
-                Callable<byte[]> task = () -> {
-                    byte[] iv = mkiv(globalIV, ctr); // make iv, add counter
-                    return inlineEnc(globalKey, iv, buffer);
-                };
-                futures.add(executor.submit(task));
+            try {
+                while (true) {
+                    // 2. Read Chunk
+                    long toRead = Math.min(chunkSize, remaining);
+                    byte[] buffer = src.readNBytes((int) toRead);
+                    remaining -= toRead;
 
-                // 4. Writeback if task is more than 8
-                while (futures.size() > 8) {
+                    // 3. Submit Task
+                    final long ctr = counter++;
+                    Callable<byte[]> task = () -> {
+                        byte[] iv = mkiv(globalIV, ctr); // make iv, add counter
+                        return inlineEnc(globalKey, iv, buffer);
+                    };
+                    futures.add(executor.submit(task));
+
+                    // 4. Writeback if task is more than 8
+                    while (futures.size() > 8) {
+                        byte[] result = futures.poll().get();
+                        dst.write(result);
+                        this.processed.addAndGet(result.length - 16);
+                    }
+                    if (remaining <= 0)
+                        break;
+                }
+
+                // 5. Writeback remaining tasks
+                while (futures.size() > 0) {
                     byte[] result = futures.poll().get();
                     dst.write(result);
                     this.processed.addAndGet(result.length - 16);
                 }
-                if (remaining <= 0) break;
-            }
 
-            // 5. Writeback remaining tasks
-            while (futures.size() > 0) {
-                byte[] result = futures.poll().get();
-                dst.write(result);
-                this.processed.addAndGet(result.length - 16);
+            } finally { // 6. Close Thread x8 Pool
+                executor.shutdown();
             }
-
-        } finally { // 6. Close Thread x8 Pool
-            executor.shutdown();
         }
-    }
 
-    // decrypt stream with 44B key, default chunkSize=1048576
-    public void deAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize) throws Exception {
-        this.processed.set(0);
-        if (key.length != 44) throw new IllegalArgumentException("key size must be 44 bytes");
-        if (chunkSize <= 0) chunkSize = 1048576;
-        byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
-        byte[] globalKey = Arrays.copyOfRange(key, 12, 44);
+        // decrypt stream with 44B key, default chunkSize=1048576
+        public void deAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize)
+                throws Exception {
+            this.processed.set(0);
+            if (key.length != 44)
+                throw new IllegalArgumentException("key size must be 44 bytes");
+            if (chunkSize <= 0)
+                chunkSize = 1048576;
+            byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
+            byte[] globalKey = Arrays.copyOfRange(key, 12, 44);
 
-        // 1. Generate Thread x8 Pool
-        ExecutorService executor = Executors.newFixedThreadPool(8);
-        LinkedList<Future<byte[]>> futures = new LinkedList<>();
-        long counter = 0;
-        long remaining = size;
+            // 1. Generate Thread x8 Pool
+            ExecutorService executor = Executors.newFixedThreadPool(8);
+            LinkedList<Future<byte[]>> futures = new LinkedList<>();
+            long counter = 0;
+            long remaining = size;
 
-        try {
-            while (remaining >= 16) {
-                // 2. Read Chunk
-                long toRead = Math.min(chunkSize + 16, remaining);
-                byte[] buffer = readBytes(src, (int) toRead);
-                remaining -= toRead;
+            try {
+                while (remaining >= 16) {
+                    // 2. Read Chunk
+                    long toRead = Math.min(chunkSize + 16, remaining);
+                    byte[] buffer = src.readNBytes((int) toRead);
+                    remaining -= toRead;
 
-                // 3. Submit Task
-                final long ctr = counter++;
-                Callable<byte[]> task = () -> {
-                    byte[] iv = mkiv(globalIV, ctr); // make iv, add counter
-                    return inlineDec(globalKey, iv, buffer);
-                };
-                futures.add(executor.submit(task));
+                    // 3. Submit Task
+                    final long ctr = counter++;
+                    Callable<byte[]> task = () -> {
+                        byte[] iv = mkiv(globalIV, ctr); // make iv, add counter
+                        return inlineDec(globalKey, iv, buffer);
+                    };
+                    futures.add(executor.submit(task));
 
-                // 4. Writeback if task is more than 8
-                while (futures.size() > 8) {
+                    // 4. Writeback if task is more than 8
+                    while (futures.size() > 8) {
+                        byte[] result = futures.poll().get();
+                        dst.write(result);
+                        this.processed.addAndGet(result.length + 16);
+                    }
+                }
+
+                // 5. Writeback remaining tasks
+                while (futures.size() > 0) {
                     byte[] result = futures.poll().get();
                     dst.write(result);
                     this.processed.addAndGet(result.length + 16);
                 }
-            }
 
-            // 5. Writeback remaining tasks
-            while (futures.size() > 0) {
-                byte[] result = futures.poll().get();
-                dst.write(result);
-                this.processed.addAndGet(result.length + 16);
+            } finally { // 6. Close Thread x8 Pool
+                executor.shutdown();
             }
-
-        } finally { // 6. Close Thread x8 Pool
-            executor.shutdown();
         }
     }
 
     // ========== RSA1 Functions ==========
-    public PublicKey RSApub;
-    public PrivateKey RSApri;
+    public static class RSA1 {
+        public PublicKey RSApub = null;
+        public PrivateKey RSApri = null;
 
-    // Generate RSA key (public, private), DER(PKIX, PKCS8) format
-    public byte[][] RSAgenkey(int bits) throws Exception {
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-        kpg.initialize(bits); // 2048, 3072, 4096
-        KeyPair kp = kpg.generateKeyPair();
-        this.RSApub = kp.getPublic();
-        this.RSApri = kp.getPrivate();
-        return new byte[][] {
-            this.RSApub.getEncoded(),
-            this.RSApri.getEncoded()
-        };
-    }
-
-    // Load RSA key if not null (public, private), DER(PKIX, PKCS8) format
-    public void RSAloadkey(byte[] pubBytes, byte[] priBytes) throws Exception {
-        KeyFactory kf = KeyFactory.getInstance("RSA");
-        if (pubBytes != null) {
-            this.RSApub = kf.generatePublic(new X509EncodedKeySpec(pubBytes));
+        // Generate RSA key (public, private), DER(PKIX, PKCS8) format
+        public byte[][] genkey(int bits) throws Exception {
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+            kpg.initialize(bits); // 2048, 3072, 4096
+            KeyPair kp = kpg.generateKeyPair();
+            this.RSApub = kp.getPublic();
+            this.RSApri = kp.getPrivate();
+            return new byte[][] {
+                    this.RSApub.getEncoded(),
+                    this.RSApri.getEncoded()
+            };
         }
-        if (priBytes != null) {
-            this.RSApri = kf.generatePrivate(new PKCS8EncodedKeySpec(priBytes));
+
+        // Load RSA key if not null (public, private), DER(PKIX, PKCS8) format
+        public void loadkey(byte[] pubBytes, byte[] priBytes) throws Exception {
+            KeyFactory kf = KeyFactory.getInstance("RSA");
+            if (pubBytes != null) {
+                this.RSApub = kf.generatePublic(new X509EncodedKeySpec(pubBytes));
+            }
+            if (priBytes != null) {
+                this.RSApri = kf.generatePrivate(new PKCS8EncodedKeySpec(priBytes));
+            }
         }
-    }
 
-    // RSA encrypt: OAEP-SHA-512
-    public byte[] RSAencrypt(byte[] data) throws Exception {
-        Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding");
-        OAEPParameterSpec oaepSpec = new OAEPParameterSpec(
-            "SHA-512", 
-            "MGF1", 
-            MGF1ParameterSpec.SHA512, 
-            PSource.PSpecified.DEFAULT
-        );
-        cipher.init(Cipher.ENCRYPT_MODE, this.RSApub, oaepSpec);
-        return cipher.doFinal(data);
-    }
+        // RSA encrypt: OAEP-SHA-512
+        public byte[] encrypt(byte[] data) throws Exception {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding");
+            OAEPParameterSpec oaepSpec = new OAEPParameterSpec(
+                    "SHA-512",
+                    "MGF1",
+                    MGF1ParameterSpec.SHA512,
+                    PSource.PSpecified.DEFAULT);
+            cipher.init(Cipher.ENCRYPT_MODE, this.RSApub, oaepSpec);
+            return cipher.doFinal(data);
+        }
 
-    // RSA decrypt: OAEP-SHA-512
-    public byte[] RSAdecrypt(byte[] data) throws Exception {
-        Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding");
-        OAEPParameterSpec oaepSpec = new OAEPParameterSpec(
-            "SHA-512",
-            "MGF1",
-            MGF1ParameterSpec.SHA512, 
-            PSource.PSpecified.DEFAULT
-        ); // set OAEP, MGF1 to SHA-512
-        cipher.init(Cipher.DECRYPT_MODE, this.RSApri, oaepSpec);
-        return cipher.doFinal(data);
-    }
+        // RSA decrypt: OAEP-SHA-512
+        public byte[] decrypt(byte[] data) throws Exception {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding");
+            OAEPParameterSpec oaepSpec = new OAEPParameterSpec(
+                    "SHA-512",
+                    "MGF1",
+                    MGF1ParameterSpec.SHA512,
+                    PSource.PSpecified.DEFAULT); // set OAEP, MGF1 to SHA-512
+            cipher.init(Cipher.DECRYPT_MODE, this.RSApri, oaepSpec);
+            return cipher.doFinal(data);
+        }
 
-    // RSA sign: PKCS#1 v1.5 SHA-256
-    public byte[] RSAsign(byte[] data) throws Exception {
-        Signature sig = Signature.getInstance("SHA256withRSA");
-        sig.initSign(this.RSApri);
-        sig.update(data);
-        return sig.sign();
-    }
-
-    // RSA verify: PKCS#1 v1.5 SHA-256
-    public boolean RSAverify(byte[] data, byte[] signature) {
-        try {
+        // RSA sign: PKCS#1 v1.5 SHA-256
+        public byte[] sign(byte[] data) throws Exception {
             Signature sig = Signature.getInstance("SHA256withRSA");
-            sig.initVerify(this.RSApub);
+            sig.initSign(this.RSApri);
             sig.update(data);
-            return sig.verify(signature);
-        } catch (Exception e) {
-            return false;
+            return sig.sign();
+        }
+
+        // RSA verify: PKCS#1 v1.5 SHA-256
+        public boolean verify(byte[] data, byte[] signature) {
+            try {
+                Signature sig = Signature.getInstance("SHA256withRSA");
+                sig.initVerify(this.RSApub);
+                sig.update(data);
+                return sig.verify(signature);
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 
     // ========== ECC1 Functions ==========
-    public X448PublicKeyParameters pubX;
-    public X448PrivateKeyParameters priX;
-    public Ed448PublicKeyParameters pubEd;
-    public Ed448PrivateKeyParameters priEd;
+    public static class ECC1 {
+        public X448PublicKeyParameters pubX = null;
+        public X448PrivateKeyParameters priX = null;
+        public Ed448PublicKeyParameters pubEd = null;
+        public Ed448PrivateKeyParameters priEd = null;
 
-    // Generate ECC key (public, private), [X448 56B][Ed448 57B] format
-    public byte[][] ECCgenkey() throws Exception {
-        SecureRandom rnd = new SecureRandom();
+        // Generate ECC key (public, private), [X448 56B][Ed448 57B] format
+        public byte[][] genkey() throws Exception {
+            SecureRandom rnd = new SecureRandom();
 
-        // 1. Generate X448
-        X448KeyPairGenerator xGen = new X448KeyPairGenerator();
-        xGen.init(new X448KeyGenerationParameters(rnd));
-        AsymmetricCipherKeyPair xKp = xGen.generateKeyPair();
-        this.pubX = (X448PublicKeyParameters) xKp.getPublic();
-        this.priX = (X448PrivateKeyParameters) xKp.getPrivate();
+            // 1. Generate X448
+            X448KeyPairGenerator xGen = new X448KeyPairGenerator();
+            xGen.init(new X448KeyGenerationParameters(rnd));
+            AsymmetricCipherKeyPair xKp = xGen.generateKeyPair();
+            this.pubX = (X448PublicKeyParameters) xKp.getPublic();
+            this.priX = (X448PrivateKeyParameters) xKp.getPrivate();
 
-        // 2. Generate Ed448
-        Ed448KeyPairGenerator edGen = new Ed448KeyPairGenerator();
-        edGen.init(new Ed448KeyGenerationParameters(rnd));
-        AsymmetricCipherKeyPair edKp = edGen.generateKeyPair();
-        this.pubEd = (Ed448PublicKeyParameters) edKp.getPublic();
-        this.priEd = (Ed448PrivateKeyParameters) edKp.getPrivate();
+            // 2. Generate Ed448
+            Ed448KeyPairGenerator edGen = new Ed448KeyPairGenerator();
+            edGen.init(new Ed448KeyGenerationParameters(rnd));
+            AsymmetricCipherKeyPair edKp = edGen.generateKeyPair();
+            this.pubEd = (Ed448PublicKeyParameters) edKp.getPublic();
+            this.priEd = (Ed448PrivateKeyParameters) edKp.getPrivate();
 
-        // 3. Get Raw Bytes & Concatenate
-        byte[] xPubB = this.pubX.getEncoded(); // 56 bytes
-        byte[] xPriB = this.priX.getEncoded(); // 56 bytes
-        byte[] edPubB = this.pubEd.getEncoded(); // 57 bytes
-        byte[] edPriB = this.priEd.getEncoded(); // 57 bytes
+            // 3. Get Raw Bytes & Concatenate
+            byte[] xPubB = this.pubX.getEncoded(); // 56 bytes
+            byte[] xPriB = this.priX.getEncoded(); // 56 bytes
+            byte[] edPubB = this.pubEd.getEncoded(); // 57 bytes
+            byte[] edPriB = this.priEd.getEncoded(); // 57 bytes
 
-        byte[] pubFull = new byte[113];
-        System.arraycopy(xPubB, 0, pubFull, 0, 56);
-        System.arraycopy(edPubB, 0, pubFull, 56, 57);
+            byte[] pubFull = new byte[113];
+            System.arraycopy(xPubB, 0, pubFull, 0, 56);
+            System.arraycopy(edPubB, 0, pubFull, 56, 57);
 
-        byte[] priFull = new byte[113];
-        System.arraycopy(xPriB, 0, priFull, 0, 56);
-        System.arraycopy(edPriB, 0, priFull, 56, 57);
+            byte[] priFull = new byte[113];
+            System.arraycopy(xPriB, 0, priFull, 0, 56);
+            System.arraycopy(edPriB, 0, priFull, 56, 57);
 
-        return new byte[][] { pubFull, priFull };
-    }
-
-    // Load ECC key if not null (public, private), [X448 56B][Ed448 57B] format
-    public void ECCloadkey(byte[] pubBytes, byte[] priBytes) throws Exception {
-        if (pubBytes != null) {
-            if (pubBytes.length != 113) throw new IllegalArgumentException("Invalid Curve448 public key length");
-            byte[] xPubB = Arrays.copyOfRange(pubBytes, 0, 56);
-            byte[] edPubB = Arrays.copyOfRange(pubBytes, 56, 113);
-            this.pubX = new X448PublicKeyParameters(xPubB, 0);
-            this.pubEd = new Ed448PublicKeyParameters(edPubB, 0);
+            return new byte[][] { pubFull, priFull };
         }
-        if (priBytes != null) {
-            if (priBytes.length != 113) throw new IllegalArgumentException("Invalid Curve448 private key length");
-            byte[] xPriB = Arrays.copyOfRange(priBytes, 0, 56);
-            byte[] edPriB = Arrays.copyOfRange(priBytes, 56, 113);
-            this.priX = new X448PrivateKeyParameters(xPriB, 0);
-            this.priEd = new Ed448PrivateKeyParameters(edPriB, 0);
+
+        // Load ECC key if not null (public, private), [X448 56B][Ed448 57B] format
+        public void loadkey(byte[] pubBytes, byte[] priBytes) throws Exception {
+            if (pubBytes != null) {
+                if (pubBytes.length != 113)
+                    throw new IllegalArgumentException("Invalid Curve448 public key length");
+                byte[] xPubB = Arrays.copyOfRange(pubBytes, 0, 56);
+                byte[] edPubB = Arrays.copyOfRange(pubBytes, 56, 113);
+                this.pubX = new X448PublicKeyParameters(xPubB, 0);
+                this.pubEd = new Ed448PublicKeyParameters(edPubB, 0);
+            }
+            if (priBytes != null) {
+                if (priBytes.length != 113)
+                    throw new IllegalArgumentException("Invalid Curve448 private key length");
+                byte[] xPriB = Arrays.copyOfRange(priBytes, 0, 56);
+                byte[] edPriB = Arrays.copyOfRange(priBytes, 56, 113);
+                this.priX = new X448PrivateKeyParameters(xPriB, 0);
+                this.priEd = new Ed448PrivateKeyParameters(edPriB, 0);
+            }
         }
-    }
 
-    // ECC encrypt with public key, output: [1B KeyLen][PubKey][Ciphertext]
-    public byte[] ECCencrypt(byte[] data) throws Exception {
-        // 1. Generate Temp Ephemeral Key
-        X448KeyPairGenerator xGen = new X448KeyPairGenerator();
-        xGen.init(new X448KeyGenerationParameters(new SecureRandom()));
-        AsymmetricCipherKeyPair ephKp = xGen.generateKeyPair();
-        X448PublicKeyParameters ephPub = (X448PublicKeyParameters) ephKp.getPublic();
-        X448PrivateKeyParameters ephPri = (X448PrivateKeyParameters) ephKp.getPrivate();
+        // ECC encrypt with public key, output: [1B KeyLen][PubKey][Ciphertext]
+        public byte[] encrypt(byte[] data) throws Exception {
+            // 1. Generate Temp Ephemeral Key
+            X448KeyPairGenerator xGen = new X448KeyPairGenerator();
+            xGen.init(new X448KeyGenerationParameters(new SecureRandom()));
+            AsymmetricCipherKeyPair ephKp = xGen.generateKeyPair();
+            X448PublicKeyParameters ephPub = (X448PublicKeyParameters) ephKp.getPublic();
+            X448PrivateKeyParameters ephPri = (X448PrivateKeyParameters) ephKp.getPrivate();
 
-        // 2. ECDH Agreement
-        X448Agreement agreement = new X448Agreement();
-        agreement.init(ephPri);
-        byte[] sharedSecret = new byte[agreement.getAgreementSize()];
-        agreement.calculateAgreement(this.pubX, sharedSecret, 0);
+            // 2. ECDH Agreement
+            X448Agreement agreement = new X448Agreement();
+            agreement.init(ephPri);
+            byte[] sharedSecret = new byte[agreement.getAgreementSize()];
+            agreement.calculateAgreement(this.pubX, sharedSecret, 0);
 
-        // 3. KDF & Encrypt
-        byte[] gcmKey = genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
-        byte[] enc = enAESGCM(gcmKey, data);
+            // 3. KDF & Encrypt
+            byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
+            Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
+            byte[] enc = worker.enBin(data);
 
-        // 4. Pack
-        byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
-        byte[] res = new byte[1 + ephPubRaw.length + enc.length];
-        res[0] = (byte) ephPubRaw.length;
-        System.arraycopy(ephPubRaw, 0, res, 1, ephPubRaw.length);
-        System.arraycopy(enc, 0, res, 1 + ephPubRaw.length, enc.length);
-        return res;
-    }
+            // 4. Pack
+            byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
+            byte[] res = new byte[1 + ephPubRaw.length + enc.length];
+            res[0] = (byte) ephPubRaw.length;
+            System.arraycopy(ephPubRaw, 0, res, 1, ephPubRaw.length);
+            System.arraycopy(enc, 0, res, 1 + ephPubRaw.length, enc.length);
+            return res;
+        }
 
-    // ECC decrypt with my private key
-    public byte[] ECCdecrypt(byte[] data) throws Exception {
-        // 1. Parse
-        int keyLen = data[0] & 0xFF;
-        byte[] ephPubRaw = Arrays.copyOfRange(data, 1, 1 + keyLen);
-        byte[] enc = Arrays.copyOfRange(data, 1 + keyLen, data.length);
+        // ECC decrypt with my private key
+        public byte[] decrypt(byte[] data) throws Exception {
+            // 1. Parse
+            int keyLen = data[0] & 0xFF;
+            byte[] ephPubRaw = Arrays.copyOfRange(data, 1, 1 + keyLen);
+            byte[] enc = Arrays.copyOfRange(data, 1 + keyLen, data.length);
 
-        // 2. Load Eph Public Key
-        X448PublicKeyParameters ephPub = new X448PublicKeyParameters(ephPubRaw, 0);
+            // 2. Load Eph Public Key
+            X448PublicKeyParameters ephPub = new X448PublicKeyParameters(ephPubRaw, 0);
 
-        // 3. ECDH Agreement
-        X448Agreement agreement = new X448Agreement();
-        agreement.init(this.priX);
-        byte[] sharedSecret = new byte[agreement.getAgreementSize()];
-        agreement.calculateAgreement(ephPub, sharedSecret, 0);
+            // 3. ECDH Agreement
+            X448Agreement agreement = new X448Agreement();
+            agreement.init(this.priX);
+            byte[] sharedSecret = new byte[agreement.getAgreementSize()];
+            agreement.calculateAgreement(ephPub, sharedSecret, 0);
 
-        // 4. KDF & Decrypt
-        byte[] gcmKey = genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
-        return deAESGCM(gcmKey, enc);
-    }
+            // 4. KDF & Decrypt
+            byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
+            Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
+            return worker.deBin(enc);
+        }
 
-    // ECC sign: Ed448
-    public byte[] ECCsign(byte[] data) throws Exception {
-        Ed448Signer signer = new Ed448Signer(new byte[0]); // context empty
-        signer.init(true, this.priEd);
-        signer.update(data, 0, data.length);
-        return signer.generateSignature();
-    }
-
-    // ECC verify: Ed448
-    public boolean ECCverify(byte[] data, byte[] signature) {
-        try {
+        // ECC sign: Ed448
+        public byte[] sign(byte[] data) throws Exception {
             Ed448Signer signer = new Ed448Signer(new byte[0]); // context empty
-            signer.init(false, this.pubEd);
+            signer.init(true, this.priEd);
             signer.update(data, 0, data.length);
-            return signer.verifySignature(signature);
-        } catch (Exception e) {
-            return false;
+            return signer.generateSignature();
+        }
+
+        // ECC verify: Ed448
+        public boolean verify(byte[] data, byte[] signature) {
+            try {
+                Ed448Signer signer = new Ed448Signer(new byte[0]); // context empty
+                signer.init(false, this.pubEd);
+                signer.update(data, 0, data.length);
+                return signer.verifySignature(signature);
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 
@@ -562,11 +566,11 @@ public class Bencrypt {
     public static class SymMaster {
         private String algo;
         private byte[] key;
-        private Bencrypt worker;
+        private Bencrypt.AES1 worker;
 
         /**
          * @param algo "gcm1" or "gcmx1"
-         * @param key 44 bytes (12B IV + 32B Key)
+         * @param key  44 bytes (12B IV + 32B Key)
          */
         public SymMaster(String algo, byte[] key) {
             if (!algo.equals("gcm1") && !algo.equals("gcmx1")) {
@@ -577,7 +581,7 @@ public class Bencrypt {
             }
             this.algo = algo;
             this.key = key;
-            this.worker = new Bencrypt();
+            this.worker = new Bencrypt.AES1();
         }
 
         /**
@@ -634,13 +638,7 @@ public class Bencrypt {
          */
         public void enFile(InputStream src, long size, OutputStream dst) throws Exception {
             if (this.algo.equals("gcm1")) {
-                byte[] buf = new byte[(int)size];
-                int offset = 0;
-                while (offset < size) {
-                    int read = src.read(buf, offset, (int)size - offset);
-                    if (read == -1) break;
-                    offset += read;
-                }
+                byte[] buf = src.readAllBytes();
                 byte[] enc = this.worker.enAESGCM(this.key, buf);
                 dst.write(enc);
             } else {
@@ -653,13 +651,7 @@ public class Bencrypt {
          */
         public void deFile(InputStream src, long size, OutputStream dst) throws Exception {
             if (this.algo.equals("gcm1")) {
-                byte[] buf = new byte[(int)size];
-                int offset = 0;
-                while (offset < size) {
-                    int read = src.read(buf, offset, (int)size - offset);
-                    if (read == -1) break;
-                    offset += read;
-                }
+                byte[] buf = src.readAllBytes();
                 byte[] dec = this.worker.deAESGCM(this.key, buf);
                 dst.write(dec);
             } else {
@@ -670,13 +662,14 @@ public class Bencrypt {
 
     public static class AsymMaster {
         private String algo;
-        private Bencrypt worker;
+        private Bencrypt.RSA1 worker0;
+        private Bencrypt.ECC1 worker1;
 
         /**
          * @param algo "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"
          */
         public AsymMaster(String algo) {
-            String[] valid = {"rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"};
+            String[] valid = { "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1" };
             boolean isValid = false;
             for (String v : valid) {
                 if (v.equals(algo)) {
@@ -689,63 +682,68 @@ public class Bencrypt {
             }
 
             this.algo = algo;
-            this.worker = new Bencrypt(); // Bencrypt instance holds keys
+            if (this.algo.startsWith("rsa1")) {
+                this.worker0 = new Bencrypt.RSA1();
+            } else if (this.algo.equals("ecc1")) {
+                this.worker1 = new Bencrypt.ECC1();
+            }
         }
 
         /**
          * Generate key pair
+         * 
          * @return byte[][] {public, private}
          */
         public byte[][] genkey() throws Exception {
             if (this.algo.equals("rsa1") || this.algo.equals("rsa1-2k")) {
-                return this.worker.RSAgenkey(2048);
+                return this.worker0.genkey(2048);
             } else if (this.algo.equals("rsa1-3k")) {
-                return this.worker.RSAgenkey(3072);
+                return this.worker0.genkey(3072);
             } else if (this.algo.equals("rsa1-4k")) {
-                return this.worker.RSAgenkey(4096);
+                return this.worker0.genkey(4096);
             } else if (this.algo.equals("ecc1")) {
-                return this.worker.ECCgenkey();
+                return this.worker1.genkey();
             }
             return null;
         }
 
         public void loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
             if (this.algo.startsWith("rsa1")) {
-                this.worker.RSAloadkey(publicBuf, privateBuf);
+                this.worker0.loadkey(publicBuf, privateBuf);
             } else if (this.algo.equals("ecc1")) {
-                this.worker.ECCloadkey(publicBuf, privateBuf);
+                this.worker1.loadkey(publicBuf, privateBuf);
             }
         }
 
         public byte[] encrypt(byte[] data) throws Exception {
             if (this.algo.startsWith("rsa1")) {
-                return this.worker.RSAencrypt(data);
+                return this.worker0.encrypt(data);
             } else {
-                return this.worker.ECCencrypt(data);
+                return this.worker1.encrypt(data);
             }
         }
 
         public byte[] decrypt(byte[] data) throws Exception {
             if (this.algo.startsWith("rsa1")) {
-                return this.worker.RSAdecrypt(data);
+                return this.worker0.decrypt(data);
             } else {
-                return this.worker.ECCdecrypt(data);
+                return this.worker1.decrypt(data);
             }
         }
 
         public byte[] sign(byte[] data) throws Exception {
             if (this.algo.startsWith("rsa1")) {
-                return this.worker.RSAsign(data);
+                return this.worker0.sign(data);
             } else {
-                return this.worker.ECCsign(data);
+                return this.worker1.sign(data);
             }
         }
 
         public boolean verify(byte[] data, byte[] signature) {
             if (this.algo.startsWith("rsa1")) {
-                return this.worker.RSAverify(data, signature);
+                return this.worker0.verify(data, signature);
             } else {
-                return this.worker.ECCverify(data, signature);
+                return this.worker1.verify(data, signature);
             }
         }
     }

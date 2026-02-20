@@ -4,6 +4,8 @@ Base-N으로 이진 데이터를 텍스트로 인코딩합니다. Base-64 모드
 
 Encodes binary data into text using Base-N. Base-64 mode encodes into standard English characters. Base-32k mode encodes into Korean (Hangul) and CJK characters, offering higher compression rates in Unicode-supported environments.
 
+warning: Base-32k is deprecated, just use standard Base64.
+
 #### python
 ```py
 class Bencode:

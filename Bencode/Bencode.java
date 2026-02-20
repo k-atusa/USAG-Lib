@@ -129,6 +129,13 @@ public class Bencode {
         return ba.toByteArray();
     }
 
-    public String Encode(byte[] data) { return this.encode(data, true); }
-    public byte[] Decode(String data) { return this.decode(data); }
+    public String Encode(byte[] data) {
+        if (data.length == 0) return "";
+        return Base64.getEncoder().encodeToString(data);
+    }
+    public byte[] Decode(String data) {
+        String cleaned = data.replace("\r", "").replace("\n", "").replace(" ", "");
+        if (cleaned.isEmpty()) return new byte[0];
+        return Base64.getDecoder().decode(cleaned);
+    }
 }

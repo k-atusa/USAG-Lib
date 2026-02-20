@@ -3,26 +3,25 @@
 const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
 
 class Bencode { // Base-N encoder
-    constructor() {
-        this._CHARS = [];
-        this._REV_MAP = {};
-
+    static _CHARS = [];
+    static _REV_MAP = {};
+    static _THRESHOLD = 32164;
+    static _ESCAPE_CHAR = ".";
+    static {
         // 1. Korean letters (U+AC00-U+D7A3): 11172
         for (let i = 0; i < 11172; i++) {
-            this._CHARS.push(String.fromCharCode(0xAC00 + i));
+            Bencode._CHARS.push(String.fromCharCode(0xAC00 + i));
         }
         // 2. CJK letters (U+4E00-U+9FFF): 20992
         for (let i = 0; i < 20992; i++) {
-            this._CHARS.push(String.fromCharCode(0x4E00 + i));
+            Bencode._CHARS.push(String.fromCharCode(0x4E00 + i));
         }
         // Build reverse map
-        this._CHARS.forEach((char, idx) => {
-            this._REV_MAP[char] = idx;
+        Bencode._CHARS.forEach((char, idx) => {
+            Bencode._REV_MAP[char] = idx;
         });
-
-        this._THRESHOLD = 32164;
-        this._ESCAPE_CHAR = ".";
     }
+    constructor() {}
 
     encode(data, isBase64) {
         // Ensure data is Uint8Array
@@ -43,7 +42,7 @@ class Bencode { // Base-N encoder
 
         const firstCharCode = data.charCodeAt(0);
         // Base64 Check: ASCII < 128 AND not escape char
-        if (firstCharCode < 128 && data[0] !== this._ESCAPE_CHAR) {
+        if (firstCharCode < 128 && data[0] !== Bencode._ESCAPE_CHAR) {
             return this._fromBase64(data);
         } else {
             return this._decodeUnicode(data);
@@ -88,22 +87,22 @@ class Bencode { // Base-N encoder
                 // reset acc logic: keep only lower 'bits'
                 acc = (bits === 0) ? 0 : acc & ((1 << bits) - 1);
 
-                if (val < this._THRESHOLD) {
-                    result.push(this._CHARS[val]);
+                if (val < Bencode._THRESHOLD) {
+                    result.push(Bencode._CHARS[val]);
                 } else {
-                    const offset = val - this._THRESHOLD;
-                    result.push(this._ESCAPE_CHAR + this._CHARS[offset]);
+                    const offset = val - Bencode._THRESHOLD;
+                    result.push(Bencode._ESCAPE_CHAR + Bencode._CHARS[offset]);
                 }
             }
         }
 
         // Pad leftover
         const val = ((acc << 1) | 1) << (14 - bits);
-        if (val < this._THRESHOLD) {
-            result.push(this._CHARS[val]);
+        if (val < Bencode._THRESHOLD) {
+            result.push(Bencode._CHARS[val]);
         } else {
-            const offset = val - this._THRESHOLD;
-            result.push(this._ESCAPE_CHAR + this._CHARS[offset]);
+            const offset = val - Bencode._THRESHOLD;
+            result.push(Bencode._ESCAPE_CHAR + Bencode._CHARS[offset]);
         }
         return result.join("");
     }
@@ -129,13 +128,13 @@ class Bencode { // Base-N encoder
             i++;
             let val = 0;
 
-            if (char === this._ESCAPE_CHAR) {
+            if (char === Bencode._ESCAPE_CHAR) {
                 if (i >= n) throw new Error("invalid escape");
                 const nextChar = data[i];
                 i++;
-                val = (this._REV_MAP[nextChar] || 0) + this._THRESHOLD;
+                val = (Bencode._REV_MAP[nextChar] || 0) + Bencode._THRESHOLD;
             } else {
-                val = this._REV_MAP[char] || 0;
+                val = Bencode._REV_MAP[char] || 0;
             }
 
             acc = (acc << 15) | val;

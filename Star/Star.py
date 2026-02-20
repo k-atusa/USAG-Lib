@@ -114,7 +114,7 @@ class TarReader:
         self.isEOF = False
 
     def _parse(self, data: bytes):
-        lines = data.decode('utf-8').split('\n')
+        lines = data.decode('utf-8', 'replace').split('\n')
         for line in lines: # format: "length key=value\n"
             if line == "": continue
             parts = line.split(' ', 1)
@@ -139,7 +139,7 @@ class TarReader:
             return False
 
         # parse standard header
-        self.name = header[0:100].decode('utf-8').rstrip('\0')
+        self.name = header[0:100].decode('utf-8', 'replace').rstrip('\0')
         self.mode = int(header[100:108].strip(b'\x00 '), 8)
         self.size = int(header[124:136].strip(b'\x00 '), 8)
         tp = header[156:157]
