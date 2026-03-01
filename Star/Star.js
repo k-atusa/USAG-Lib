@@ -4,9 +4,8 @@
 if (typeof isNode === 'undefined') {
     window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
 }
-let fs;
-if (isNode) {
-    fs = require('fs');
+if (typeof fs === 'undefined' && isNode) {
+    window.fs = require('fs');
 }
 
 class TarWriter {
