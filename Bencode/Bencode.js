@@ -1,6 +1,8 @@
 // test789b : USAG-Lib bencode
 
-const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+if (typeof isNode === 'undefined') {
+    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+}
 
 class Bencode { // Base-N encoder
     static _CHARS = [];
