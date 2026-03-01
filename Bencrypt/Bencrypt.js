@@ -7,7 +7,9 @@
 * require @noble/curves: <script type="module">import {x448, ed448} from 'https://esm.sh/@noble/curves@1.4.0/ed448';window.noble = {x448, ed448};</script>
 */
 
-const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+if (typeof isNode === 'undefined') {
+    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+}
 const deps = {
     crypto: null,
     argon2: null,
