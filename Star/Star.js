@@ -1,7 +1,9 @@
 // test792b : USAG-Lib star
 // !!! JS version is not designed for big data !!!
 
-const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+if (typeof isNode === 'undefined') {
+    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+}
 let fs;
 if (isNode) {
     fs = require('fs');
