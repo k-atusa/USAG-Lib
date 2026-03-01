@@ -5,7 +5,9 @@
 * require jszip: npm install jszip, <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 */
 
-const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+if (typeof isNode === 'undefined') {
+    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+}
 let fs, JSZip;
 if (isNode) {
     fs = require('fs');
