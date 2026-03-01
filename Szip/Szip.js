@@ -8,9 +8,11 @@
 if (typeof isNode === 'undefined') {
     window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
 }
-let fs, JSZip;
+if (typeof fs === 'undefined' && isNode) {
+    window.fs = require('fs');
+}
+let JSZip;
 if (isNode) {
-    fs = require('fs');
     JSZip = require('jszip');
 } else {
     JSZip = window.JSZip;
