@@ -1,13 +1,13 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bencrypt JS Test (USAG-Lib)</title>
-    <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/src/sha3.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js"></script>
-    <script type="module">import {x448, ed448} from 'https://esm.sh/@noble/curves@1.4.0/ed448';window.noble = {x448, ed448};</script>
-    <script src="../Bencrypt.js"></script>
+    <title>Test</title>
     <style>
         body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
         #console { 
@@ -27,17 +27,32 @@
     </style>
 </head>
 <body>
-
-    <h1>Bencrypt.js Library Test</h1>
-    <p>Tests USAG-Lib Bencrypt implementation matching Python logic.</p>
+    <h1>Library Test</h1>
+    <p>test will be executed on your browser</p>
     <button onclick="runTest()">(Run Test)</button>
     <br><br>
     <div id="console">Ready...</div>
 
+    <script type="module">
+        import {TestReader, TestWriter, Random, SHA3256, SHA3512, pbkdf2, argon2Hash, argon2Verify, genkey, SymMaster, AsymMaster} from '../Bencrypt.js';
+        window.Bencrypt = {
+            "TestReader": TestReader,
+            "TestWriter": TestWriter,
+            "Random": Random,
+            "SHA3256": SHA3256,
+            "SHA3512": SHA3512,
+            "pbkdf2": pbkdf2,
+            "argon2Hash": argon2Hash,
+            "argon2Verify": argon2Verify,
+            "genkey": genkey,
+            "SymMaster": SymMaster,
+            "AsymMaster": AsymMaster
+        }
+    </script>
+
     <script>
-        // printer
         const consoleDiv = document.getElementById('console');
-        function log(message, color = '') {
+        function log(message, color = '') { // printer
             const span = document.createElement('span');
             span.textContent = message + "\n";
             if (color) span.style.color = color;
@@ -45,8 +60,6 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
             console.log(message);
         }
-
-        // Uint8Array to hex string (helper)
         function formatBytes(u8) {
             if (u8.length > 100) return `[Uint8Array length=${u8.length}]`;
             try {
@@ -55,16 +68,16 @@
                 return "[Error formatting bytes]";
             }
         }
+    </script>
 
-        // base64 to Uint8Array
+    <script>
         function fromBase64(str) {
             return Uint8Array.from(atob(str), c => c.charCodeAt(0));
         }
 
         async function runTest() {
-            InitBencrypt();
             consoleDiv.innerHTML = "";
-            log("--- Start Bencrypt.js Test (Browser) ---", "white");
+            log("--- Start Test ---", "blue");
 
             let pub0 = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApCITGWNQcB8GdwWFpKW02VVYdtir1/IAbUstmwhBugo2rbdi1a/7n/hafglvwV+kxQ4jJychYjl921OhPwqlaFv/+iP8sDemmjXKW5G9QtSGFx34FVLYGewrF1ApoyvI5Zi3m7KBhrAFQyZ+6VYojnx0NJPjnCOGwSx8rb73Csi+gBoxSse5EUUwywWJ9tQkQfayFY7bVAORje7y58rrk4ASwpGNnaXgsNQffCgtBf6J4XhXm/neZP7wpDJqx6j4c5JY0OnYnCIkU66RMgEn4jHc+hg9Hfr99AWBnxjuMrAUbsaDrHrAcl5Sxhi0xzlxFvT+/PFx0BzPSt/noM0C1wIDAQAB'
             let pri0 = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCkIhMZY1BwHwZ3BYWkpbTZVVh22KvX8gBtSy2bCEG6Cjatt2LVr/uf+Fp+CW/BX6TFDiMnJyFiOX3bU6E/CqVoW//6I/ywN6aaNcpbkb1C1IYXHfgVUtgZ7CsXUCmjK8jlmLebsoGGsAVDJn7pViiOfHQ0k+OcI4bBLHytvvcKyL6AGjFKx7kRRTDLBYn21CRB9rIVjttUA5GN7vLnyuuTgBLCkY2dpeCw1B98KC0F/onheFeb+d5k/vCkMmrHqPhzkljQ6dicIiRTrpEyASfiMdz6GD0d+v30BYGfGO4ysBRuxoOsesByXlLGGLTHOXEW9P788XHQHM9K3+egzQLXAgMBAAECggEAAOL2O3Lf4lsoi8gJ2sPSYEInwiyVcQsrmWuIiYfX4wtfFD0jWYgj0c9jnb6rTd4YY8AZzIJXmdI5rc+b1V1XW2Lz1QQQv1rtmXOk7i2xWgUP3FwbFPJnnGw8J1oVf34jDapvg3XJYVLeFGjG0rfWbD6b2hTaa+N9PNniqoWXjAVbWp2yJ0emN2nyFF/jhXIKJHmJZFAe4DFp/vHLykxHKOtMxsoHikjRj3KnpPy2NQzZue8jQ6UvX1zZhucR9tJb+9kVq9nLVxKVinSvaq8hLavtEh74o0ykQzxr4bT+eeX+6Jm0vON7VCH+HmeKdrACnsZ5tKd4oCA+2EXw2cPPMQKBgQDELGPJHQH0SxSjOyaXkKoSf2jvxYCQiay6Y+qT6lnL7Ag9MtOOGLARezaV8fYRBwTYdIUKCJj8jZtzTJVmg30t1qyy1jTkzwlq36cWxzToaQPYZVULuHOWMyMcUPdgLk+kslVxN7ZyhpDxdatAcnr4HphAsD20F+Dk0ZJASDU0kwKBgQDWMD3OKZOC661NsSjI7+INDIxov8aP/MBJKirj+/I9KU4cXfvzuMS/G20EvI9Bxc294Aghnp/I25Eg9NTL8AzWCJlXM4AF+fzM8yR/NlW/nfxOT07wHbvKMTQHM3bBcIKQkg3BCCIomGf0jWthXRROdWaFE3G7HksfnOS0k2pHLQKBgQC/2d24yKqpnGfRfz6tyafaMUqR+2hRcqM/Igo+oFkzamFgYH2vIQvH/OUUXa7VVjTx73pQprnffCnD5+jQedWJZ8I7n+vYvXWrVJEXYLiodlNxZSB4NuqrwNUckz5qjMANBO80q1S9ykakLfzOKWeDkoA5+2JM53FktmQ+g5+tCwKBgFnjhQywhie7oM+qOeOaSNQRIBwV388t08Tg3X8wjUj9vLpK9yIhuPA7IlWKjNSdnurAyqjRWV2CSDX8ihHMfJaWpUPjaScY8u9QW1DIDNSOCQUUY5yB3f3NCHi9MGmePi1OHleUgkFnNLl9YENMPOlwe8X9kw1keUKbJaBi/YdBAoGAWQ+zica3FnZI5oTEv44qh/S0hbjHjo3AhST+5VTOx7pitwySI8gC2u1af5fHJskBEwQKhkvOt1n7eh88aLo3b7HHB4QIur+KFrKmUvBHIa3Y2FQOTsBQj1Cj9hMTWBErqEb/+/D9n5PlH7zt5MVwZTA8HAGUpVhIR3xxUtpTiJI='
@@ -77,114 +90,111 @@
 
             try {
                 log("===== Basic Functions Test =====", "white");
-                // 1-1. random
-                log("random: " + formatBytes(window.random(16)), "#569cd6");
+                log("random: " + formatBytes(window.Bencrypt.Random(16)), "");
+                log("SHA3-256: " + formatBytes(window.Bencrypt.SHA3256(new Uint8Array(0))), "");
+                log("SHA3-512: " + formatBytes(window.Bencrypt.SHA3512(new Uint8Array(0))), "");
 
-                // 1-2. sha3
-                log("SHA3-256: " + formatBytes(window.sha3256(new Uint8Array(0))), "#569cd6");
-                log("SHA3-512: " + formatBytes(window.sha3512(new Uint8Array(0))), "#569cd6");
+                log("PBKDF2: " + formatBytes(await window.Bencrypt.pbkdf2("0000", "0000000000000000")), "");
+                let t = await window.Bencrypt.argon2Hash("0000", "0000000000000000");
+                log("Argon2: " + t, "");
+                log(await window.Bencrypt.argon2Verify(t, "0000"), "");
 
-                // 1-3. pbkdf2, argon2
-                log("PBKDF2: " + formatBytes(await window.pbkdf2("0000", "0000000000000000")), "#569cd6");
-                let t = await window.argon2Hash("0000", "0000000000000000");
-                log("Argon2: " + t, "#569cd6");
-                log(await window.argon2Verify(t, "0000"), "#569cd6");
+                log("genkey: " + formatBytes(window.Bencrypt.genkey(new TextEncoder().encode("0000000000000000"), "test", 16)), "");
 
-                // 1-4. genkey
-                log("genkey: " + formatBytes(await window.genkey("0000000000000000", "test", 16)), "#569cd6");
-
-                log("===== Encrypting Functions Test =====", "white");
-                // 2-1. AES-GCM
-                const m = new AES1();
+                log("===== Encrypting Functions Test =====", "blue");
                 const key = new TextEncoder().encode("0123".repeat(11));
                 let plain = new TextEncoder().encode("Hello, world!".repeat(4));
-                let enc = await m.enAESGCM(key, plain);
-                log("en-AES-GCM: " + m.processed() + ", " + formatBytes(enc), "#569cd6");
-                let dec = await m.deAESGCM(key, enc);
-                log("de-AES-GCM: " + m.processed() + ", " + new TextDecoder().decode(dec), "#569cd6");
+                
+                // 2-1. AES-GCM
+                let m = new window.Bencrypt.SymMaster("gcm1", key);
+                let enc = await m.EnBin(plain);
+                log("en-AES-GCM: " + m.Processed() + ", " + formatBytes(enc), "");
+                let dec = await m.DeBin(enc);
+                log("de-AES-GCM: " + m.Processed() + ", " + new TextDecoder().decode(dec), "");
 
-                // 2-2. AES-GCMx
+                // 2-2. AES-GCMx (Stream/Chunked)
                 plain = new Uint8Array(20 * 1000000); // 20MB
-                let r = new TestReader(plain);
-                let w = new TestWriter();
-                await m.enAESGCMx(key, r, plain.length, w);
+                let mx = new window.Bencrypt.SymMaster("gcmx1", key);
+                let r = new window.Bencrypt.TestReader(plain);
+                let w = new window.Bencrypt.TestWriter();
+                await mx.EnFile(r, plain.length, w);
                 enc = w.getValue();
-                log("en-AES-GCMx: " + m.processed() + ", " +formatBytes(enc.slice(0, 16)), "#569cd6");
-                r = new TestReader(enc);
-                w = new TestWriter();
-                await m.deAESGCMx(key, r, enc.length, w);
+                log("en-AES-GCMx: " + mx.Processed() + ", " + formatBytes(enc.slice(0, 16)), "");
+                
+                r = new window.Bencrypt.TestReader(enc);
+                w = new window.Bencrypt.TestWriter();
+                await mx.DeFile(r, enc.length, w);
                 dec = w.getValue();
-                log("de-AES-GCMx: " + m.processed() + ", " + formatBytes(dec.slice(0, 16)), "#569cd6");
+                log("de-AES-GCMx: " + mx.Processed() + ", " + formatBytes(dec.slice(0, 16)), "");
 
                 // 2-3. AES-GCMx with size 0
                 plain = new Uint8Array(0);
-                r = new TestReader(plain);
-                w = new TestWriter();
-                await m.enAESGCMx(key, r, plain.length, w);
+                r = new window.Bencrypt.TestReader(plain);
+                w = new window.Bencrypt.TestWriter();
+                await mx.EnFile(r, plain.length, w);
                 enc = w.getValue();
-                r = new TestReader(enc);
-                w = new TestWriter();
-                await m.deAESGCMx(key, r, enc.length, w);
+                
+                r = new window.Bencrypt.TestReader(enc);
+                w = new window.Bencrypt.TestWriter();
+                await mx.DeFile(r, enc.length, w);
                 dec = w.getValue();
-                log(dec.length, "#569cd6");
+                log(dec.length, "");
 
                 // 2-4. AES-GCMx with size 4MiB
                 plain = new Uint8Array(4 * 1048576);
-                r = new TestReader(plain);
-                w = new TestWriter();
-                await m.enAESGCMx(key, r, plain.length, w);
+                r = new window.Bencrypt.TestReader(plain);
+                w = new window.Bencrypt.TestWriter();
+                await mx.EnFile(r, plain.length, w);
                 enc = w.getValue();
-                r = new TestReader(enc);
-                w = new TestWriter();
-                await m.deAESGCMx(key, r, enc.length, w);
+                
+                r = new window.Bencrypt.TestReader(enc);
+                w = new window.Bencrypt.TestWriter();
+                await mx.DeFile(r, enc.length, w);
                 dec = w.getValue();
-                log(dec.length / 4, "#569cd6");
+                log(dec.length / 4, "");
 
-                log("===== RSA Functions Test =====", "white");
+                log("===== RSA Functions Test =====", "blue");
                 plain = new TextEncoder().encode("Hello, world!".repeat(4));
-                let me = new RSA1();
-                await me.genkey(2048);
+                
+                let meRsa = new window.Bencrypt.AsymMaster("rsa1");
+                await meRsa.Genkey();
 
-                // 3-1. RSA encrypt test
-                enc = await me.encrypt(plain);
-                dec = await me.decrypt(enc);
-                log("RSA: " + new TextDecoder().decode(dec), "#569cd6");
+                enc = await meRsa.Encrypt(plain);
+                dec = await meRsa.Decrypt(enc);
+                log("RSA: " + new TextDecoder().decode(dec), "");
 
-                // 3-2. RSA sign test
-                enc = await me.sign(plain);
-                dec = await me.verify(plain, enc);
-                log("RSA: " + dec, "#569cd6");
+                enc = await meRsa.Sign(plain);
+                let is_valid = await meRsa.Verify(plain, enc);
+                log("RSA: " + is_valid, "");
 
-                // 3-3. RSA external test
-                let you = new RSA1();
-                await you.loadkey(fromBase64(pub0), fromBase64(pri0));
-                log(formatBytes( await you.decrypt(fromBase64(enc0)) ), "#569cd6");
-                log(await you.verify("0000", fromBase64(sign0)), "#569cd6");
+                let youRsa = new window.Bencrypt.AsymMaster("rsa1");
+                await youRsa.Loadkey(fromBase64(pub0), fromBase64(pri0));
+                log(formatBytes( await youRsa.Decrypt(fromBase64(enc0)) ), "");
+                log(await youRsa.Verify("0000", fromBase64(sign0)), "");
 
-                log("===== ECC Functions Test =====", "white");
-                me = new ECC1();
-                await me.genkey();
-                // 4-1. ECC encrypt test
-                enc = await me.encrypt(plain);
-                dec = await me.decrypt(enc);
-                log("ECC: " + new TextDecoder().decode(dec), "#569cd6");
+                log("===== ECC Functions Test =====", "blue");
+                let meEcc = new window.Bencrypt.AsymMaster("ecc1");
+                await meEcc.Genkey();
+                
+                enc = await meEcc.Encrypt(plain);
+                dec = await meEcc.Decrypt(enc);
+                log("ECC: " + new TextDecoder().decode(dec), "");
 
-                // 4-2. ECC sign test
-                enc = await me.sign(plain);
-                dec = await me.verify(plain, enc);
-                log("ECC: " + dec, "#569cd6");
+                enc = await meEcc.Sign(plain);
+                is_valid = await meEcc.Verify(plain, enc);
+                log("ECC: " + is_valid, "");
 
-                // 4-3. ECC external test
-                you = new ECC1();
-                you.loadkey(fromBase64(pub1), fromBase64(pri1));
-                log(formatBytes( await you.decrypt(fromBase64(enc1)) ), "#569cd6");
-                log(await you.verify("0000", fromBase64(sign1)), "#569cd6");
+                let youEcc = new window.Bencrypt.AsymMaster("ecc1");
+                await youEcc.Loadkey(fromBase64(pub1), fromBase64(pri1));
+                log(formatBytes( await youEcc.Decrypt(fromBase64(enc1)) ), "");
+                log(await youEcc.Verify("0000", fromBase64(sign1)), "");
 
             } catch (e) {
                 console.error(e);
-                log(`ERROR: ${e.message}`, "#f44336");
+                log(`ERROR: ${e.message}`, "red");
                 log(e.stack, "gray");
             }
+            log("--- End Test ---", "blue");
         }
     </script>
 </body>

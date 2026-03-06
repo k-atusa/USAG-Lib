@@ -1,15 +1,6 @@
 // test793b : USAG-Lib bencrypt
-
-/*
-* !!! JS version is  not designed for big data !!!
-* require js-sha3: npm install js-sha3, <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/src/sha3.min.js"></script>
-* require argon2: npm install argon2, <script src="https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js"></script>
-* require @noble/curves: <script type="module">import {x448, ed448} from 'https://esm.sh/@noble/curves@1.4.0/ed448';window.noble = {x448, ed448};</script>
-*/
-
-if (typeof isNode === 'undefined') {
-    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
-}
+// !!! JS version is  not designed for big data !!!
+const isNode = (typeof window === 'undefined');
 const deps = {
     crypto: null,
     argon2: null,
@@ -17,36 +8,46 @@ const deps = {
     sha3512: null,
     noble: null
 };
-// Initialize Dependencies, call once before use
-function InitBencrypt() {
-    if (isNode) {
-        try { deps.crypto = require('crypto'); }
-        catch (e) { console.error('crypto module not found'); }
-        try {
-            const sha3 = require('js-sha3');
-            deps.sha3256 = sha3.sha3_256;
-            deps.sha3512 = sha3.sha3_512;
-        } catch (e) {
-            console.error('js-sha3 module not installed');
-        }
-        try { deps.argon2 = require('argon2'); } 
-        catch (e) { console.error('argon2 module not installed'); }
+if (isNode) {
+    try { 
+        const nodeCrypto = await import('crypto');
+        deps.crypto = nodeCrypto.default || nodeCrypto; 
+    } catch (e) { console.error('crypto module not found'); }
+    
+    try {
+        const nodeSha3 = await import('js-sha3');
+        deps.sha3256 = nodeSha3.sha3_256;
+        deps.sha3512 = nodeSha3.sha3_512;
+    } catch (e) { console.error('js-sha3 module not installed'); }
+    
+    try { 
+        const nodeArgon2 = await import('argon2');
+        deps.argon2 = nodeArgon2.default || nodeArgon2; 
+    } catch (e) { console.error('argon2 module not installed'); }
 
-    } else {
-        if (typeof self.crypto !== 'undefined') {deps.crypto = self.crypto; } 
-        else if (typeof window !== 'undefined' && window.crypto) { deps.crypto = window.crypto; } 
-        else { console.error('web crypto api not found'); }
-        if (window.sha3_256 && window.sha3_512) {
-            deps.sha3256 = window.sha3_256;
-            deps.sha3512 = window.sha3_512;
-        } else {
-            console.error('sha3 module not installed');
-        }
-        if (window.argon2) { deps.argon2 = window.argon2; }
-        else { console.error('argon2 module not installed'); }
-        if (window.noble && window.noble.x448 && window.noble.ed448) { deps.noble = window.noble; } 
-        else { console.error('@noble/curves module not installed'); }
-    }
+} else {
+    if (typeof self !== 'undefined' && self.crypto) { deps.crypto = self.crypto; } 
+    else if (typeof window !== 'undefined' && window.crypto) { deps.crypto = window.crypto; } 
+    else { console.error('web crypto api not found'); }
+
+    try {
+        const webSha3 = (await import('https://esm.sh/js-sha3@0.9.3')).default;
+        deps.sha3256 = webSha3.sha3_256;
+        deps.sha3512 = webSha3.sha3_512;
+    } catch (e) { console.error('sha3 module not installed'); }
+
+    try {
+        const webArgon2 = (await import('https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js/+esm')).default;
+        deps.argon2 = webArgon2;
+    } catch (e) { console.error('argon2 module not installed'); }
+
+    try {
+        const webNoble = await import('https://esm.sh/@noble/curves@1.4.0/ed448');
+        deps.noble = { 
+            x448: webNoble.x448, 
+            ed448: webNoble.ed448 
+        };
+    } catch (e) { console.error('@noble/curves module not installed'); }
 }
 
 function toU8(data) {
@@ -80,7 +81,7 @@ function hmac_sha3_512(key, msg) {
 
     // 1. Key reduction / padding
     if (k.length > B) {
-        k = sha3512(k); // Key is too long, hash it
+        k = SHA3512(k); // Key is too long, hash it
     }
     if (k.length < B) {
         const newK = new Uint8Array(B);
@@ -100,16 +101,16 @@ function hmac_sha3_512(key, msg) {
     const innerData = new Uint8Array(B + m.length);
     innerData.set(i_key_pad);
     innerData.set(m, B);
-    const innerHash = sha3512(innerData);
+    const innerHash = SHA3512(innerData);
 
     // 4. Outer hash: H(o_key_pad || innerHash)
     const outerData = new Uint8Array(B + innerHash.length);
     outerData.set(o_key_pad);
     outerData.set(innerHash, B);
-    return sha3512(outerData);
+    return SHA3512(outerData);
 }
 
-class TestReader {
+export class TestReader {
     constructor(u8Array) {
         this.data = u8Array; // Uint8Array
         this.pos = 0;
@@ -125,7 +126,7 @@ class TestReader {
     }
 }
 
-class TestWriter {
+export class TestWriter {
     constructor() {
         this.chunks = [];
         this.length = 0;
@@ -155,7 +156,7 @@ class TestWriter {
  * @param {number} size 
  * @returns {Uint8Array}
  */
-function random(size) {
+export function Random(size) {
     if (isNode) {
         return deps.crypto.randomBytes(size);
     } else {
@@ -170,7 +171,7 @@ function random(size) {
  * @param {Uint8Array|string} data 
  * @returns {Uint8Array}
  */
-function sha3256(data) {
+export function SHA3256(data) {
     return new Uint8Array(deps.sha3256.create().update(data).arrayBuffer());
 }
 
@@ -179,7 +180,7 @@ function sha3256(data) {
  * @param {Uint8Array|string} data 
  * @returns {Uint8Array}
  */
-function sha3512(data) {
+export function SHA3512(data) {
     return new Uint8Array(deps.sha3512.create().update(data).arrayBuffer());
 }
 
@@ -191,7 +192,7 @@ function sha3512(data) {
  * @param {number} outsize 
  * @returns {Promise<Uint8Array>}
  */
-async function pbkdf2(pw, salt, iter = 1000000, outsize = 64) {
+export async function pbkdf2(pw, salt, iter = 1000000, outsize = 64) {
     const passBytes = toU8(pw);
     const saltBytes = toU8(salt);
 
@@ -231,7 +232,7 @@ async function pbkdf2(pw, salt, iter = 1000000, outsize = 64) {
  * @param {Uint8Array|string} salt - Salt (Optional, but recommended)
  * @returns {Promise<string>} Encoded hash string
  */
-async function argon2Hash(pw, salt = null) {
+export async function argon2Hash(pw, salt = null) {
     const pwBuf = toU8(pw);
     const saltBuf = salt ? toU8(salt) : undefined;
     const type = isNode ? deps.argon2.argon2id : deps.argon2.Argon2id;
@@ -272,7 +273,7 @@ async function argon2Hash(pw, salt = null) {
  * @param {Uint8Array|string} pw - Password (or binary data)
  * @returns {Promise<boolean>}
  */
-async function argon2Verify(hashed, pw) {
+export async function argon2Verify(hashed, pw) {
     const pwBuf = toU8(pw);
     try {
         if (isNode) {
@@ -293,7 +294,7 @@ async function argon2Verify(hashed, pw) {
  * @param {number} size 
  * @returns {Uint8Array}
  */
-function genkey(data, lbl, size) {
+export function genkey(data, lbl, size) {
     const digest = hmac_sha3_512(data, lbl);
     if (size > digest.length) {
         throw new Error("key size too large");
@@ -301,7 +302,116 @@ function genkey(data, lbl, size) {
     return digest.slice(0, size);
 }
 
-// Encrypting Functions (AES1)
+// ========== Symmetric Encryption Master ==========
+export class SymMaster {
+    /**
+     * @param {string} algo - "gcm1" or "gcmx1"
+     * @param {Uint8Array} key - 44 bytes (12B IV + 32B Key)
+     */
+    constructor(algo, key) {
+        this.key = toU8(key);
+        if (algo === "gcm1" || algo === "gcmx1") {
+            this.algo = algo;
+            this.worker = new AES1();
+            if (this.key.length !== 44) {
+                throw new Error("Key length must be 44 bytes (12B IV + 32B Key)");
+            }
+        } else {
+            throw new Error(`Unsupported algorithm: ${algo}`);
+        }
+    }
+
+    /**
+     * Calculate expected output size
+     * @param {number} size 
+     * @returns {number}
+     */
+    AfterSize(size) {
+        if (this.algo === "gcm1") {
+            return size + 16;
+        } else if (this.algo === "gcmx1") {
+            const chunkSize = 1048576;
+            let c = Math.floor(size / chunkSize) + 1;
+            if (size !== 0 && size % chunkSize === 0) {
+                c -= 1;
+            }
+            return size + (16 * c);
+        }
+        return 0;
+    }
+
+    Processed() {
+        return this.worker.processed();
+    }
+
+    /**
+     * Encrypt binary data (Memory)
+     * @param {Uint8Array} data 
+     * @returns {Promise<Uint8Array>}
+     */
+    async EnBin(data) {
+        const d = toU8(data);
+        if (this.algo === "gcm1") {
+            return await this.worker.enAESGCM(this.key, d);
+        } else if (this.algo === "gcmx1") {
+            const reader = new TestReader(d);
+            const writer = new TestWriter();
+            await this.worker.enAESGCMx(this.key, reader, d.length, writer, 1048576);
+            return writer.getValue();
+        }
+    }
+
+    /**
+     * Decrypt binary data (Memory)
+     * @param {Uint8Array} data 
+     * @returns {Promise<Uint8Array>}
+     */
+    async DeBin(data) {
+        const d = toU8(data);
+        if (this.algo === "gcm1") {
+            return await this.worker.deAESGCM(this.key, d);
+        } else if (this.algo === "gcmx1") {
+            const reader = new TestReader(d);
+            const writer = new TestWriter();
+            await this.worker.deAESGCMx(this.key, reader, d.length, writer, 1048576);
+            return writer.getValue();
+        }
+    }
+
+    /**
+     * Encrypt Stream/File
+     * @param {Object} src - Must have async read(size)
+     * @param {number} size - Total size
+     * @param {Object} dst - Must have async write(chunk)
+     */
+    async EnFile(src, size, dst) {
+        if (this.algo === "gcm1") {
+            const data = await src.read(size);
+            const enc = await this.worker.enAESGCM(this.key, data);
+            await dst.write(enc);
+        } else if (this.algo === "gcmx1") {
+            await this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
+        }
+    }
+
+    /**
+     * Decrypt Stream/File
+     * @param {Object} src - Must have async read(size)
+     * @param {number} size - Total size
+     * @param {Object} dst - Must have async write(chunk)
+     */
+    async DeFile(src, size, dst) {
+        if (this.algo === "gcm1") {
+            const data = await src.read(size);
+            const dec = await this.worker.deAESGCM(this.key, data);
+            await dst.write(dec);
+        } else if (this.algo === "gcmx1") {
+            await this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
+        }
+    }
+}
+
+// AES Encryption
 class AES1 {
     constructor() {
         this._processed = 0;
@@ -534,7 +644,59 @@ class AES1 {
     }
 }
 
-// ========== Signing Functions ==========
+// ========== Asymetric Encryption Master ==========
+export class AsymMaster {
+    /**
+     * @param {string} algo - "rsa1", "rsa2", "ecc1"
+     */
+    constructor(algo) {
+        if (algo === "rsa1" || algo === "rsa2") {
+            this.algo = algo;
+            this.worker = new RSA1();
+        } else if (algo === "ecc1") {
+            this.algo = algo;
+            this.worker = new ECC1();
+        } else {
+            throw new Error(`Unsupported algorithm: ${algo}`);
+        }
+    }
+
+    /**
+     * Generate key pair
+     * @returns {Promise<[Uint8Array, Uint8Array]>} [pub, pri]
+     */
+    async Genkey() {
+        if (this.algo === "rsa1") {
+            return await this.worker.genkey(2048);
+        } else if (this.algo === "rsa2") {
+            return await this.worker.genkey(4096);
+        } else if (this.algo === "ecc1") {
+            return await this.worker.genkey();
+        }
+    }
+
+    async Loadkey(publicBuf, privateBuf) {
+        await this.worker.loadkey(publicBuf, privateBuf);
+    }
+
+    async Encrypt(data) {
+        return await this.worker.encrypt(data);
+    }
+
+    async Decrypt(data) {
+        return await this.worker.decrypt(data);
+    }
+
+    async Sign(data) {
+        return await this.worker.sign(data);
+    }
+
+    async Verify(data, signature) {
+        return await this.worker.verify(data, signature);
+    }
+}
+
+// ========== RSA Encryption ==========
 class RSA1 {
     constructor() {
         this.pub = null; // Node: KeyObject, Browser: CryptoKey
@@ -722,13 +884,13 @@ class RSA1 {
     }
 }
 
+// ========== ECC Encryption ==========
 class ECC1 {
     constructor() {
         this.pubX = null; // 56 bytes
         this.priX = null; // 56 bytes
         this.pubEd = null; // 57 bytes
         this.priEd = null; // 57 bytes
-        this.em = new AES1();
         // encryption format: [1B PubLen][PubKey][encdata][tag]
     }
 
@@ -833,7 +995,8 @@ class ECC1 {
 
         // encrypt
         const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 44);
-        const enc = await this.em.enAESGCM(gcmKey, d);
+        let em = new SymMaster("gcm1", gcmKey);
+        const enc = await em.EnBin(d);
 
         // Pack: [1B Len][EphPub][Enc]
         const res = new Uint8Array(1 + ephPubRaw.length + enc.length);
@@ -870,7 +1033,8 @@ class ECC1 {
 
         // decrypt
         const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 44);
-        return await this.em.deAESGCM(gcmKey, enc);
+        let em = new SymMaster("gcm1", gcmKey);
+        return await em.DeBin(enc);
     }
 
     /** 
@@ -903,170 +1067,5 @@ class ECC1 {
         } else {
             return deps.noble.ed448.verify(s, d, this.pubEd);
         }
-    }
-}
-
-// ========== Master Classe ==========
-class SymMaster {
-    /**
-     * @param {string} algo - "gcm1" or "gcmx1"
-     * @param {Uint8Array} key - 44 bytes (12B IV + 32B Key)
-     */
-    constructor(algo, key) {
-        if (algo !== "gcm1" && algo !== "gcmx1") {
-            throw new Error(`Unsupported algorithm: ${algo}`);
-        }
-        this.algo = algo;
-        
-        this.key = toU8(key);
-        if (this.key.length !== 44) {
-            throw new Error("Key length must be 44 bytes (12B IV + 32B Key)");
-        }
-        
-        this.worker = new AES1();
-    }
-
-    /**
-     * Calculate expected output size
-     * @param {number} size 
-     * @returns {number}
-     */
-    aftersize(size) {
-        if (this.algo === "gcm1") {
-            return size + 16;
-        } else if (this.algo === "gcmx1") {
-            const chunkSize = 1048576;
-            let c = Math.floor(size / chunkSize) + 1;
-            if (size !== 0 && size % chunkSize === 0) {
-                c -= 1;
-            }
-            return size + (16 * c);
-        }
-        return 0;
-    }
-
-    processed() {
-        return this.worker.processed();
-    }
-
-    /**
-     * Encrypt binary data (Memory)
-     * @param {Uint8Array} data 
-     * @returns {Promise<Uint8Array>}
-     */
-    async enBin(data) {
-        const d = toU8(data);
-        if (this.algo === "gcm1") {
-            return await this.worker.enAESGCM(this.key, d);
-        } else if (this.algo === "gcmx1") {
-            const reader = new TestReader(d);
-            const writer = new TestWriter();
-            await this.worker.enAESGCMx(this.key, reader, d.length, writer, 1048576);
-            return writer.getValue();
-        }
-    }
-
-    /**
-     * Decrypt binary data (Memory)
-     * @param {Uint8Array} data 
-     * @returns {Promise<Uint8Array>}
-     */
-    async deBin(data) {
-        const d = toU8(data);
-        if (this.algo === "gcm1") {
-            return await this.worker.deAESGCM(this.key, d);
-        } else if (this.algo === "gcmx1") {
-            const reader = new TestReader(d);
-            const writer = new TestWriter();
-            await this.worker.deAESGCMx(this.key, reader, d.length, writer, 1048576);
-            return writer.getValue();
-        }
-    }
-
-    /**
-     * Encrypt Stream/File
-     * @param {Object} src - Must have async read(size)
-     * @param {number} size - Total size
-     * @param {Object} dst - Must have async write(chunk)
-     */
-    async enFile(src, size, dst) {
-        if (this.algo === "gcm1") {
-            const data = await src.read(size);
-            const enc = await this.worker.enAESGCM(this.key, data);
-            await dst.write(enc);
-        } else if (this.algo === "gcmx1") {
-            await this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
-        }
-    }
-
-    /**
-     * Decrypt Stream/File
-     * @param {Object} src - Must have async read(size)
-     * @param {number} size - Total size
-     * @param {Object} dst - Must have async write(chunk)
-     */
-    async deFile(src, size, dst) {
-        if (this.algo === "gcm1") {
-            const data = await src.read(size);
-            const dec = await this.worker.deAESGCM(this.key, data);
-            await dst.write(dec);
-        } else if (this.algo === "gcmx1") {
-            await this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
-        }
-    }
-}
-
-class AsymMaster {
-    /**
-     * @param {string} algo - "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"
-     */
-    constructor(algo) {
-        const validAlgos = ["rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"];
-        if (!validAlgos.includes(algo)) {
-            throw new Error(`Unsupported algorithm: ${algo}`);
-        }
-        this.algo = algo;
-
-        if (this.algo.startsWith("rsa1")) {
-            this.worker = new RSA1();
-        } else if (this.algo === "ecc1") {
-            this.worker = new ECC1();
-        }
-    }
-
-    /**
-     * Generate key pair
-     * @returns {Promise<[Uint8Array, Uint8Array]>} [pub, pri]
-     */
-    async genkey() {
-        if (this.algo === "rsa1" || this.algo === "rsa1-2k") {
-            return await this.worker.genkey(2048);
-        } else if (this.algo === "rsa1-3k") {
-            return await this.worker.genkey(3072);
-        } else if (this.algo === "rsa1-4k") {
-            return await this.worker.genkey(4096);
-        } else if (this.algo === "ecc1") {
-            return await this.worker.genkey();
-        }
-    }
-
-    async loadkey(publicBuf, privateBuf) {
-        await this.worker.loadkey(publicBuf, privateBuf);
-    }
-
-    async encrypt(data) {
-        return await this.worker.encrypt(data);
-    }
-
-    async decrypt(data) {
-        return await this.worker.decrypt(data);
-    }
-
-    async sign(data) {
-        return await this.worker.sign(data);
-    }
-
-    async verify(data, signature) {
-        return await this.worker.verify(data, signature);
     }
 }

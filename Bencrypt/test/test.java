@@ -47,110 +47,106 @@ public class test {
 
     public static void main(String[] args) {
         try {
-            Bencrypt ben = new Bencrypt();
-
             System.out.println("\n===== basic test =====");
-            p(ben.random(16));
-            p(ben.sha3256(new byte[0]));
-            p(ben.sha3512(new byte[0]));
-            p(ben.pbkdf2("0000".getBytes(), "0000000000000000".getBytes(), 0, 0));
-            
-            String tHash = ben.argon2Hash("0000".getBytes(), "0000000000000000".getBytes());
+            Bencrypt b = new Bencrypt();
+            p(b.Random(16));
+            p(Bencrypt.SHA3256(new byte[0]));
+            p(Bencrypt.SHA3512(new byte[0]));
+
+            System.out.println("\n===== basic-adv test =====");
+            p(Bencrypt.pbkdf2("0000".getBytes(), "0000000000000000".getBytes(), 0, 0));
+            String tHash = b.argon2Hash("0000".getBytes(), "0000000000000000".getBytes());
             System.out.println(tHash);
-            System.out.println(ben.argon2Verify(tHash, "0000".getBytes()));
-            p(ben.genkey("0000000000000000".getBytes(), "test", 16));
+            System.out.println(b.argon2Verify(tHash, "0000".getBytes()));
+            p(Bencrypt.genkey("0000000000000000".getBytes(), "test", 16));
 
-            System.out.println("\n===== aes test =====");
+            System.out.println("\n===== sym-gcm1 test =====");
             byte[] plain = repeat("Hello, world!".getBytes(StandardCharsets.UTF_8), 4);
-            byte[] key = repeat("0123".getBytes(StandardCharsets.UTF_8), 11); // 44 bytes
-
-            byte[] enc = ben.enAESGCM(key, plain);
-            p(enc);
-            System.out.println(ben.Processed());
+            byte[] key = repeat("0123".getBytes(StandardCharsets.UTF_8), 11);
+            Bencrypt.SymMaster m = new Bencrypt.SymMaster("gcm1", key);
+            System.out.println("b'" + new String(m.DeBin(m.EnBin(plain)), StandardCharsets.UTF_8) + "' " + m.Processed());
             
-            byte[] dec = ben.deAESGCM(key, enc);
-            System.out.println(new String(dec, StandardCharsets.UTF_8));
-            System.out.println(ben.Processed());
+            byte[] hugePlain = new byte[100000000]; // 100MB
+            ByteArrayInputStream r = new ByteArrayInputStream(hugePlain);
+            ByteArrayOutputStream w = new ByteArrayOutputStream();
+            m.EnFile(r, hugePlain.length, w);
+            byte[] tBytes = w.toByteArray();
+            r = new ByteArrayInputStream(tBytes);
+            w = new ByteArrayOutputStream();
+            m.DeFile(r, tBytes.length, w);
+            System.out.println(Arrays.equals(w.toByteArray(), hugePlain) + " " + m.Processed());
 
-            // Large stream test (100MB)
-            byte[] hugePlain = new byte[100000000]; // 100MB zero-filled
-            ByteArrayInputStream rin = new ByteArrayInputStream(hugePlain);
-            ByteArrayOutputStream wout = new ByteArrayOutputStream();
+            System.out.println("\n===== sym-gcmx1 test =====");
+            m = new Bencrypt.SymMaster("gcmx1", key);
+            System.out.println("b'" + new String(m.DeBin(m.EnBin(plain)), StandardCharsets.UTF_8) + "' " + m.Processed());
             
-            ben.enAESGCMx(key, rin, hugePlain.length, wout, 1048576);
-            byte[] tBytes = wout.toByteArray();
+            r = new ByteArrayInputStream(hugePlain);
+            w = new ByteArrayOutputStream();
+            m.EnFile(r, hugePlain.length, w);
+            tBytes = w.toByteArray();
+            r = new ByteArrayInputStream(tBytes);
+            w = new ByteArrayOutputStream();
+            m.DeFile(r, tBytes.length, w);
+            System.out.println(Arrays.equals(w.toByteArray(), hugePlain) + " " + m.Processed());
+
+            System.out.println("\n===== sym-vsizes test =====");
+            Bencrypt.SymMaster m1 = new Bencrypt.SymMaster("gcm1", key);
+            Bencrypt.SymMaster m2 = new Bencrypt.SymMaster("gcmx1", key);
+            System.out.println(Arrays.equals(m1.DeBin(m1.EnBin(new byte[0])), new byte[0]));
             
-            // Print first 16 bytes (p(t[0:16]))
-            p(Arrays.copyOfRange(tBytes, 0, 16));
-            System.out.println(ben.Processed());
-
-            rin = new ByteArrayInputStream(tBytes);
-            wout = new ByteArrayOutputStream();
-            ben.deAESGCMx(key, rin, tBytes.length, wout, 1048576);
-            System.out.println(ben.Processed());
-            System.out.println(Arrays.equals(wout.toByteArray(), hugePlain));
-
-            // Test various sizes (Edge cases)
-            // Empty string
-            byte[] tEmpty = ben.enAESGCM(key, new byte[0]);
-            System.out.println(Arrays.equals(ben.deAESGCM(key, tEmpty), new byte[0]));
-
-            // Empty stream
-            rin = new ByteArrayInputStream(new byte[0]);
-            wout = new ByteArrayOutputStream();
-            ben.enAESGCMx(key, rin, 0, wout, 1048576);
-            byte[] tStreamEmpty = wout.toByteArray();
+            r = new ByteArrayInputStream(new byte[0]);
+            w = new ByteArrayOutputStream();
+            m2.EnFile(r, 0, w);
+            tBytes = w.toByteArray();
+            r = new ByteArrayInputStream(tBytes);
+            w = new ByteArrayOutputStream();
+            m2.DeFile(r, tBytes.length, w);
+            System.out.println(Arrays.equals(w.toByteArray(), new byte[0]));
             
-            rin = new ByteArrayInputStream(tStreamEmpty);
-            wout = new ByteArrayOutputStream();
-            ben.deAESGCMx(key, rin, tStreamEmpty.length, wout, 1048576);
-            System.out.println(Arrays.equals(wout.toByteArray(), new byte[0]));
+            r = new ByteArrayInputStream(new byte[0]);
+            w = new ByteArrayOutputStream();
+            m2.EnFile(r, 0, w);
+            tBytes = w.toByteArray();
+            r = new ByteArrayInputStream(tBytes);
+            w = new ByteArrayOutputStream();
+            m2.DeFile(r, tBytes.length, w);
+            System.out.println(Arrays.equals(w.toByteArray(), new byte[0]));
+            
+            byte[] plain4M = new byte[1048576 * 4];
+            r = new ByteArrayInputStream(plain4M);
+            w = new ByteArrayOutputStream();
+            m2.EnFile(r, plain4M.length, w);
+            tBytes = w.toByteArray();
+            r = new ByteArrayInputStream(tBytes);
+            w = new ByteArrayOutputStream();
+            m2.DeFile(r, tBytes.length, w);
+            System.out.println(Arrays.equals(w.toByteArray(), plain4M));
 
-            // Exact chunk multiple
-            int size4M = 1048576 * 4;
-            rin = new ByteArrayInputStream(new byte[size4M]);
-            wout = new ByteArrayOutputStream();
-            ben.enAESGCMx(key, rin, size4M, wout, 1048576);
-            byte[] t4M = wout.toByteArray();
+            System.out.println("\n===== asym-rsa test =====");
+            Bencrypt.AsymMaster meRSA = new Bencrypt.AsymMaster("rsa1");
+            meRSA.Genkey();
+            byte[] enc = meRSA.Encrypt(plain);
+            System.out.println(new String(meRSA.Decrypt(enc), StandardCharsets.UTF_8));
+            byte[] sign = meRSA.Sign(plain);
+            System.out.println(meRSA.Verify(plain, sign));
 
-            rin = new ByteArrayInputStream(t4M);
-            wout = new ByteArrayOutputStream();
-            ben.deAESGCMx(key, rin, t4M.length, wout, 1048576);
-            System.out.println(Arrays.equals(wout.toByteArray(), new byte[size4M]));
+            Bencrypt.AsymMaster youRSA = new Bencrypt.AsymMaster("rsa1");
+            youRSA.Loadkey(Base64.getDecoder().decode(pub0), Base64.getDecoder().decode(pri0));
+            p(youRSA.Decrypt(Base64.getDecoder().decode(enc0)));
+            System.out.println(youRSA.Verify("0000".getBytes(), Base64.getDecoder().decode(sign0)));
 
+            System.out.println("\n===== asym-ecc test =====");
+            Bencrypt.AsymMaster meECC = new Bencrypt.AsymMaster("ecc1");
+            meECC.Genkey();
+            enc = meECC.Encrypt(plain);
+            System.out.println(new String(meECC.Decrypt(enc), StandardCharsets.UTF_8));
+            sign = meECC.Sign(plain);
+            System.out.println(meECC.Verify(plain, sign));
 
-            System.out.println("\n===== rsa test =====");
-            Bencrypt me = new Bencrypt();
-            me.RSAgenkey(2048);
-            Bencrypt you = new Bencrypt();
-            you.RSAloadkey(Base64.getDecoder().decode(pub0), Base64.getDecoder().decode(pri0));
-
-            // encrypt, sign
-            byte[] rsaEnc = me.RSAencrypt(plain); // Hello world * 4
-            System.out.println(new String(me.RSAdecrypt(rsaEnc), StandardCharsets.UTF_8));
-            byte[] rsaSig = me.RSAsign(plain);
-            System.out.println(me.RSAverify(plain, rsaSig));
-
-            // Interop: decrypt enc0, verify sign0
-            p(you.RSAdecrypt(Base64.getDecoder().decode(enc0))); // Should be "0000" (48 48 48 48)
-            System.out.println(you.RSAverify("0000".getBytes(), Base64.getDecoder().decode(sign0)));
-
-
-            System.out.println("\n===== ecc test =====");
-            me = new Bencrypt();
-            me.ECCgenkey();
-            you = new Bencrypt();
-            you.ECCloadkey(Base64.getDecoder().decode(pub1), Base64.getDecoder().decode(pri1));
-
-            // encrypt, sign
-            byte[] eccEnc = me.ECCencrypt(plain); // Hello world * 4
-            System.out.println(new String(me.ECCdecrypt(eccEnc), StandardCharsets.UTF_8));
-            byte[] eccSig = me.ECCsign(plain);
-            System.out.println(me.ECCverify(plain, eccSig));
-
-            // Interop: decrypt enc1, verify sign1
-            p(you.ECCdecrypt(Base64.getDecoder().decode(enc1))); // Should be "0000"
-            System.out.println(you.ECCverify("0000".getBytes(), Base64.getDecoder().decode(sign1)));
+            Bencrypt.AsymMaster youECC = new Bencrypt.AsymMaster("ecc1");
+            youECC.Loadkey(Base64.getDecoder().decode(pub1), Base64.getDecoder().decode(pri1));
+            p(youECC.Decrypt(Base64.getDecoder().decode(enc1)));
+            System.out.println(youECC.Verify("0000".getBytes(), Base64.getDecoder().decode(sign1)));
 
         } catch (Exception e) {
             e.printStackTrace();

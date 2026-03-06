@@ -1,16 +1,12 @@
-// go mod init example.com
-// go mod tidy
-// go run test.go
-
-package main
+// go test
+package Bencrypt
 
 import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
 	"strings"
-
-	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
+	"testing"
 )
 
 const (
@@ -32,155 +28,156 @@ func b64d(s string) []byte {
 	return b
 }
 
-func main() {
+func p(d []byte) {
+	if d == nil {
+		return
+	}
+	for _, b := range d {
+		fmt.Printf("%d ", b)
+	}
+	fmt.Println("\n====================")
+}
+
+func TestMain(t *testing.T) {
 	// ===== basic test =====
 	fmt.Println("\n===== basic test =====")
-	fmt.Println(Bencrypt.Random(16))
-	fmt.Println(Bencrypt.Sha3256([]byte{}))
-	fmt.Println(Bencrypt.Sha3512([]byte{}))
-	fmt.Println(Bencrypt.Pbkdf2([]byte("0000"), []byte("0000000000000000"), 0, 0)) // 0 uses default iter/size
+	p(Random(16))
+	p(SHA3256([]byte{}))
+	p(SHA3512([]byte{}))
 
-	t := Bencrypt.Argon2Hash([]byte("0000"), []byte("0000000000000000"))
-	fmt.Println(t)
-	fmt.Println(Bencrypt.Argon2Verify(t, []byte("0000")))
+	// ===== basic-adv test =====
+	fmt.Println("\n===== basic-adv test =====")
+	p(Pbkdf2([]byte("0000"), []byte("0000000000000000"), 0, 0))
 
-	k, _ := Bencrypt.Genkey([]byte("0000000000000000"), "test", 16)
-	fmt.Println(k)
+	tHash := Argon2Hash([]byte("0000"), []byte("0000000000000000"))
+	fmt.Println(tHash)
+	fmt.Println(Argon2Verify(tHash, []byte("0000")))
 
-	// ===== aes test =====
-	fmt.Println("\n===== aes test =====")
+	gk, _ := Genkey([]byte("0000000000000000"), "test", 16)
+	p(gk)
+
+	// ===== sym-gcm1 test =====
+	fmt.Println("\n===== sym-gcm1 test =====")
 	plain := []byte(strings.Repeat("Hello, world!", 4))
-	keyBytes := []byte(strings.Repeat("0123", 11))
-	var key [44]byte
-	copy(key[:], keyBytes)
+	keyBytes := []byte(strings.Repeat("0123", 11)) // 44 bytes
 
-	m := Bencrypt.AES1{}
-	m.Init() // Ensure processed is 0
+	m := new(SymMaster)
+	m.Init("gcm1", keyBytes)
 
-	// EnAESGCM
-	enc, err := m.EnAESGCM(key, plain)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(enc)
-	fmt.Println(m.Processed())
+	enc, _ := m.EnBin(plain)
+	dec, _ := m.DeBin(enc)
+	fmt.Printf("b'%s' %d\n", string(dec), m.Processed())
 
-	// DeAESGCM
-	dec, err := m.DeAESGCM(key, enc)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(dec))
-	fmt.Println(m.Processed())
-
-	// EnAESGCMx (Streaming)
-	plainLarge := make([]byte, 100000000) // 100MB
-	r := bytes.NewReader(plainLarge)
+	hugePlain := make([]byte, 100000000) // 100MB zero-filled
+	r := bytes.NewReader(hugePlain)
 	w := new(bytes.Buffer)
-	err = m.EnAESGCMx(key, r, int64(len(plainLarge)), w, 0) // 0 for default chunk size
-	if err != nil {
-		panic(err)
-	}
-	tBytes := w.Bytes()
-	fmt.Println(tBytes[0:16])
-	fmt.Println(m.Processed())
+	m.EnFile(r, int64(len(hugePlain)), w)
 
-	// DeAESGCMx (Streaming)
+	tBytes := w.Bytes()
 	r = bytes.NewReader(tBytes)
 	w = new(bytes.Buffer)
-	err = m.DeAESGCMx(key, r, int64(len(tBytes)), w, 0)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(m.Processed())
-	fmt.Println(bytes.Equal(w.Bytes(), plainLarge))
+	m.DeFile(r, int64(len(tBytes)), w)
 
-	// Test various sizes
-	// Empty EnAESGCM
-	tBytes, _ = m.EnAESGCM(key, []byte{})
-	dec, _ = m.DeAESGCM(key, tBytes)
-	fmt.Println(bytes.Equal(dec, []byte{}))
+	fmt.Printf("%v %d\n", bytes.Equal(w.Bytes(), hugePlain), m.Processed())
 
-	// Empty Streaming
+	// ===== sym-gcmx1 test =====
+	fmt.Println("\n===== sym-gcmx1 test =====")
+	mx := new(SymMaster)
+	mx.Init("gcmx1", keyBytes)
+
+	encX, _ := mx.EnBin(plain)
+	decX, _ := mx.DeBin(encX)
+	fmt.Printf("b'%s' %d\n", string(decX), mx.Processed())
+
+	r = bytes.NewReader(hugePlain)
+	w = new(bytes.Buffer)
+	mx.EnFile(r, int64(len(hugePlain)), w)
+
+	tBytesX := w.Bytes()
+	r = bytes.NewReader(tBytesX)
+	w = new(bytes.Buffer)
+	mx.DeFile(r, int64(len(tBytesX)), w)
+
+	fmt.Printf("%v %d\n", bytes.Equal(w.Bytes(), hugePlain), mx.Processed())
+
+	// ===== sym-vsizes test =====
+	fmt.Println("\n===== sym-vsizes test =====")
+	m1 := new(SymMaster)
+	m1.Init("gcm1", keyBytes)
+	m2 := new(SymMaster)
+	m2.Init("gcmx1", keyBytes)
+
+	encE, _ := m1.EnBin([]byte{})
+	decE, _ := m1.DeBin(encE)
+	fmt.Println(bytes.Equal(decE, []byte{}))
+
 	r = bytes.NewReader([]byte{})
 	w = new(bytes.Buffer)
-	m.EnAESGCMx(key, r, 0, w, 0)
-	tBytes = w.Bytes()
-	r = bytes.NewReader(tBytes)
+	m2.EnFile(r, 0, w)
+	tBytesV := w.Bytes()
+	r = bytes.NewReader(tBytesV)
 	w = new(bytes.Buffer)
-	m.DeAESGCMx(key, r, int64(len(tBytes)), w, 0)
+	m2.DeFile(r, int64(len(tBytesV)), w)
 	fmt.Println(bytes.Equal(w.Bytes(), []byte{}))
 
-	// 4MiB Streaming
+	r = bytes.NewReader([]byte{})
+	w = new(bytes.Buffer)
+	m2.EnFile(r, 0, w)
+	tBytesV = w.Bytes()
+	r = bytes.NewReader(tBytesV)
+	w = new(bytes.Buffer)
+	m2.DeFile(r, int64(len(tBytesV)), w)
+	fmt.Println(bytes.Equal(w.Bytes(), []byte{}))
+
 	plain4MB := make([]byte, 1048576*4)
 	r = bytes.NewReader(plain4MB)
 	w = new(bytes.Buffer)
-	m.EnAESGCMx(key, r, int64(len(plain4MB)), w, 0)
-	tBytes = w.Bytes()
-	r = bytes.NewReader(tBytes)
+	m2.EnFile(r, int64(len(plain4MB)), w)
+	tBytesV = w.Bytes()
+	r = bytes.NewReader(tBytesV)
 	w = new(bytes.Buffer)
-	m.DeAESGCMx(key, r, int64(len(tBytes)), w, 0)
+	m2.DeFile(r, int64(len(tBytesV)), w)
 	fmt.Println(bytes.Equal(w.Bytes(), plain4MB))
 
-	// ===== rsa test =====
-	fmt.Println("\n===== rsa test =====")
-	me0 := Bencrypt.RSA1{}
-	me0.Genkey(2048)
-	you0 := Bencrypt.RSA1{}
-	you0.Loadkey(b64d(pub0), b64d(pri0))
+	// ===== asym-rsa test =====
+	fmt.Println("\n===== asym-rsa test =====")
+	meRSA := new(AsymMaster)
+	meRSA.Init("rsa1")
+	meRSA.Genkey()
 
-	enc, err = me0.Encrypt([]byte(strings.Repeat("Hello, world!", 4)))
-	if err != nil {
-		panic(err)
-	}
-	dec, err = me0.Decrypt(enc)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(dec))
-	enc, err = me0.Sign([]byte(strings.Repeat("Hello, world!", 4)))
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(me0.Verify([]byte(strings.Repeat("Hello, world!", 4)), enc))
+	youRSA := new(AsymMaster)
+	youRSA.Init("rsa1")
+	youRSA.Loadkey(b64d(pub0), b64d(pri0))
 
-	// Compatibility Check (Decrypt enc0, Verify sign0)
-	dec, err = you0.Decrypt(b64d(enc0))
-	if err != nil {
-		fmt.Println("Decrypt Error:", err)
-	} else {
-		fmt.Println(dec)
-	}
-	fmt.Println(you0.Verify([]byte("0000"), b64d(sign0)))
+	encR, _ := meRSA.Encrypt(plain)
+	decR, _ := meRSA.Decrypt(encR)
+	fmt.Println(string(decR))
 
-	// ===== ecc test =====
-	fmt.Println("\n===== ecc test =====")
-	me1 := Bencrypt.ECC1{}
-	me1.Genkey()
-	you1 := Bencrypt.ECC1{}
-	you1.Loadkey(b64d(pub1), b64d(pri1))
+	signR, _ := meRSA.Sign(plain)
+	fmt.Println(meRSA.Verify(plain, signR))
 
-	enc, err = me1.Encrypt([]byte(strings.Repeat("Hello, world!", 4)))
-	if err != nil {
-		panic(err)
-	}
-	dec, err = me1.Decrypt(enc)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(dec))
-	enc, err = me1.Sign([]byte(strings.Repeat("Hello, world!", 4)))
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(me1.Verify([]byte(strings.Repeat("Hello, world!", 4)), enc))
+	decY, _ := youRSA.Decrypt(b64d(enc0))
+	p(decY)
+	fmt.Println(youRSA.Verify([]byte("0000"), b64d(sign0)))
 
-	// Compatibility Check (Decrypt enc1, Verify sign1)
-	dec, err = you1.Decrypt(b64d(enc1))
-	if err != nil {
-		fmt.Println("Decrypt Error:", err)
-	} else {
-		fmt.Println(dec)
-	}
-	fmt.Println(you1.Verify([]byte("0000"), b64d(sign1)))
+	// ===== asym-ecc test =====
+	fmt.Println("\n===== asym-ecc test =====")
+	meECC := new(AsymMaster)
+	meECC.Init("ecc1")
+	meECC.Genkey()
+
+	youECC := new(AsymMaster)
+	youECC.Init("ecc1")
+	youECC.Loadkey(b64d(pub1), b64d(pri1))
+
+	encE2, _ := meECC.Encrypt(plain)
+	decE2, _ := meECC.Decrypt(encE2)
+	fmt.Println(string(decE2))
+
+	signE2, _ := meECC.Sign(plain)
+	fmt.Println(meECC.Verify(plain, signE2))
+
+	decY2, _ := youECC.Decrypt(b64d(enc1))
+	p(decY2)
+	fmt.Println(youECC.Verify([]byte("0000"), b64d(sign1)))
 }

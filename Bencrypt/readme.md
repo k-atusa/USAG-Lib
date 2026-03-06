@@ -8,71 +8,59 @@ options
 - gcm1
 - gcmx1
 - rsa1
-- rsa1-2k
-- rsa1-3k
-- rsa1-4k
+- rsa2
 - ecc1
 
 #### python
 ```py
 class SymMaster:
     def __init__(algo: str, key: bytes) -> None
-    def aftersize(size: int) -> int
-    def processed() -> int
-    def enBin(data: bytes) -> bytes
-    def deBin(data: bytes) -> bytes
-    def enFile(src: io.IOBase, size: int, dst: io.IOBase) -> None
-    def deFile(src: io.IOBase, size: int, dst: io.IOBase) -> None
+    def AfterSize(size: int) -> int
+    def Processed() -> int
+    def EnBin(data: bytes) -> bytes
+    def DeBin(data: bytes) -> bytes
+    def EnFile(src: io.IOBase, size: int, dst: io.IOBase) -> None
+    def DeFile(src: io.IOBase, size: int, dst: io.IOBase) -> None
 
 class AsymMaster:
     def __init__(algo: str) -> None
-    def genkey() -> Tuple[bytes, bytes]
-    def loadkey(public: bytes | None, private: bytes | None)
-    def encrypt(data: bytes) -> bytes
-    def decrypt(data: bytes) -> bytes
-    def sign(data: bytes) -> bytes
-    def verify(data: bytes, signature: bytes) -> bool
+    def Genkey() -> Tuple[bytes, bytes]
+    def Loadkey(public: bytes | None, private: bytes | None)
+    def Encrypt(data: bytes) -> bytes
+    def Decrypt(data: bytes) -> bytes
+    def Sign(data: bytes) -> bytes
+    def Verify(data: bytes, signature: bytes) -> bool
 
-def random(size: int) -> bytes
-def sha3256(data: bytes) -> bytes
-def sha3512(data: bytes) -> bytes
-def pbkdf2(pw: bytes, salt: bytes, iter: int, outsize: int) -> bytes
-def argon2Hash(pw: bytes, salt: bytes = None) -> str
-def argon2Verify(hashed: str, pw: bytes) -> bool
-def genkey(data: bytes, lbl: str, size: int) -> bytes
+def Random(size: int) -> bytes
+def SHA3256(data: bytes) -> bytes
+def SHA3512(data: bytes) -> bytes
 ```
 
 #### javascript
 ```js
-function InitBencrypt() // Initialize (Required)
-
 class SymMaster {
     constructor(algo: string, key: Uint8Array)
-    aftersize(size: number): number
-    processed(): number
-    async function enBin(data): Promise<Uint8Array>
-    async function deBin(data): Promise<Uint8Array>
-    async function enFile(src, size, dst)
-    async function deFile(src, size, dst)
+    AfterSize(size: number): number
+    Processed(): number
+    async function EnBin(data): Promise<Uint8Array>
+    async function DeBin(data): Promise<Uint8Array>
+    async function EnFile(src, size, dst)
+    async function DeFile(src, size, dst)
 }
 
 class AsymMaster {
     constructor(algo: string)
-    async function genkey(): Promise<[Uint8Array, Uint8Array]>
-    async function loadkey(pub, pri)
-    async function encrypt(data): Promise<Uint8Array>
-    async function decrypt(data): Promise<Uint8Array>
-    async function sign(data): Promise<Uint8Array>
-    async function verify(data, signature): Promise<boolean>
+    async function Genkey(): Promise<[Uint8Array, Uint8Array]>
+    async function Loadkey(pub, pri)
+    async function Encrypt(data): Promise<Uint8Array>
+    async function Decrypt(data): Promise<Uint8Array>
+    async function Sign(data): Promise<Uint8Array>
+    async function Verify(data, signature): Promise<boolean>
 }
 
-function random(size: number): Uint8Array
-function sha3256(data: Uint8Array | string): Uint8Array
-function sha3512(data: Uint8Array | string): Uint8Array
-async function pbkdf2(pw, salt, iter, outsize): Promise<Uint8Array>
-async function argon2Hash(pw, salt): Promise<string>
-async function argon2Verify(hashed, pw): Promise<boolean>
-function genkey(data, lbl, size): Uint8Array
+function Random(size: number): Uint8Array
+function SHA3256(data: Uint8Array | string): Uint8Array
+function SHA3512(data: Uint8Array | string): Uint8Array
 ```
 
 #### golang
@@ -98,12 +86,8 @@ struct AsymMaster {
 }
 
 func Random(size int) []byte
-func Sha3256(data []byte) []byte
-func Sha3512(data []byte) []byte
-func Pbkdf2(pw []byte, salt []byte, iter int, outsize int) []byte
-func Argon2Hash(pw []byte, salt []byte) string
-func Argon2Verify(hashed string, pw []byte) bool
-func Genkey(data []byte, lbl string, size int) ([]byte, error)
+func SHA3256(data []byte) []byte
+func SHA3512(data []byte) []byte
 ```
 
 #### java
@@ -111,32 +95,28 @@ func Genkey(data []byte, lbl string, size int) ([]byte, error)
 class Bencrypt {
     static class SymMaster {
         SymMaster(String algo, byte[] key)
-        long aftersize(long size)
-        long processed()
-        byte[] enBin(byte[] data)
-        byte[] deBin(byte[] data)
-        void enFile(InputStream src, long size, OutputStream dst)
-        void deFile(InputStream src, long size, OutputStream dst)
+        long AfterSize(long size)
+        long Processed()
+        byte[] EnBin(byte[] data)
+        byte[] DeBin(byte[] data)
+        void EnFile(InputStream src, long size, OutputStream dst)
+        void DeFile(InputStream src, long size, OutputStream dst)
     }
 
     static class AsymMaster {
         AsymMaster(String algo)
-        byte[][] genkey()
-        void loadkey(byte[] pubBytes, byte[] priBytes)
-        byte[] encrypt(byte[] data)
-        byte[] decrypt(byte[] data)
-        byte[] sign(byte[] data)
-        boolean verify(byte[] data, byte[] signature)
+        byte[][] Genkey()
+        void Loadkey(byte[] pubBytes, byte[] priBytes)
+        byte[] Encrypt(byte[] data)
+        byte[] Decrypt(byte[] data)
+        byte[] Sign(byte[] data)
+        boolean Verify(byte[] data, byte[] signature)
     }
 
     // Basic Functions
-    byte[] random(int size)
-    static byte[] sha3256(byte[] data)
-    static byte[] sha3512(byte[] data)
-    static byte[] pbkdf2(byte[] pw, byte[] salt, int iter, int outsize)
-    String argon2Hash(byte[] pw, byte[] salt)
-    boolean argon2Verify(String hashed, byte[] pw)
-    static byte[] genkey(byte[] data, String lbl, int size)
+    byte[] Random(int size)
+    static byte[] SHA3256(byte[] data)
+    static byte[] SHA3512(byte[] data)
 }
 ```
 
@@ -168,8 +148,8 @@ GCMx mode: Divides input into 1MiB chunks and applies independent IVs (Base IV[4
 
 #### RSA
 
-- 지원 비트: 2048, 3072, 4096
-​Supported bits: 2048, 3072, 4096
+- 지원 비트: 2048, 4096
+​Supported bits: 2048, 4096
 - 키 형식: 공개키(PKIX-DER), 개인키(PKCS8-DER) 형식의 바이트 배열입니다.
 Key format: Byte arrays in Public Key (PKIX-DER) and Private Key (PKCS8-DER) formats.
 - 암호화: `OAEP-SHA-512`를 사용합니다.

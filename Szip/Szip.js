@@ -1,13 +1,12 @@
 // test790b : USAG-Lib szip
 // !!! JS version is  not designed for big data !!!
 const isNode = (typeof window === 'undefined');
-const fs = isNode ? require('fs') : null;
+const fs = isNode ? (await import('fs')).default : null;
 const JSZip = isNode ? (await import('jszip')).default : (await import('https://cdn.skypack.dev/jszip')).default;
 
 export class ZipWriter { // Zip64 Writer
     /**
      * @param {string} output set empty for memory, filepath(Node) or filename(Browser)
-     * @param {Uint8Array} header custom header
      * @param {boolean} compress compress flag
     */
     constructor(output, compress) {

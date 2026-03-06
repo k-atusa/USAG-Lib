@@ -28,13 +28,13 @@ def mkiv(g: bytes, c: int) -> bytearray:
     return g
 
 # ========== Basic Functions ==========
-def random(size: int) -> bytes:
+def Random(size: int) -> bytes:
     return secrets.token_bytes(size)
 
-def sha3256(data: bytes) -> bytes:
+def SHA3256(data: bytes) -> bytes:
     return hashlib.sha3_256(data).digest()
 
-def sha3512(data: bytes) -> bytes:
+def SHA3512(data: bytes) -> bytes:
     return hashlib.sha3_512(data).digest()
 
 def pbkdf2(pw: bytes, salt: bytes, iter: int = 1000000, outsize: int = 64) -> bytes:
@@ -62,7 +62,61 @@ def genkey(data: bytes, lbl: str, size: int) -> bytes: # HMAC-SHA3-512
         raise ValueError("key size too large")
     return key[:size]
 
-# ========== Encrypting Functions ==========
+# ========== Symmetric Encryption Master ==========
+class SymMaster:
+    def __init__(self, algo: str, key: bytes):
+        if algo not in ["gcm1", "gcmx1"]:
+            raise ValueError(f"Unsupported algorithm: {algo}")
+        self.algo = algo
+        if self.algo == 'gcm1' or self.algo == 'gcmx1':
+            if len(key) != 44:
+                raise ValueError("Key length must be 44 bytes (12B IV + 32B Key)")
+            self.key, self.worker = key, AES1()
+
+    def AfterSize(self, size: int) -> int:
+        if self.algo == "gcm1":
+            return size + 16 # tag size
+        elif self.algo == "gcmx1":
+            c = size // 1048576 + 1
+            if size != 0 and size % 1048576 == 0:
+                c -= 1
+            return size + 16 * c
+        
+    def Processed(self) -> int:
+        if self.algo == 'gcm1' or self.algo == 'gcmx1':
+            return self.worker.processed()
+
+    def EnBin(self, data: bytes) -> bytes:
+        if self.algo == "gcm1":
+            return self.worker.enAESGCM(self.key, data)
+        elif self.algo == "gcmx1":
+            wr = io.BytesIO()
+            self.worker.enAESGCMx(self.key, io.BytesIO(data), len(data), wr)
+            return wr.getvalue()
+
+    def DeBin(self, data: bytes) -> bytes:
+        if self.algo == "gcm1":
+            return self.worker.deAESGCM(self.key, data)
+        elif self.algo == "gcmx1":
+            wr = io.BytesIO()
+            self.worker.deAESGCMx(self.key, io.BytesIO(data), len(data), wr)
+            return wr.getvalue()
+
+    def EnFile(self, src: io.IOBase, size: int, dst: io.IOBase):
+        if self.algo == "gcm1":
+            data = self.worker.enAESGCM(self.key, src.read(size))
+            dst.write(data)
+        elif self.algo == "gcmx1":
+            self.worker.enAESGCMx(self.key, src, size, dst)
+
+    def DeFile(self, src: io.IOBase, size: int, dst: io.IOBase):
+        if self.algo == "gcm1":
+            data = self.worker.deAESGCM(self.key, src.read(size))
+            dst.write(data)
+        elif self.algo == "gcmx1":
+            self.worker.deAESGCMx(self.key, src, size, dst)
+
+# ========== AES Encryption ==========
 class AES1:
     def __init__(self):
         self._processed: int = 0
@@ -136,7 +190,46 @@ class AES1:
             dst.write(plaintext)
             with self._lock: self._processed += size % (chunkSize + 16)
 
-# ========== Signing Functions ==========
+# ========== Asymmetric Encryption Master ==========
+class AsymMaster:
+    def __init__(self, algo: str):
+        if algo not in ["rsa1", "rsa2", "ecc1"]:
+            raise ValueError(f"Unsupported algorithm: {algo}")
+        self.algo = algo
+        if self.algo == 'rsa1' or self.algo == 'rsa2':
+            self.worker = RSA1()
+        elif self.algo == 'ecc1':
+            self.worker = ECC1()
+
+    def Genkey(self) -> Tuple[bytes, bytes]:
+        if self.algo == 'rsa1':
+            return self.worker.genkey(2048)
+        elif self.algo == 'rsa2':
+            return self.worker.genkey(4096)
+        elif self.algo == 'ecc1':
+            return self.worker.genkey()
+
+    def Loadkey(self, public: bytes|None, private: bytes|None):
+        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+            self.worker.loadkey(public, private)
+
+    def Encrypt(self, data: bytes) -> bytes:
+        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+            return self.worker.encrypt(data)
+
+    def Decrypt(self, data: bytes) -> bytes:
+        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+            return self.worker.decrypt(data)
+
+    def Sign(self, data: bytes) -> bytes:
+        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+            return self.worker.sign(data)
+
+    def Verify(self, data: bytes, signature: bytes) -> bool:
+        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+            return self.worker.verify(data, signature)
+
+# ========== RSA Encryption ==========
 class RSA1:
     def __init__(self):
         self.public: Optional[RSA.RsaKey] = None
@@ -174,13 +267,13 @@ class RSA1:
         except (ValueError, TypeError):
             return False
 
+# ========== ECC Encryption ==========
 class ECC1: # Curve448
     def __init__(self):
         self.pubX: Optional[x448.X448PublicKey] = None
         self.priX: Optional[x448.X448PrivateKey] = None
         self.pubEd: Optional[ed448.Ed448PublicKey] = None
         self.priEd: Optional[ed448.Ed448PrivateKey] = None
-        self.em = AES1()
         # encryption format: [1B PubLen][PubKey][encdata][tag]
 
     def genkey(self) -> Tuple[bytes, bytes]: # [X448 56B][Ed448 57B] format, (public, private)
@@ -214,7 +307,7 @@ class ECC1: # Curve448
         tempPub = tempKey.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
         shared = tempKey.exchange(self.pubX) # 2. Get shared secret (ECDH)
         gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
-        enc = self.em.enAESGCM(gcmKey, data) # 3. Encrypt with AES-GCM
+        enc = SymMaster("gcm1", gcmKey).EnBin(data) # 3. Encrypt with AES-GCM
         return len(tempPub).to_bytes(1, 'big') + tempPub + enc
 
     def decrypt(self, data: bytes) -> bytes:
@@ -229,7 +322,7 @@ class ECC1: # Curve448
 
         # 3. Decrypt with AES-GCM
         gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
-        return self.em.deAESGCM(gcmKey, enc)
+        return SymMaster("gcm1", gcmKey).DeBin(enc)
 
     def sign(self, data: bytes) -> bytes: # Ed448
         return self.priEd.sign(data)
@@ -240,95 +333,3 @@ class ECC1: # Curve448
             return True
         except:
             return False
-        
-# ========== Master Class ==========
-class SymMaster:
-    def __init__(self, algo: str, key: bytes):
-        if algo not in ["gcm1", "gcmx1"]:
-            raise ValueError(f"Unsupported algorithm: {algo}")
-        self.algo = algo
-        if len(key) != 44:
-            raise ValueError("Key length must be 44 bytes (12B IV + 32B Key)")
-        self.key = key
-        if self.algo == 'gcm1':
-            self.worker = AES1()
-        elif self.algo == 'gcmx1':
-            self.worker = AES1()
-
-    def aftersize(self, size: int) -> int:
-        if self.algo == "gcm1":
-            return size + 16 # tag size
-        elif self.algo == "gcmx1":
-            c = size // 1048576 + 1
-            if size != 0 and size % 1048576 == 0:
-                c -= 1
-            return size + 16 * c
-        
-    def processed(self) -> int:
-        return self.worker.processed()
-
-    def enBin(self, data: bytes) -> bytes:
-        if self.algo == "gcm1":
-            return self.worker.enAESGCM(self.key, data)
-        elif self.algo == "gcmx1":
-            wr = io.BytesIO()
-            self.worker.enAESGCMx(self.key, io.BytesIO(data), len(data), wr)
-            return wr.getvalue()
-
-    def deBin(self, data: bytes) -> bytes:
-        if self.algo == "gcm1":
-            return self.worker.deAESGCM(self.key, data)
-        elif self.algo == "gcmx1":
-            wr = io.BytesIO()
-            self.worker.deAESGCMx(self.key, io.BytesIO(data), len(data), wr)
-            return wr.getvalue()
-
-    def enFile(self, src: io.IOBase, size: int, dst: io.IOBase):
-        if self.algo == "gcm1":
-            data = self.worker.enAESGCM(self.key, src.read(size))
-            dst.write(data)
-        elif self.algo == "gcmx1":
-            self.worker.enAESGCMx(self.key, src, size, dst)
-
-    def deFile(self, src: io.IOBase, size: int, dst: io.IOBase):
-        if self.algo == "gcm1":
-            data = self.worker.deAESGCM(self.key, src.read(size))
-            dst.write(data)
-        elif self.algo == "gcmx1":
-            self.worker.deAESGCMx(self.key, src, size, dst)
-
-
-class AsymMaster:
-    def __init__(self, algo: str):
-        if algo not in ["rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"]:
-            raise ValueError(f"Unsupported algorithm: {algo}")
-        self.algo = algo
-        if self.algo == 'rsa1' or self.algo == 'rsa1-2k' or self.algo == 'rsa1-3k' or self.algo == 'rsa1-4k':
-            self.worker = RSA1()
-        elif self.algo == 'ecc1':
-            self.worker = ECC1()
-
-    def genkey(self) -> Tuple[bytes, bytes]:
-        if self.algo == 'rsa1' or self.algo == 'rsa1-2k':
-            return self.worker.genkey(2048)
-        elif self.algo == 'rsa1-3k':
-            return self.worker.genkey(3072)
-        elif self.algo == 'rsa1-4k':
-            return self.worker.genkey(4096)
-        elif self.algo == 'ecc1':
-            return self.worker.genkey()
-
-    def loadkey(self, public: bytes|None, private: bytes|None):
-        self.worker.loadkey(public, private)
-
-    def encrypt(self, data: bytes) -> bytes:
-        return self.worker.encrypt(data)
-
-    def decrypt(self, data: bytes) -> bytes:
-        return self.worker.decrypt(data)
-
-    def sign(self, data: bytes) -> bytes:
-        return self.worker.sign(data)
-
-    def verify(self, data: bytes, signature: bytes) -> bool:
-        return self.worker.verify(data, signature)

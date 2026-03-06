@@ -81,13 +81,13 @@ public class Bencrypt {
         return Base64.getDecoder().decode(padded);
     }
 
-    public byte[] random(int size) {
+    public byte[] Random(int size) {
         byte[] bytes = new byte[size];
         this.randSrc.nextBytes(bytes);
         return bytes;
     }
 
-    public static byte[] sha3256(byte[] data) {
+    public static byte[] SHA3256(byte[] data) {
         SHA3Digest digest = new SHA3Digest(256);
         byte[] result = new byte[digest.getDigestSize()];
         digest.update(data, 0, data.length);
@@ -95,7 +95,7 @@ public class Bencrypt {
         return result;
     }
 
-    public static byte[] sha3512(byte[] data) {
+    public static byte[] SHA3512(byte[] data) {
         SHA3Digest digest = new SHA3Digest(512);
         byte[] result = new byte[digest.getDigestSize()];
         digest.update(data, 0, data.length);
@@ -119,7 +119,7 @@ public class Bencrypt {
     // Len=32, Salt=16
     public String argon2Hash(byte[] pw, byte[] salt) {
         if (salt == null) {
-            salt = this.random(16);
+            salt = this.Random(16);
         }
         Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                 .withVersion(Argon2Parameters.ARGON2_VERSION_13)
@@ -196,7 +196,95 @@ public class Bencrypt {
         return Arrays.copyOf(result, size);
     }
 
-    // ========== AES1 Functions ==========
+    // ========== Symmetric Encryption Master ==========
+    public static class SymMaster {
+        private String algo;
+        private byte[] key;
+        private Bencrypt.AES1 worker;
+
+        /**
+         * @param algo "gcm1" or "gcmx1"
+         * @param key  44 bytes (12B IV + 32B Key)
+         */
+        public SymMaster(String algo, byte[] key) {
+            if (!algo.equals("gcm1") && !algo.equals("gcmx1")) {
+                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
+            }
+            if (key.length != 44) {
+                throw new IllegalArgumentException("Key length must be 44 bytes (12B IV + 32B Key)");
+            }
+            this.algo = algo;
+            this.key = key;
+            this.worker = new Bencrypt.AES1();
+        }
+
+        // Calculate expected output size
+        public long AfterSize(long size) {
+            if (this.algo.equals("gcm1")) {
+                return size + 16;
+            } else if (this.algo.equals("gcmx1")) {
+                long chunkSize = 1048576;
+                long c = size / chunkSize + 1;
+                if (size != 0 && size % chunkSize == 0) {
+                    c -= 1;
+                }
+                return size + (16 * c);
+            }
+            return 0;
+        }
+
+        public long Processed() {
+            return this.worker.Processed();
+        }
+
+        // Encrypt binary data (Memory)
+        public byte[] EnBin(byte[] data) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                return this.worker.enAESGCM(this.key, data);
+            } else {
+                java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                this.worker.enAESGCMx(this.key, in, data.length, out, 1048576);
+                return out.toByteArray();
+            }
+        }
+
+        // Decrypt binary data (Memory)
+        public byte[] DeBin(byte[] data) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                return this.worker.deAESGCM(this.key, data);
+            } else {
+                java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                this.worker.deAESGCMx(this.key, in, data.length, out, 1048576);
+                return out.toByteArray();
+            }
+        }
+
+        // Encrypt Stream/File
+        public void EnFile(InputStream src, long size, OutputStream dst) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                byte[] buf = src.readAllBytes();
+                byte[] enc = this.worker.enAESGCM(this.key, buf);
+                dst.write(enc);
+            } else {
+                this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
+            }
+        }
+
+        // Decrypt Stream/File
+        public void DeFile(InputStream src, long size, OutputStream dst) throws Exception {
+            if (this.algo.equals("gcm1")) {
+                byte[] buf = src.readAllBytes();
+                byte[] dec = this.worker.deAESGCM(this.key, buf);
+                dst.write(dec);
+            } else {
+                this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
+            }
+        }
+    }
+
+    // ========== AES Encryption ==========
     public static class AES1 {
         private final AtomicLong processed = new AtomicLong(0);
 
@@ -354,7 +442,84 @@ public class Bencrypt {
         }
     }
 
-    // ========== RSA1 Functions ==========
+    // ========== Asymmetric Encryption Master ==========
+    public static class AsymMaster {
+        private String algo;
+        private Bencrypt.RSA1 worker0;
+        private Bencrypt.ECC1 worker1;
+
+        /**
+         * @param algo "rsa1", "rsa2", "ecc1"
+         */
+        public AsymMaster(String algo) {
+            switch (algo) {
+                case "rsa1": case "rsa2":
+                    this.algo = algo;
+                    this.worker0 = new Bencrypt.RSA1();
+                    break;
+                case "ecc1":
+                    this.algo = algo;
+                    this.worker1 = new Bencrypt.ECC1();
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unsupported algorithm: " + algo);
+            }
+        }
+
+        // Generate key pair, {public, private}
+        public byte[][] Genkey() throws Exception {
+            if (this.algo.equals("rsa1")) {
+                return this.worker0.genkey(2048);
+            } else if (this.algo.equals("rsa2")) {
+                return this.worker0.genkey(4096);
+            } else if (this.algo.equals("ecc1")) {
+                return this.worker1.genkey();
+            }
+            return null;
+        }
+
+        public void Loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
+            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
+                this.worker0.loadkey(publicBuf, privateBuf);
+            } else if (this.algo.equals("ecc1")) {
+                this.worker1.loadkey(publicBuf, privateBuf);
+            }
+        }
+
+        public byte[] Encrypt(byte[] data) throws Exception {
+            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
+                return this.worker0.encrypt(data);
+            } else {
+                return this.worker1.encrypt(data);
+            }
+        }
+
+        public byte[] Decrypt(byte[] data) throws Exception {
+            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
+                return this.worker0.decrypt(data);
+            } else {
+                return this.worker1.decrypt(data);
+            }
+        }
+
+        public byte[] Sign(byte[] data) throws Exception {
+            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
+                return this.worker0.sign(data);
+            } else {
+                return this.worker1.sign(data);
+            }
+        }
+
+        public boolean Verify(byte[] data, byte[] signature) {
+            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
+                return this.worker0.verify(data, signature);
+            } else {
+                return this.worker1.verify(data, signature);
+            }
+        }
+    }
+
+    // ========== RSA Encryption ==========
     public static class RSA1 {
         public PublicKey RSApub = null;
         public PrivateKey RSApri = null;
@@ -428,7 +593,7 @@ public class Bencrypt {
         }
     }
 
-    // ========== ECC1 Functions ==========
+    // ========== ECC Encryption ==========
     public static class ECC1 {
         public X448PublicKeyParameters pubX = null;
         public X448PrivateKeyParameters priX = null;
@@ -508,7 +673,7 @@ public class Bencrypt {
             // 3. KDF & Encrypt
             byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
-            byte[] enc = worker.enBin(data);
+            byte[] enc = worker.EnBin(data);
 
             // 4. Pack
             byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
@@ -538,7 +703,7 @@ public class Bencrypt {
             // 4. KDF & Decrypt
             byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
-            return worker.deBin(enc);
+            return worker.DeBin(enc);
         }
 
         // ECC sign: Ed448
@@ -558,192 +723,6 @@ public class Bencrypt {
                 return signer.verifySignature(signature);
             } catch (Exception e) {
                 return false;
-            }
-        }
-    }
-
-    // ========== Master Class ==========
-    public static class SymMaster {
-        private String algo;
-        private byte[] key;
-        private Bencrypt.AES1 worker;
-
-        /**
-         * @param algo "gcm1" or "gcmx1"
-         * @param key  44 bytes (12B IV + 32B Key)
-         */
-        public SymMaster(String algo, byte[] key) {
-            if (!algo.equals("gcm1") && !algo.equals("gcmx1")) {
-                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
-            }
-            if (key.length != 44) {
-                throw new IllegalArgumentException("Key length must be 44 bytes (12B IV + 32B Key)");
-            }
-            this.algo = algo;
-            this.key = key;
-            this.worker = new Bencrypt.AES1();
-        }
-
-        /**
-         * Calculate expected output size
-         */
-        public long aftersize(long size) {
-            if (this.algo.equals("gcm1")) {
-                return size + 16;
-            } else if (this.algo.equals("gcmx1")) {
-                long chunkSize = 1048576;
-                long c = size / chunkSize + 1;
-                if (size != 0 && size % chunkSize == 0) {
-                    c -= 1;
-                }
-                return size + (16 * c);
-            }
-            return 0;
-        }
-
-        public long processed() {
-            return this.worker.Processed();
-        }
-
-        /**
-         * Encrypt binary data (Memory)
-         */
-        public byte[] enBin(byte[] data) throws Exception {
-            if (this.algo.equals("gcm1")) {
-                return this.worker.enAESGCM(this.key, data);
-            } else {
-                java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
-                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-                this.worker.enAESGCMx(this.key, in, data.length, out, 1048576);
-                return out.toByteArray();
-            }
-        }
-
-        /**
-         * Decrypt binary data (Memory)
-         */
-        public byte[] deBin(byte[] data) throws Exception {
-            if (this.algo.equals("gcm1")) {
-                return this.worker.deAESGCM(this.key, data);
-            } else {
-                java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
-                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-                this.worker.deAESGCMx(this.key, in, data.length, out, 1048576);
-                return out.toByteArray();
-            }
-        }
-
-        /**
-         * Encrypt Stream/File
-         */
-        public void enFile(InputStream src, long size, OutputStream dst) throws Exception {
-            if (this.algo.equals("gcm1")) {
-                byte[] buf = src.readAllBytes();
-                byte[] enc = this.worker.enAESGCM(this.key, buf);
-                dst.write(enc);
-            } else {
-                this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
-            }
-        }
-
-        /**
-         * Decrypt Stream/File
-         */
-        public void deFile(InputStream src, long size, OutputStream dst) throws Exception {
-            if (this.algo.equals("gcm1")) {
-                byte[] buf = src.readAllBytes();
-                byte[] dec = this.worker.deAESGCM(this.key, buf);
-                dst.write(dec);
-            } else {
-                this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
-            }
-        }
-    }
-
-    public static class AsymMaster {
-        private String algo;
-        private Bencrypt.RSA1 worker0;
-        private Bencrypt.ECC1 worker1;
-
-        /**
-         * @param algo "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1"
-         */
-        public AsymMaster(String algo) {
-            String[] valid = { "rsa1", "rsa1-2k", "rsa1-3k", "rsa1-4k", "ecc1" };
-            boolean isValid = false;
-            for (String v : valid) {
-                if (v.equals(algo)) {
-                    isValid = true;
-                    break;
-                }
-            }
-            if (!isValid) {
-                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
-            }
-
-            this.algo = algo;
-            if (this.algo.startsWith("rsa1")) {
-                this.worker0 = new Bencrypt.RSA1();
-            } else if (this.algo.equals("ecc1")) {
-                this.worker1 = new Bencrypt.ECC1();
-            }
-        }
-
-        /**
-         * Generate key pair
-         * 
-         * @return byte[][] {public, private}
-         */
-        public byte[][] genkey() throws Exception {
-            if (this.algo.equals("rsa1") || this.algo.equals("rsa1-2k")) {
-                return this.worker0.genkey(2048);
-            } else if (this.algo.equals("rsa1-3k")) {
-                return this.worker0.genkey(3072);
-            } else if (this.algo.equals("rsa1-4k")) {
-                return this.worker0.genkey(4096);
-            } else if (this.algo.equals("ecc1")) {
-                return this.worker1.genkey();
-            }
-            return null;
-        }
-
-        public void loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
-            if (this.algo.startsWith("rsa1")) {
-                this.worker0.loadkey(publicBuf, privateBuf);
-            } else if (this.algo.equals("ecc1")) {
-                this.worker1.loadkey(publicBuf, privateBuf);
-            }
-        }
-
-        public byte[] encrypt(byte[] data) throws Exception {
-            if (this.algo.startsWith("rsa1")) {
-                return this.worker0.encrypt(data);
-            } else {
-                return this.worker1.encrypt(data);
-            }
-        }
-
-        public byte[] decrypt(byte[] data) throws Exception {
-            if (this.algo.startsWith("rsa1")) {
-                return this.worker0.decrypt(data);
-            } else {
-                return this.worker1.decrypt(data);
-            }
-        }
-
-        public byte[] sign(byte[] data) throws Exception {
-            if (this.algo.startsWith("rsa1")) {
-                return this.worker0.sign(data);
-            } else {
-                return this.worker1.sign(data);
-            }
-        }
-
-        public boolean verify(byte[] data, byte[] signature) {
-            if (this.algo.startsWith("rsa1")) {
-                return this.worker0.verify(data, signature);
-            } else {
-                return this.worker1.verify(data, signature);
             }
         }
     }
