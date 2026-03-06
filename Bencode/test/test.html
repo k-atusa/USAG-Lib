@@ -71,6 +71,7 @@
             } catch (e) {
                 console.error(e);
                 log(`ERROR: ${e.message}`, "red");
+                log(e.stack, "gray");
             }
             log("--- End Test ---", "blue");
         }

@@ -1,6 +1,5 @@
 // javac -encoding UTF-8 Star.java test.java
 // java -cp . test
-
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
@@ -19,34 +18,34 @@ public class test {
             }
 
             // TarWriter
-            Star writer = new Star();
-            writer.openWriter(null); // memory output
+            Star.TarWriter writer = new Star.TarWriter();
+            writer.Open(null); // memory output
 
-            writer.write("test/", (InputStream) null, 0, 0755, true); // write "test/"
+            writer.Write("test/", (InputStream) null, 0, 0755, true); // write "test/"
             String longName = "test/";
-            for (int i = 0; i < 100; i++) longName += "_";
-            longName += "small.bin";
-            writer.write(longName, smallBin, 0644); // write long name
-            writer.write("이진 데이터", "Hello, world!".getBytes(StandardCharsets.UTF_8), 0644); // write binary
+            for (int i = 0; i < 100; i++) longName += "가";
+            longName += "파일.bin";
+            writer.Write(longName, smallBin, 0644); // write long name
+            writer.Write("이진 데이터", "Hello, world!".getBytes(StandardCharsets.UTF_8), 0644); // write binary
 
-            byte[] tarData = writer.closeTar();
+            byte[] tarData = writer.Close();
             try (FileOutputStream fos = new FileOutputStream("test.tar")) {
                 fos.write(tarData); // write to file
             }
             System.out.println("Created test.tar");
 
             // TarReader
-            Star reader = new Star();
-            reader.openReader(new FileInputStream("test.tar"));
+            Star.TarReader reader = new Star.TarReader();
+            reader.Open(new FileInputStream("test.tar"));
 
-            while (reader.next()) {
-                System.out.printf("Name: %s, Size: %d, Mode: %o IsDir: %b\n", reader.name, reader.size, reader.mode, reader.isDir);
-                if (reader.name.equals("이진 데이터")) {
-                    byte[] data = reader.read();
+            while (reader.Next()) {
+                System.out.printf("Name: %s, Size: %d, Mode: %o IsDir: %b\n", reader.Name, reader.Size, reader.Mode, reader.IsDir);
+                if (reader.Name.equals("이진 데이터")) {
+                    byte[] data = reader.Read();
                     System.out.println("Data: " + new String(data, StandardCharsets.UTF_8));
-                } else if (!reader.isDir) {
+                } else if (!reader.IsDir) {
                     FileOutputStream fos = new FileOutputStream("output.bin");
-                    reader.mkfile(fos);
+                    reader.Mkfile(fos);
                     fos.close();
                 }
             }

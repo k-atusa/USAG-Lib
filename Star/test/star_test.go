@@ -26,11 +26,11 @@ func TestMain(t *testing.T) {
 	mw.Init("") // memory output
 
 	mw.WriteDir("test/", 0755) // Dir
-	longName := "test/" + strings.Repeat("_", 100) + "small.bin"
+	longName := "test/" + strings.Repeat("가", 100) + "파일.bin"
 	mw.WriteFile(longName, dummyName, 0644)              // Long File
 	mw.WriteBin("이진 데이터", []byte("Hello, world!"), 0644) // Binary
 
-	tarData := mw.Close()
+	tarData, _ := mw.Close()
 	os.WriteFile("test.tar", tarData, 0644)
 	fmt.Println("Created test.tar")
 

@@ -1,14 +1,9 @@
 // test792b : USAG-Lib star
 // !!! JS version is not designed for big data !!!
+const isNode = (typeof window === 'undefined')
+const fs = isNode ? require('fs') : null
 
-if (typeof isNode === 'undefined') {
-    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
-}
-if (typeof fs === 'undefined' && isNode) {
-    window.fs = require('fs');
-}
-
-class TarWriter {
+export class TarWriter {
     /**
      * @param {string} output set empty for memory, filepath(Node) or filename(Browser)
      */
@@ -24,7 +19,7 @@ class TarWriter {
      * @param {string|Blob|File|Uint8Array} src file path (Node) or Blob/File object (Browser)
      * @param {boolean} isDir set true for directory
      */
-    async write(name, src, isDir) {
+    async Write(name, src, isDir) {
         let data;
         
         // load data from src if not directory
@@ -55,7 +50,7 @@ class TarWriter {
         this._add(name, data, isDir);
     }
 
-    async close() {
+    async Close() {
         // Two 512-byte blocks of zeroes to mark end of archive
         this.blocks.push(new Uint8Array(512));
         this.blocks.push(new Uint8Array(512));
@@ -215,7 +210,7 @@ class TarWriter {
     }
 }
 
-class TarReader {
+export class TarReader {
     /**
      * @param {string|Blob|Uint8Array} input set empty for memory, filepath(Node) or filename(Browser)
      */
@@ -223,10 +218,10 @@ class TarReader {
         this.input = input;
         this.data = null;
         this.decoder = new TextDecoder();
-        this.files = null; // {name, size, offset, isDir}
+        this.Files = null; // {Name, Size, Offset, IsDir}
     }
 
-    async init() {
+    async Init() {
         // load data
         if (isNode && typeof this.input === 'string') {
             this.data = await fs.promises.readFile(this.input);
@@ -239,7 +234,7 @@ class TarReader {
             throw new Error("Invalid input type");
         }
         let current = 0;
-        this.files = [];
+        this.Files = [];
 
         // metadata
         let wasPax = false;
@@ -277,11 +272,11 @@ class TarReader {
             } else if (typeflag === '5') { // Directory
                 isDir = true;
             }
-            this.files.push({
-                name: name,
-                size: size,
-                offset: current + 512,
-                isDir: isDir
+            this.Files.push({
+                Name: name,
+                Size: size,
+                Offset: current + 512,
+                IsDir: isDir
             });
 
             // Move to next header
@@ -293,16 +288,16 @@ class TarReader {
         }
     }
 
-    read(idx) {
-        if (idx < 0 || idx >= this.files.length) throw new Error("Index out of bounds");
-        const file = this.files[idx];
-        return this.data.subarray(file.offset, file.offset + file.size);
+    Read(idx) {
+        if (idx < 0 || idx >= this.Files.length) throw new Error("Index out of bounds");
+        const file = this.Files[idx];
+        return this.data.subarray(file.Offset, file.Offset + file.Size);
     }
 
-    close() {
+    Close() {
         this.input = null;
         this.data = null;
-        this.files = [];
+        this.Files = [];
     }
 
     _readString(bytes) {

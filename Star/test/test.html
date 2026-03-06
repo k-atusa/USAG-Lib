@@ -1,10 +1,13 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Star JS Test (USAG-Lib)</title>
-    <script src="../Star.js"></script>
+    <title>Test</title>
     <style>
         body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
         #console { 
@@ -24,17 +27,23 @@
     </style>
 </head>
 <body>
-
-    <h1>Star.js Library Test</h1>
-    <p>Tests USAG-Lib Star (Tar) implementation matching Python logic.</p>
+    <h1>Library Test</h1>
+    <p>test will be executed on your browser</p>
     <button onclick="runTest()">(Run Test)</button>
     <br><br>
     <div id="console">Ready...</div>
 
+    <script type="module">
+        import {TarWriter, TarReader} from '../Star.js';
+        window.Star = {
+            "TarWriter": TarWriter,
+            "TarReader": TarReader
+        }
+    </script>
+
     <script>
-        // printer
         const consoleDiv = document.getElementById('console');
-        function log(message, color = '') {
+        function log(message, color = '') { // printer
             const span = document.createElement('span');
             span.textContent = message + "\n";
             if (color) span.style.color = color;
@@ -42,58 +51,54 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
             console.log(message);
         }
-
-        // Uint8Array to hex string (helper)
-        function formatBytes(u8) {
+        function formatBytes(u8) { // array to hex string
             if (u8.length > 20) return `[Uint8Array length=${u8.length}]`;
-            try {
-                return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
-            } catch (e) {
-                return "[Error formatting bytes]";
-            }
+            return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
         }
+    </script>
 
+    <script>
         async function runTest() {
             consoleDiv.innerHTML = "";
-            log("--- Start Star.js Test (Browser) ---", "#569cd6");
-
+            log("--- Start Test ---", "blue");
             try {
                 // Prepare Dummy Data
                 const dummySize = 1024 * 1024 * 10; 
                 const dummyData = new Uint8Array(dummySize); 
                 const dummyBlob = new Blob([dummyData]);
-                log(`[Setup] Created dummy data (${dummySize} bytes)`, "#569cd6");
+                log(`[Setup] Created dummy data (${dummySize} bytes)`, "");
 
                 // test TarWriter
-                const tw = new TarWriter("");
-                await tw.write("test/", null, true); // write "test/"
-                const longName = "test/" + "_".repeat(100) + "small.bin";
-                await tw.write(longName, dummyBlob, false); // write long name
-                await tw.write("이진 데이터", new TextEncoder().encode("Hello, world!"), false); // write binary
+                const tw = new window.Star.TarWriter("");
+                await tw.Write("test/", null, true); // write "test/"
+                const longName = "test/" + "가".repeat(100) + "파일.bin";
+                await tw.Write(longName, dummyBlob, false); // write long name
+                await tw.Write("이진 데이터", new TextEncoder().encode("Hello, world!"), false); // write binary
 
                 // Close and Get Data
-                const tarResult = await tw.close();
-                log(`[Success] Tar generated. Total size: ${tarResult.length} bytes`, "#4caf50");
+                const tarResult = await tw.Close();
+                log(`[Success] Tar generated. Total size: ${tarResult.length} bytes`, "");
 
                 // test TarReader
-                const tr = new TarReader(tarResult);
-                await tr.init();
-                for (let i = 0; i < tr.files.length; i++) {
-                    const f = tr.files[i];
-                    log(` [File ${i}] Name: ${f.name}, Size: ${f.size}, Offset: ${f.offset}, IsDir: ${f.isDir}`, "#569cd6");
+                const tr = new window.Star.TarReader(tarResult);
+                await tr.Init();
+                for (let i = 0; i < tr.Files.length; i++) {
+                    const f = tr.Files[i];
+                    log(` [File ${i}] Name: ${f.Name}, Size: ${f.Size}, Offset: ${f.Offset}, IsDir: ${f.IsDir}`, "");
                 }
-                log(`binary: ${formatBytes(tr.read(2))}`, "#569cd6"); // read binary
-                tr.close();
+                log(`binary: ${formatBytes(tr.Read(2))}`, ""); // read binary
+                tr.Close();
 
                 // DOWNLOAD
-                log("\nDownloading result as 'test.tar'...", "#4caf50");
+                log("\nDownloading result as 'test.tar'...", "");
                 tw._browserDownload(tarResult, "test.tar");
 
             } catch (e) {
                 console.error(e);
-                log(`ERROR: ${e.message}`, "#f44336");
+                log(`ERROR: ${e.message}`, "red");
                 log(e.stack, "gray");
             }
+            log("--- End Test ---", "blue");
         }
     </script>
 </body>

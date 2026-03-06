@@ -10,23 +10,23 @@ Since it accepts input as a stream, it is used by repeating the process of heade
 ```py
 class TarWriter:
     def __init__(output: str)
-    def writeFile(name: str, path: str, mode: int = 0o644)
-    def writeDir(name: str, mode: int = 0o755)
-    def writeBin(name: str, data: bytes, mode: int = 0o644)
-    def close() -> bytes
+    def WriteFile(name: str, path: str, mode: int = 0o644)
+    def WriteDir(name: str, mode: int = 0o755)
+    def WriteBin(name: str, data: bytes, mode: int = 0o644)
+    def Close() -> bytes
 
 class TarReader:
     def __init__(src: str | bytes)
-    name: str
-    size: int
+    Name: str
+    Size: int
     mode: int
-    isDir: bool
-    isEOF: bool
-    def next() -> bool
-    def read() -> bytes
-    def mkfile(path: str)
-    def skip()
-    def close()
+    IsDir: bool
+    IsEOF: bool
+    def Next() -> bool
+    def Read() -> bytes
+    def Mkfile(path: str)
+    def Skip()
+    def Close()
 
 Pack(srcs: str|list[str], dst: str) -> None
 Unpack(src: str, dst: str) -> None
@@ -36,16 +36,16 @@ Unpack(src: str, dst: str) -> None
 ```js
 class TarWriter {
     constructor(output: string)
-    async function write(name: string, src: string | Blob | Uint8Array, isDir: boolean)
-    async function close(): Uint8Array | null
+    async function Write(name: string, src: string | Blob | Uint8Array, isDir: boolean)
+    async function Close(): Uint8Array | null
 }
 
 class TarReader {
     constructor(input: string | Blob | Uint8Array)
-    files: Array<{name: string, size: number, offset: number, isDir: boolean}>
-    async function init()
-    function read(idx: number): Uint8Array
-    function close()
+    Files: Array<{Name: string, Size: number, Offset: number, IsDir: boolean}>
+    async function Init()
+    function Read(idx: number): Uint8Array
+    function Close()
 }
 ```
 
@@ -82,26 +82,25 @@ func Unpack(src string, dst string) error
 ```java
 class Star {
     static class TarWriter implements Closeable {
-        void open(OutputStream out)
-        void write(String name, byte[] data, int mode)
-        void write(String name, File file, int mode)
-        void write(String name, InputStream data, long size, int mode, boolean isDir)
-        byte[] closeTar()
+        void Open(OutputStream out)
+        void Write(String name, byte[] data, int mode)
+        void Write(String name, File file, int mode)
+        void Write(String name, InputStream data, long size, int mode, boolean isDir)
+        byte[] Close()
         void close()
     }
 
     static class TarReader implements Closeable {
-        String name;
-        long size;
-        int mode;
-        boolean isDir;
+        String Name;
+        long Size;
+        int Mode;
+        boolean IsDir;
         
-        void open(InputStream in)
-        boolean next()
-        byte[] read()
-        void mkfile(OutputStream dst)
-        void skip()
-        byte[] closeTar()
+        void Open(InputStream in)
+        boolean Next()
+        byte[] Read()
+        void Mkfile(OutputStream dst)
+        void Skip()
         void close()
     }
 }

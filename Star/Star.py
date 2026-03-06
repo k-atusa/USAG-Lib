@@ -1,5 +1,4 @@
 # test792a : USAG-Lib star
-
 import os
 import io
 import time
@@ -55,7 +54,7 @@ class TarWriter:
         pad_size = (512 - (size % 512)) % 512
         return b'\0' * pad_size
 
-    def writeFile(self, name: str, path: str, mode: int = 0o644):
+    def WriteFile(self, name: str, path: str, mode: int = 0o644):
         size = os.path.getsize(path)
         # write pax header if long name or large size
         if len(name.encode('utf-8')) > 99 or size > 0o77777777777:
@@ -70,7 +69,7 @@ class TarWriter:
                 self.output.write(chunk)
         self.output.write(self._pad(size))
 
-    def writeDir(self, name: str, mode: int = 0o755):
+    def WriteDir(self, name: str, mode: int = 0o755):
         name = name.replace("\\", "/")
         if not name.endswith("/"):
             name += "/"
@@ -78,7 +77,7 @@ class TarWriter:
             self.output.write(self._pax_header(name, 0))
         self.output.write(self._tar_header(name, 0, mode, int(time.time()), b'5'))
 
-    def writeBin(self, name: str, data: bytes, mode: int = 0o644):
+    def WriteBin(self, name: str, data: bytes, mode: int = 0o644):
         size = len(data)
         if len(name.encode('utf-8')) > 99 or size > 0o77777777777:
             self.output.write(self._pax_header(name, size))
@@ -86,7 +85,7 @@ class TarWriter:
         self.output.write(data)
         self.output.write(self._pad(size))
 
-    def close(self) -> bytes:
+    def Close(self) -> bytes:
         self.output.write(b"\x00" * 1024) # two 512-byte blocks of zeroes
         if isinstance(self.output, io.BytesIO):
             res = self.output.getvalue()
@@ -107,11 +106,11 @@ class TarReader:
             self.stream = src
 
         # metadata of current entry
-        self.name = ""
-        self.size = 0
-        self.mode = 0o644
-        self.isDir = False
-        self.isEOF = False
+        self.Name = ""
+        self.Size = 0
+        self.Mode = 0o644
+        self.IsDir = False
+        self.IsEOF = False
 
     def _parse(self, data: bytes):
         lines = data.decode('utf-8', 'replace').split('\n')
@@ -123,66 +122,66 @@ class TarReader:
             if len(kv) < 2: continue
             
             key, value = kv[0], kv[1] # update metadata by pax key-values
-            if key == "path": self.name = value
-            elif key == "size": self.size = int(value)
+            if key == "path": self.Name = value
+            elif key == "size": self.Size = int(value)
 
     def _unpad(self, size: int):
         pad = (512 - (size % 512)) % 512 # jump padding bytes
         if pad > 0: self.stream.read(pad)
 
-    def next(self) -> bool:
-        if self.isEOF: return False
+    def Next(self) -> bool:
+        if self.IsEOF: return False
         header = self.stream.read(512) # read next 512-byte header
         if header == None or len(header) != 512 or header == b'\0' * 512:
-            self.isEOF = True
+            self.IsEOF = True
             self.stream.read(512)
             return False
 
         # parse standard header
-        self.name = header[0:100].decode('utf-8', 'replace').rstrip('\0')
-        self.mode = int(header[100:108].strip(b'\x00 '), 8)
-        self.size = int(header[124:136].strip(b'\x00 '), 8)
+        self.Name = header[0:100].decode('utf-8', 'replace').rstrip('\0')
+        self.Mode = int(header[100:108].strip(b'\x00 '), 8)
+        self.Size = int(header[124:136].strip(b'\x00 '), 8)
         tp = header[156:157]
-        self.isDir = True if tp == b'5' else False
+        self.IsDir = True if tp == b'5' else False
 
         # parse PAX header if type is 'x'
         if tp == b'x':
-            pax_data = self.stream.read(self.size)
-            self._unpad(self.size)
+            pax_data = self.stream.read(self.Size)
+            self._unpad(self.Size)
             self._parse(pax_data)
-            tn, ts = self.name, self.size
-            e = self.next() # read next header after pax
-            self.name, self.size = tn, ts
+            tn, ts = self.Name, self.Size
+            e = self.Next() # read next header after pax
+            self.Name, self.Size = tn, ts
             return e
         return True
 
-    def read(self) -> bytes:
-        data = self.stream.read(self.size)
-        self._unpad(self.size)
+    def Read(self) -> bytes:
+        data = self.stream.read(self.Size)
+        self._unpad(self.Size)
         return data
 
-    def mkfile(self, path: str):
-        if self.isDir: # make directory
+    def Mkfile(self, path: str):
+        if self.IsDir: # make directory
             os.makedirs(path, exist_ok=True)
             return
         with open(path, "wb") as f: # make file
-            rem = self.size
+            rem = self.Size
             while rem > 0:
                 chunk = self.stream.read(min(rem, 65536))
                 if len(chunk) == 0: break
                 f.write(chunk)
                 rem -= len(chunk)
-        self._unpad(self.size)
+        self._unpad(self.Size)
 
-    def skip(self):
-        rem = self.size
+    def Skip(self):
+        rem = self.Size
         while rem > 0:
             chunk = self.stream.read(min(rem, 65536))
             if len(chunk) == 0: break
             rem -= len(chunk)
-        self._unpad(self.size)
+        self._unpad(self.Size)
 
-    def close(self):
+    def Close(self):
         self.stream.close()
 
 def Pack(srcs: str | list[str], dst: str) -> None:
@@ -191,24 +190,24 @@ def Pack(srcs: str | list[str], dst: str) -> None:
     try:
         for src in srcs:
             if os.path.isfile(src):
-                tw.writeFile(os.path.basename(src), src)
+                tw.WriteFile(os.path.basename(src), src)
             elif os.path.isdir(src):
                 parent = os.path.dirname(os.path.normpath(src))
                 for root, dirs, files in os.walk(src):
                     rel_dir = os.path.relpath(root, parent).replace("\\", "/")
-                    tw.writeDir(rel_dir)
+                    tw.WriteDir(rel_dir)
                     for f in files:
                         path = os.path.join(root, f)
                         rel = os.path.relpath(path, parent).replace("\\", "/")
-                        tw.writeFile(rel, path)
+                        tw.WriteFile(rel, path)
     finally:
-        tw.close()
+        tw.Close()
 
 def Unpack(src: str, dst: str) -> None:
     tr = TarReader(src)
     try:
-        while tr.next():
-            rel_path = tr.name.replace("\\", "/")
+        while tr.Next():
+            rel_path = tr.Name.replace("\\", "/")
             dest_path = os.path.join(dst, rel_path)
             
             # ZipSlip Protection
@@ -216,6 +215,6 @@ def Unpack(src: str, dst: str) -> None:
             if not os.path.abspath(dest_path).startswith(base):
                 raise Exception(f"illegal file path: {rel_path}")
 
-            tr.mkfile(dest_path)
+            tr.Mkfile(dest_path)
     finally:
-        tr.close()
+        tr.Close()

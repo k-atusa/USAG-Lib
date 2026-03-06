@@ -6,30 +6,30 @@ if not os.path.exists("small.bin"): # make 100MiB file
         f.write(b"\x00" * 1048576 * 100)
 
 m = Star.TarWriter("")
-m.writeDir("test/")
-m.writeFile(f"test/{'_'*100}small.bin", "small.bin") # long name test
-m.writeBin("이진 데이터", b"Hello, world!")
+m.WriteDir("test/")
+m.WriteFile(f"test/{'가'*100}파일.bin", "small.bin") # long name test
+m.WriteBin("이진 데이터", b"Hello, world!")
 
 # write tar
 with open("test.tar", "wb") as f:
-    f.write(m.close())
+    f.write(m.Close())
 print("Created test.tar")
 
 m = Star.TarReader("test.tar")
 
-m.next() # test/
-print(f"Name: {m.name}, Size: {m.size}, IsDir: {m.isDir}")
-m.mkfile(m.name)
+m.Next() # test/
+print(f"Name: {m.Name}, Size: {m.Size}, IsDir: {m.IsDir}")
+m.Mkfile(m.Name)
 
-m.next() # test/___small.bin
-print(f"Name: {m.name}, Size: {m.size}, IsDir: {m.isDir}")
-m.mkfile("small_out.bin")
+m.Next() # test/가가파일.bin
+print(f"Name: {m.Name}, Size: {m.Size}, IsDir: {m.IsDir}")
+m.Mkfile("small_out.bin")
 
-m.next() # binary data
-print(f"Name: {m.name}, Size: {m.size}, IsDir: {m.isDir}")
-print("Data:", m.read())
+m.Next() # binary data
+print(f"Name: {m.Name}, Size: {m.Size}, IsDir: {m.IsDir}")
+print("Data:", m.Read())
 
-m.close()
+m.Close()
 
 # pack/unpack
 os.mkdir("pack")
