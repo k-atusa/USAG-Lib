@@ -1,24 +1,10 @@
 // test790b : USAG-Lib szip
+// !!! JS version is  not designed for big data !!!
+const isNode = (typeof window === 'undefined');
+const fs = isNode ? require('fs') : null;
+const JSZip = isNode ? (await import('jszip')).default : (await import('https://cdn.skypack.dev/jszip')).default;
 
-/*
-* !!! JS version is  not designed for big data !!!
-* require jszip: npm install jszip, <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-*/
-
-if (typeof isNode === 'undefined') {
-    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
-}
-if (typeof fs === 'undefined' && isNode) {
-    window.fs = require('fs');
-}
-let JSZip;
-if (isNode) {
-    JSZip = require('jszip');
-} else {
-    JSZip = window.JSZip;
-}
-
-class ZipWriter { // Zip64 Writer
+export class ZipWriter { // Zip64 Writer
     /**
      * @param {string} output set empty for memory, filepath(Node) or filename(Browser)
      * @param {Uint8Array} header custom header
@@ -35,17 +21,17 @@ class ZipWriter { // Zip64 Writer
      * @param {string} name file name in zip
      * @param {string|Blob|File} src file path (Node) or Blob/File object (Browser)
      */
-    async writefile(name, src) {
+    async WriteFile(name, src) {
         if (isNode) {
             if (typeof src === 'string') {
                 const data = await fs.readFile(src);
-                this.writebin(name, data);
+                this.WriteBin(name, data);
             } else {
-                this.writebin(name, src); // write Blob
+                this.WriteBin(name, src); // write Blob
             }
         } else {
             if (src instanceof Blob) {
-                this.writebin(name, src); // write Blob or File
+                this.WriteBin(name, src); // write Blob or File
             } else {
                 throw new Error("writefile in browser needs Blob object");
             }
@@ -56,14 +42,14 @@ class ZipWriter { // Zip64 Writer
      * @param {string} name file name in zip
      * @param {Uint8Array|string|Blob} data binary data
      */
-    writebin(name, data) {
+    WriteBin(name, data) {
         const options = {
             compression: this.compress ? "DEFLATE" : "STORE"
         };
         this.zip.file(name, data, options);
     }
 
-    async close() {
+    async Close() {
         // Generate Zip
         const zipData = await this.zip.generateAsync({
             type: isNode ? "nodebuffer" : "uint8array",
@@ -103,19 +89,19 @@ class ZipWriter { // Zip64 Writer
     }
 }
 
-class ZipReader { // Zip64 Reader
+export class ZipReader { // Zip64 Reader
     /**
      * @param {string|Blob|Uint8Array} input path string (Node), Blob or Uint8Array (Browser)
      */
     constructor(input) {
         this.input = input;
         this.zip = null;
-        this.names = [];
-        this.sizes = [];
+        this.Names = [];
+        this.Sizes = [];
         this._files = [];
     }
 
-    async init() {
+    async Init() {
         // load zip data to memory
         let dataToLoad;
         if (isNode && typeof this.input === 'string') {
@@ -125,26 +111,26 @@ class ZipReader { // Zip64 Reader
         }
         this.zip = await JSZip.loadAsync(dataToLoad);
         
-        this.names = [];
-        this.sizes = [];
+        this.Names = [];
+        this.Sizes = [];
         this._files = [];
         this.zip.forEach((relativePath, file) => {
-            this.names.push(file.name);
-            this.sizes.push(file._data.uncompressedSize);
+            this.Names.push(file.name);
+            this.Sizes.push(file._data.uncompressedSize);
             this._files.push(file);
         });
     }
 
-    async read(idx) {
-        if (!this.zip) await this.init();
+    async Read(idx) {
+        if (!this.zip) await this.Init();
         if (idx < 0 || idx >= this._files.length) throw new Error("Index out of bounds");
         return await this._files[idx].async("uint8array");
     }
 
-    close() {
+    Close() {
         this.zip = null;
-        this.names = [];
-        this.sizes = [];
+        this.Names = [];
+        this.Sizes = [];
         this._files = [];
     }
 }

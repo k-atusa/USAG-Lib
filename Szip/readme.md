@@ -10,17 +10,17 @@ Loading data stores the names and sizes of all files in fields. You can then rea
 ```py
 class ZipWriter:
     def __init__(output: str, compress: bool)
-    def writefile(name: str, path: str)
-    def writebin(name: str, data: bytes)
-    def close() -> bytes
+    def WriteFile(name: str, path: str)
+    def WriteBin(name: str, data: bytes)
+    def Close() -> bytes
 
 class ZipReader:
     def __init__(input: str | bytes)
-    names: list[str]
-    sizes: list[int]
-    def read(idx: int) -> bytes
-    def open(idx: int) -> io.IOBase
-    def close()
+    Names: list[str]
+    Sizes: list[int]
+    def Read(idx: int) -> bytes
+    def Open(idx: int) -> io.IOBase
+    def Close()
 
 Pack(srcs: str|list[str], dst: str) -> None
 Unpack(src: str, dst: str) -> None
@@ -30,18 +30,18 @@ Unpack(src: str, dst: str) -> None
 ```js
 class ZipWriter {
     constructor(output: string, compress: boolean)
-    async function writefile(name: string, src: string | Blob | File)
-    function writebin(name: string, data: Uint8Array | string | Blob)
-    async function close(): Uint8Array | null
+    async function WriteFile(name: string, src: string | Blob | File)
+    function WriteBin(name: string, data: Uint8Array | string | Blob)
+    async function Close(): Uint8Array | null
 }
 
 class ZipReader {
     constructor(input: string | Blob | Uint8Array)
-    names: string[]
-    sizes: number[]
-    async function init()
-    async function read(idx: number): Uint8Array
-    function close()
+    Names: string[]
+    Sizes: number[]
+    async function Init()
+    async function Read(idx: number): Uint8Array
+    function Close()
 }
 ```
 
@@ -71,23 +71,22 @@ func Unpack(src string, dst string) error
 ```java
 class Szip {
     static class ZipWriter implements Closeable {
-        void openWriter(File file, boolean compress)
-        void write(String name, byte[] data)
-        void write(String name, File file)
-        void write(String name, InputStream inputStream)
-        byte[] closeZip()
+        void Open(File file, boolean compress)
+        void Write(String name, byte[] data)
+        void Write(String name, File file)
+        void Write(String name, InputStream inputStream)
+        byte[] Close()
         void close()
     }
 
     static class ZipReader implements Closeable {
-        List<String> names
-        List<Long> sizes
+        List<String> Names
+        List<Long> Sizes
         
-        void open(File file)
-        void open(byte[] data)
-        byte[] read(int idx)
-        InputStream open(int idx)
-        byte[] closeZip()
+        void Open(File file)
+        void Open(byte[] data)
+        byte[] Read(int idx)
+        InputStream Open(int idx)
         void close()
     }
 }

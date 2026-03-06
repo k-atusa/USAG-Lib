@@ -1,5 +1,4 @@
 // test790d : USAG-Lib szip
-
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -23,7 +22,7 @@ public class Szip {
         private ZipOutputStream zout = null;
         private boolean compress = false;
 
-        public void openWriter(File file, boolean compress) throws IOException {
+        public void Open(File file, boolean compress) throws IOException {
             if (file == null) {
                 this.writer = new ByteArrayOutputStream();
                 this.isMem = true;
@@ -43,7 +42,7 @@ public class Szip {
             }
         }
 
-        public void write(String name, byte[] data) throws IOException {
+        public void Write(String name, byte[] data) throws IOException {
             ZipEntry entry = new ZipEntry(name);
             if (!this.compress) {
                 entry.setSize(data.length);
@@ -57,13 +56,13 @@ public class Szip {
             this.zout.closeEntry();
         }
 
-        public void write(String name, File file) throws IOException {
+        public void Write(String name, File file) throws IOException {
             try (FileInputStream fis = new FileInputStream(file)) {
-                write(name, fis);
+                Write(name, fis);
             }
         }
 
-        public void write(String name, InputStream inputStream) throws IOException {
+        public void Write(String name, InputStream inputStream) throws IOException {
             ZipEntry entry = new ZipEntry(name);
 
             if (!this.compress) { // STORED mode requires pre-calculated CRC and Size
@@ -99,7 +98,7 @@ public class Szip {
             this.zout.closeEntry();
         }
 
-        public byte[] closeZip() throws IOException {
+        public byte[] Close() throws IOException {
             byte[] result = null;
             if (this.zout != null) {
                 this.zout.close();
@@ -117,7 +116,7 @@ public class Szip {
 
         @Override
         public void close() throws IOException {
-            closeZip();
+            Close();
         }
     }
 
@@ -125,20 +124,16 @@ public class Szip {
         private File reader = null;
         private ZipFile zin = null;
         private List<ZipEntry> entries = new ArrayList<>();
-        public List<String> names = new ArrayList<>();
-        public List<Long> sizes = new ArrayList<>();
+        public List<String> Names = new ArrayList<>();
+        public List<Long> Sizes = new ArrayList<>();
 
         public File tempDir = null;
 
-        public InputStream open(int idx) throws IOException {
-            return this.zin.getInputStream(this.entries.get(idx));
-        }
-
-        public void open(File file) throws IOException {
+        public void Open(File file) throws IOException {
             loadZip(file);
         }
 
-        public void open(byte[] data) throws IOException {
+        public void Open(byte[] data) throws IOException {
             this.reader = File.createTempFile("szip_read", ".tmp", this.tempDir);
             try (FileOutputStream fos = new FileOutputStream(this.reader)) {
                 fos.write(data);
@@ -149,19 +144,23 @@ public class Szip {
         private void loadZip(File file) throws IOException {
             this.zin = new ZipFile(file, ZipFile.OPEN_READ);
             this.entries.clear();
-            this.names.clear();
-            this.sizes.clear();
+            this.Names.clear();
+            this.Sizes.clear();
 
             Enumeration<? extends ZipEntry> entries = this.zin.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 this.entries.add(entry);
-                this.names.add(entry.getName());
-                this.sizes.add(entry.getSize());
+                this.Names.add(entry.getName());
+                this.Sizes.add(entry.getSize());
             }
         }
 
-        public byte[] read(int idx) throws IOException {
+        public InputStream Open(int idx) throws IOException {
+            return this.zin.getInputStream(this.entries.get(idx));
+        }
+
+        public byte[] Read(int idx) throws IOException {
             ZipEntry entry = this.entries.get(idx);
             long size = entry.getSize();
             if (size > Integer.MAX_VALUE) {
@@ -174,8 +173,8 @@ public class Szip {
             }
         }
 
-        public byte[] closeZip() throws IOException {
-            byte[] result = null;
+        @Override
+        public void close() throws IOException {
             if (this.zin != null) {
                 this.zin.close();
                 this.zin = null;
@@ -184,15 +183,9 @@ public class Szip {
                 this.reader.delete();
                 this.reader = null;
             }
-            this.names.clear();
-            this.sizes.clear();
+            this.Names.clear();
+            this.Sizes.clear();
             this.entries.clear();
-            return result;
-        }
-
-        @Override
-        public void close() throws IOException {
-            closeZip();
         }
     }
 }

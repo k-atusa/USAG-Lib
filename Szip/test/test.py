@@ -8,12 +8,12 @@ if not os.path.exists("big.bin"):
             f.write(test)
 
 m = Szip.ZipWriter("test.zip", True)
-m.writebin("이진 데이터", b"Hello, world!")
-m.writefile("file", "big.bin")
-m.close()
+m.WriteBin("이진 데이터", b"Hello, world!")
+m.WriteFile("file", "big.bin")
+m.Close()
 m = Szip.ZipReader("test.zip")
-print(m.names, m.sizes, m.read(0))
-m.close()
+print(m.Names, m.Sizes, m.Read(0))
+m.Close()
 
 # pack/unpack
 os.mkdir("pack")

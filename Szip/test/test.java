@@ -1,6 +1,5 @@
 // javac -encoding UTF-8 Szip.java test.java
 // java -cp . test
-
 import java.io.*;
 import java.util.Arrays;
 
@@ -22,29 +21,29 @@ public class test {
             }
 
             // ZipWriter
-            Szip writer = new Szip();
-            writer.openWriter(new File("test.zip"), true);
+            Szip.ZipWriter writer = new Szip.ZipWriter();
+            writer.Open(new File("test.zip"), true);
 
             // write data
-            writer.write("이진 데이터", "Hello, world!".getBytes());
-            writer.write("file", bigFile);
+            writer.Write("이진 데이터", "Hello, world!".getBytes());
+            writer.Write("file", bigFile);
 
             // close writer
-            writer.closeZip();
+            writer.close();
             System.out.println("Zip writing completed.");
 
             // ZipReader
-            Szip reader = new Szip();
-            reader.openReader(new File("test.zip"));
+            Szip.ZipReader reader = new Szip.ZipReader();
+            reader.Open(new File("test.zip"));
 
             // print file names and sizes
-            System.out.println("Files: " + reader.names);
-            System.out.println("Sizes: " + reader.sizes);
+            System.out.println("Files: " + reader.Names);
+            System.out.println("Sizes: " + reader.Sizes);
             
             // read first file
-            byte[] data = reader.read(0);
+            byte[] data = reader.Read(0);
             System.out.println("Read[0] content: " + new String(data));
-            reader.closeZip();
+            reader.close();
 
         } catch (IOException e) {
             e.printStackTrace();

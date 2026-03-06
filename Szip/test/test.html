@@ -1,11 +1,13 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Szip JS Test</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="../Szip.js"></script>
+    <title>Test</title>
     <style>
         body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
         #console { 
@@ -20,20 +22,28 @@
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
         .success { color: #4caf50; }
         .info { color: #569cd6; }
+        .warn { color: #cca700; }
+        .error { color: #f44336; }
     </style>
 </head>
 <body>
-
-    <h1>Szip.js Library Test</h1>
+    <h1>Library Test</h1>
     <p>test will be executed on your browser</p>
     <button onclick="runTest()">(Run Test)</button>
     <br><br>
     <div id="console">Ready...</div>
 
+    <script type="module">
+        import {ZipWriter, ZipReader} from '../Szip.js';
+        window.Szip = {
+            "ZipWriter": ZipWriter,
+            "ZipReader": ZipReader
+        }
+    </script>
+
     <script>
-        // printer
         const consoleDiv = document.getElementById('console');
-        function log(message, color = '') {
+        function log(message, color = '') { // printer
             const span = document.createElement('span');
             span.textContent = message + "\n";
             if (color) span.style.color = color;
@@ -41,41 +51,40 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
             console.log(message);
         }
-
-        // Uint8Array to hex string
-        function formatBytes(u8) {
+        function formatBytes(u8) { // array to hex string
             if (u8.length > 20) return `[Uint8Array length=${u8.length}]`;
             return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
         }
+    </script>
 
+    <script>
         async function runTest() {
             consoleDiv.innerHTML = "";
-            log("--- Start Test ---", "#569cd6");
-
+            log("--- Start Test ---", "blue");
             try {
                 const dummyData = new Uint8Array(5 * 1048576);
                 const blob = new Blob([dummyData]);
 
                 // Write Zip
-                const zw = new ZipWriter("", true);
-                zw.writebin("이진 데이터", new TextEncoder().encode("Hello, world!"));
-                await zw.writefile("file", blob);
-                const zipResult = await zw.close();
+                const zw = new window.Szip.ZipWriter("", true);
+                zw.WriteBin("이진 데이터", new TextEncoder().encode("Hello, world!"));
+                await zw.WriteFile("file", blob);
+                const zipResult = await zw.Close();
                 log(`Zip generated. Total size: ${zipResult.length} bytes`);
 
                 // Read Zip
-                const zr = new ZipReader(zipResult);
-                await zr.init();
+                const zr = new window.Szip.ZipReader(zipResult);
+                await zr.Init();
                 
                 // print files list
-                for (let i = 0; i < zr.names.length; i++) {
-                    log(`zip: ${zr.names[i]} ${zr.sizes[i]}`);
+                for (let i = 0; i < zr.Names.length; i++) {
+                    log(`zip: ${zr.Names[i]} ${zr.Sizes[i]}`);
                 }
 
                 // read first file
-                const binContent = await zr.read(0);
+                const binContent = await zr.Read(0);
                 log(`Read "binary": ${formatBytes(binContent)}`);
-                zr.close();
+                zr.Close();
 
                 // download result
                 log("Downloading result as 'test.zip'...", "#4caf50");
@@ -84,7 +93,9 @@
             } catch (e) {
                 console.error(e);
                 log(`ERROR: ${e.message}`, "red");
+                log(e.stack, "gray");
             }
+            log("--- End Test ---", "blue");
         }
     </script>
 </body>

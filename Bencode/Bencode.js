@@ -1,5 +1,5 @@
 // test789b : USAG-Lib bencode
-const isNode = (typeof window === 'undefined')
+const isNode = (typeof window === 'undefined');
 
 // Helper for Base64 (Env agnostic)
 function _toBase64(uint8Array) {

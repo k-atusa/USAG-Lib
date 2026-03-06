@@ -1,7 +1,7 @@
 // test792b : USAG-Lib star
 // !!! JS version is not designed for big data !!!
-const isNode = (typeof window === 'undefined')
-const fs = isNode ? require('fs') : null
+const isNode = (typeof window === 'undefined');
+const fs = isNode ? require('fs') : null;
 
 export class TarWriter {
     /**
