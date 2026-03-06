@@ -34,41 +34,34 @@ def generate_python(files): # python code
     return "\n".join(lines)
 
 def generate_javascript(files): # javascript code
-    lines = ["class Icons {"]
+    lines = ["""
+const isNode = (typeof window === 'undefined');
+function _decode(parts) {
+    const base64Str = parts.join('');
+    if (isNode) {
+        return Buffer.from(base64Str, 'base64');
+    } else {
+        const binaryString = atob(base64Str);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes;
+    }
+}
+    """, "export class Icons {"]
+
     for filepath in files:
         func_name = sanitize_name(filepath)
         with open(filepath, 'rb') as f:
             chunks = get_chunks(f.read())
-            
-        lines.append(f"    {func_name}() {{")
-        lines.append("        const parts = [")
+
+        lines.append(f"static {func_name} = _decode([")
         for chunk in chunks:
-            lines.append(f"            '{chunk}',")
-        lines.append("        ];")
+            lines.append(f"    '{chunk}',")
+        lines.append("]);")
         
-        lines.append("        const base64Str = parts.join('');")
-        lines.append("        if (typeof Buffer !== 'undefined') { // Node.js env")
-        lines.append("            return Buffer.from(base64Str, 'base64');")
-        lines.append("        } else if (typeof atob === 'function') { // Browser env")
-        lines.append("            const binaryString = atob(base64Str);")
-        lines.append("            const len = binaryString.length;")
-        lines.append("            const bytes = new Uint8Array(len);")
-        lines.append("            for (let i = 0; i < len; i++) {")
-        lines.append("                bytes[i] = binaryString.charCodeAt(i);")
-        lines.append("            }")
-        lines.append("            return bytes;")
-        lines.append("        } else {")
-        lines.append("            throw new Error('Unsupported environment');")
-        lines.append("        }")
-        lines.append("    }")
-        lines.append("")
-        
-    lines.append("}")
-    lines.append("")
-    lines.append("if (typeof module !== 'undefined' && module.exports) {")
-    lines.append("    module.exports = Icons;")
-    lines.append("} else if (typeof window !== 'undefined') {")
-    lines.append("    window.Icons = Icons;")
     lines.append("}")
     return "\n".join(lines)
 

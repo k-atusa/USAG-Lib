@@ -1,9 +1,13 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Icons.js test</title>
+    <title>Test</title>
     <style>
         .image-container {
             display: flex;
@@ -29,14 +33,13 @@
     </style>
 </head>
 <body>
+    <h1>Library Test</h1>
+    <div class="image-container" id="container"></div>
 
-    <h1>Icons.js load test</h1>
-
-    <div class="image-container" id="container">
-        </div>
-
-    <script src="../Icons.js"></script>
-    <script>
+    <script type="module">
+        import {Icons} from '../Icons.js';
+        window.Icons = Icons;
+        const container = document.getElementById('container');
         const images = [
             { Name: 'ZipPng', mime: 'image/png' },
             { Name: 'ZipWebp', mime: 'image/webp' },
@@ -46,11 +49,9 @@
             { Name: 'CloudWebp', mime: 'image/webp' }
         ];
 
-        const container = document.getElementById('container');
-
         images.forEach(item => {
             try {
-                const imageData = Icons[item.Name];
+                const imageData = window.Icons[item.Name];
                 const blob = new Blob([imageData], { type: item.mime });
                 const url = URL.createObjectURL(blob);
 
@@ -58,7 +59,7 @@
                 div.className = 'image-item';
                 const img = document.createElement('img');
                 img.src = url;
-                img.alt = item.funcName;
+                img.alt = item.Name;
 
                 const caption = document.createElement('p');
                 caption.textContent = `Name: ${item.Name}`;
@@ -67,13 +68,13 @@
                 div.appendChild(caption);
                 container.appendChild(div);
 
-                console.log(`${item.funcName} load success`);
+                console.log(`${item.Name} load success`);
 
             } catch (error) {
-                console.error(`${item.funcName} load fail:`, error);
+                console.error(`${item.Name} load fail:`, error);
                 const div = document.createElement('div');
                 div.className = 'image-item';
-                div.innerHTML = `<p style="color: red;">Load Fail: ${item.funcName}</p>`;
+                div.innerHTML = `<p style="color: red;">Load Fail: ${item.Name}</p>`;
                 container.appendChild(div);
             }
         });

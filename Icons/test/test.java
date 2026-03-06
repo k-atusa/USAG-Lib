@@ -1,6 +1,5 @@
 // javac Icons.java test.java
 // java -cp . test
-
 import java.io.FileOutputStream;
 
 public class test {
