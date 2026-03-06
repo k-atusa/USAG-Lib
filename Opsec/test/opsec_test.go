@@ -15,13 +15,19 @@ func TestMain(t *testing.T) {
 	fmt.Println(Crc32([]byte("test"))) // Expected: 0c7e7fd8
 
 	// 2. Key Generation
-	rsa := new(Bencrypt.RSA1)
-	pub0, pri0, err := rsa.Genkey(2048)
+	am := new(Bencrypt.AsymMaster)
+	am.Init("rsa1")
+	pub0, pri0, err := am.Genkey()
 	if err != nil {
 		log.Fatal(err)
 	}
-	ecc := new(Bencrypt.ECC1)
-	pub1, pri1, err := ecc.Genkey()
+	am.Init("rsa2")
+	pub1, pri1, err := am.Genkey()
+	if err != nil {
+		log.Fatal(err)
+	}
+	am.Init("ecc1")
+	pub2, pri2, err := am.Genkey()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +49,27 @@ func TestMain(t *testing.T) {
 	}
 	fmt.Println(string(readBack)) // Expected: Hello, world!
 
-	// 4. PBKDF2 Test
+	// 4-1. SHA3 Test
+	m.Msg = "msg-test"
+	m.Smsg = "smsg-test"
+	m.Size = 1024
+	m.Name = "name-test"
+	m.BodyAlgo = "gcm1"
+	m.ContAlgo = "zip1"
+
+	encSha, err := m.Encpw("sha3", []byte("password"), []byte("keyfile"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	m.View(encSha)
+	err = m.Decpw([]byte("password"), []byte("keyfile"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	printStatus(m)
+	m.Reset()
+
+	// 4-2. PBKDF2 Test
 	m.Msg = "msg-test"
 	m.Smsg = "smsg-test"
 	m.Size = 1024
@@ -79,7 +105,7 @@ func TestMain(t *testing.T) {
 	printStatus(m)
 	m.Reset()
 
-	// 6. RSA Test
+	// 6-1. RSA1 Test
 	m.Msg = "msg-test"
 	m.Smsg = "smsg-test"
 	m.Size = 1024
@@ -99,16 +125,36 @@ func TestMain(t *testing.T) {
 	printStatus(m)
 	m.Reset()
 
+	// 6-2. RSA2 Test
+	m.Msg = "msg-test"
+	m.Smsg = "smsg-test"
+	m.Size = 1024
+	m.Name = "name-test"
+	m.BodyAlgo = "gcm1"
+	m.ContAlgo = "zip1"
+
+	encRSA, err = m.Encpub("rsa2", pub1, pri1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	m.View(encRSA)
+	err = m.Decpub(pri1, pub1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	printStatus(m)
+	m.Reset()
+
 	// 7. ECC Test
 	m.Msg = "msg-test"
 	m.Smsg = "smsg-test"
 
-	encECC, err := m.Encpub("ecc1", pub1, pri1)
+	encECC, err := m.Encpub("ecc1", pub2, pri2)
 	if err != nil {
 		log.Fatal(err)
 	}
 	m.View(encECC)
-	err = m.Decpub(pri1, pub1)
+	err = m.Decpub(pri2, pub2)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -2,48 +2,66 @@ import io
 import Bencrypt
 import Opsec
 
-print(Opsec.crc32(b"test")) # 0c7e7fd8
-m = Bencrypt.RSA1()
-pub0, pri0 = m.genkey(2048)
-m = Bencrypt.ECC1()
-pub1, pri1 = m.genkey()
+print(Opsec.Crc32(b"test")) # 0c7e7fd8
+m = Bencrypt.AsymMaster("rsa1")
+pub0, pri0 = m.Genkey()
+m = Bencrypt.AsymMaster("rsa2")
+pub1, pri1 = m.Genkey()
+m = Bencrypt.AsymMaster("ecc1")
+pub2, pri2 = m.Genkey()
 m = Opsec.Opsec()
 
 # rw
 w = io.BytesIO()
 w.write(b"\x00" * 128 * 4)
-m.write(w, b"Hello, world!")
+m.Write(w, b"Hello, world!")
 r = io.BytesIO(w.getvalue())
-print(m.read(r).decode("utf-8"))
+print(m.Read(r).decode("utf-8"))
+
+# SHA3
+m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"
+enc = m.Encpw("sha3", b"password", b"keyfile")
+m.View(enc)
+m.Decpw(b"password", b"keyfile")
+print(m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo, len(m.BodyKey))
+m.Reset()
 
 # PBKDF2
-m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"
-enc = m.encpw("pbk1", b"password", b"keyfile")
-m.view(enc)
-m.decpw(b"password", b"keyfile")
-print(m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo, len(m.bodyKey))
-m.reset()
+m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"
+enc = m.Encpw("pbk1", b"password", b"keyfile")
+m.View(enc)
+m.Decpw(b"password", b"keyfile")
+print(m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo, len(m.BodyKey))
+m.Reset()
 
 # Argon2
-m.msg, m.smsg = "msg-test", "smsg-test"
-enc = m.encpw("arg1", b"password")
-m.view(enc)
-m.decpw(b"password")
-print(m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo, len(m.bodyKey))
-m.reset()
+m.Msg, m.Smsg = "msg-test", "smsg-test"
+enc = m.Encpw("arg1", b"password")
+m.View(enc)
+m.Decpw(b"password")
+print(m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo, len(m.BodyKey))
+m.Reset()
 
-# RSA
-m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"
-enc = m.encpub("rsa1", pub0, pri0)
-m.view(enc)
-m.decpub(pri0, pub0)
-print(m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo, len(m.bodyKey))
-m.reset()
+# RSA1
+m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"
+enc = m.Encpub("rsa1", pub0, pri0)
+m.View(enc)
+m.Decpub(pri0, pub0)
+print(m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo, len(m.BodyKey))
+m.Reset()
+
+# RSA2
+m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo = "msg-test", "smsg-test", 1024, "name-test", "gcm1", "zip1"
+enc = m.Encpub("rsa2", pub1, pri1)
+m.View(enc)
+m.Decpub(pri1, pub1)
+print(m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo, len(m.BodyKey))
+m.Reset()
 
 # ECC
-m.msg, m.smsg = "msg-test", "smsg-test"
-enc = m.encpub("ecc1", pub1, pri1)
-m.view(enc)
-m.decpub(pri1, pub1)
-print(m.msg, m.smsg, m.size, m.name, m.bodyAlgo, m.contAlgo, len(m.bodyKey))
-m.reset()
+m.Msg, m.Smsg = "msg-test", "smsg-test"
+enc = m.Encpub("ecc1", pub2, pri2)
+m.View(enc)
+m.Decpub(pri2, pub2)
+print(m.Msg, m.Smsg, m.Size, m.Name, m.BodyAlgo, m.ContAlgo, len(m.BodyKey))
+m.Reset()

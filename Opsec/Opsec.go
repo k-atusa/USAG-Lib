@@ -292,9 +292,6 @@ func (o *Opsec) unwrapHead(data []byte) {
 // Encrypt with password
 func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	// set basic parameters
-	if method != "arg1" && method != "pbk1" {
-		return nil, errors.New("unsupported method: " + method)
-	}
 	o.headAlgo = method
 	o.salt = Bencrypt.Random(16)
 	if o.Size >= 0 {
@@ -310,12 +307,17 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	var mkey []byte
 	var err error
 	switch method {
-	case "arg1":
-		mkey = []byte(Bencrypt.Argon2Hash(combinedPw, o.salt))
-		o.pwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_ARGON2", 32)
+	case "sha3":
+		mkey = Bencrypt.SHA3512(append(o.salt, combinedPw...))
+		o.pwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_SHA3512", 32)
 	case "pbk1":
 		mkey = Bencrypt.Pbkdf2(combinedPw, o.salt, 1000000, 64)
 		o.pwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32)
+	case "arg1":
+		mkey = []byte(Bencrypt.Argon2Hash(combinedPw, o.salt))
+		o.pwHash, err = Bencrypt.Genkey(mkey, "PWHASH_OPSEC_ARGON2", 32)
+	default:
+		return nil, errors.New("unsupported method: " + method)
 	}
 	if err != nil {
 		return nil, err
@@ -325,10 +327,14 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	var hkey [44]byte
 	var hkey_t []byte
 	switch method {
-	case "arg1":
-		hkey_t, err = Bencrypt.Genkey(mkey, "KEYGEN_OPSEC_ARGON2", 44)
+	case "sha3":
+		hkey_t, err = Bencrypt.Genkey(mkey, "KEYGEN_OPSEC_SHA3512", 44)
 	case "pbk1":
 		hkey_t, err = Bencrypt.Genkey(mkey, "KEYGEN_OPSEC_PBKDF2", 44)
+	case "arg1":
+		hkey_t, err = Bencrypt.Genkey(mkey, "KEYGEN_OPSEC_ARGON2", 44)
+	default:
+		return nil, errors.New("unsupported method: " + method)
 	}
 	copy(hkey[:], hkey_t)
 	if err != nil {
@@ -362,9 +368,6 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 // Encrypt with public key, sign if private key is not nil
 func (o *Opsec) Encpub(method string, public []byte, private []byte) ([]byte, error) {
 	// set basic parameters
-	if method != "rsa1" && method != "ecc1" {
-		return nil, errors.New("unsupported method: " + method)
-	}
 	o.headAlgo = method
 	if o.Size >= 0 {
 		o.BodyKey = Bencrypt.Random(44)
@@ -399,7 +402,7 @@ func (o *Opsec) Encpub(method string, public []byte, private []byte) ([]byte, er
 	}
 	var encHeadData []byte
 	switch method {
-	case "rsa1":
+	case "rsa1", "rsa2":
 		// RSA Hybrid: Encrypt Key with RSA, Data with AES
 		var hkey [44]byte
 		copy(hkey[:], Bencrypt.Random(44))
@@ -418,6 +421,8 @@ func (o *Opsec) Encpub(method string, public []byte, private []byte) ([]byte, er
 		if err != nil {
 			return nil, err
 		}
+	default:
+		return nil, errors.New("unsupported method: " + method)
 	}
 	o.encHeadData = encHeadData
 
@@ -463,9 +468,6 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	if o.headAlgo == "" {
 		return errors.New("call View() first")
 	}
-	if o.headAlgo != "arg1" && o.headAlgo != "pbk1" {
-		return errors.New("unsupported method: " + o.headAlgo)
-	}
 
 	// Combine pw + kf
 	combinedPw := make([]byte, len(pw)+len(kf))
@@ -476,15 +478,21 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	var mkey []byte
 	var verifyLbl, keygenLbl string
 	switch o.headAlgo {
+	case "sha3":
+		mkey = Bencrypt.SHA3512(append(o.salt, combinedPw...))
+		verifyLbl = "PWHASH_OPSEC_SHA3512"
+		keygenLbl = "KEYGEN_OPSEC_SHA3512"
+	case "pbk1":
+		mkey = Bencrypt.Pbkdf2(combinedPw, o.salt, 1000000, 64)
+		verifyLbl = "PWHASH_OPSEC_PBKDF2"
+		keygenLbl = "KEYGEN_OPSEC_PBKDF2"
 	case "arg1":
 		hashStr := Bencrypt.Argon2Hash(combinedPw, o.salt)
 		mkey = []byte(hashStr)
 		verifyLbl = "PWHASH_OPSEC_ARGON2"
 		keygenLbl = "KEYGEN_OPSEC_ARGON2"
-	case "pbk1":
-		mkey = Bencrypt.Pbkdf2(combinedPw, o.salt, 1000000, 64)
-		verifyLbl = "PWHASH_OPSEC_PBKDF2"
-		keygenLbl = "KEYGEN_OPSEC_PBKDF2"
+	default:
+		return errors.New("unsupported method: " + o.headAlgo)
 	}
 
 	// Check password
@@ -518,9 +526,6 @@ func (o *Opsec) Decpub(private []byte, public []byte) error {
 	if o.headAlgo == "" {
 		return errors.New("call View() first")
 	}
-	if o.headAlgo != "rsa1" && o.headAlgo != "ecc1" {
-		return errors.New("unsupported method: " + o.headAlgo)
-	}
 
 	// Init AsymMaster
 	am := new(Bencrypt.AsymMaster)
@@ -535,7 +540,7 @@ func (o *Opsec) Decpub(private []byte, public []byte) error {
 	var decryptedHead []byte
 	var err error
 	switch o.headAlgo {
-	case "rsa1":
+	case "rsa1", "rsa2":
 		hkey_t, err := am.Decrypt(o.encHeadKey)
 		if err != nil {
 			return errors.New("RSA decryption failed")
@@ -553,6 +558,8 @@ func (o *Opsec) Decpub(private []byte, public []byte) error {
 		if err != nil {
 			return errors.New("ECC decryption failed")
 		}
+	default:
+		return errors.New("unsupported method: " + o.headAlgo)
 	}
 	o.unwrapHead(decryptedHead)
 

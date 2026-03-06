@@ -1,116 +1,190 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Opsec Library Test</title>
+    <title>Test</title>
     <style>
-        body { font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 20px; }
-        #log { white-space: pre-wrap; word-wrap: break-word; }
-        .success { color: #4ec9b0; }
-        .error { color: #f44747; }
-        .info { color: #569cd6; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-        .success { color: #4caf50; }
-        .info { color: #569cd6; }
-        .warn { color: #cca700; }
-        .error { color: #f44336; }
-    </style>
-
-    <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.8.0/src/sha3.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js"></script>
-    <script type="module">
-        import { x448, ed448 } from 'https://esm.sh/@noble/curves@1.2.0/ed448';
-        window.noble = { x448, ed448 };
-    </script>
-
-    <script src="../../Bencrypt/Bencrypt.js"></script>
-    <script src="../Opsec.js"></script>
-</head>
-<body>
-    <h2>Opsec Library Test Output</h2>
-    <button onclick="runTest()">(Run Test)</button>
-    <div id="log">Ready...</div>
-
-    <script>
-        // logger
-        const logDiv = document.getElementById('log');
-        function print(msg, color = '') {
-            const span = document.createElement('span');
-            span.textContent = msg + '\n';
-            if (color) span.className = color;
-            logDiv.appendChild(span);
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background-color: #f0f0f0;
         }
 
-        // test main
-        async function runTest() {
-            // initialize
-            InitBencrypt();
-            logDiv.textContent = "";
-            
+        #console {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            min-height: 300px;
+            overflow-y: auto;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .success {
+            color: #4caf50;
+        }
+
+        .info {
+            color: #569cd6;
+        }
+
+        .warn {
+            color: #cca700;
+        }
+
+        .error {
+            color: #f44336;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Library Test</h1>
+    <p>test will be executed on your browser</p>
+    <button onclick="runTest()">(Run Test)</button>
+    <br><br>
+    <div id="console">Ready...</div>
+
+    <script type="module">
+        import { Opsec, Crc32 } from '../Opsec.js';
+        const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
+        const { AsymMaster, TestReader, TestWriter } = await import(BencryptURL);
+
+        window.LibTest = {
+            Opsec,
+            Crc32,
+            AsymMaster,
+            TestReader,
+            TestWriter
+        };
+    </script>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        function log(message, color = '') { // printer
+            const span = document.createElement('span');
+            span.textContent = message + "\n";
+            if (color) span.style.color = color;
+            consoleDiv.appendChild(span);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            console.log(message);
+        }
+        function formatBytes(u8) {
+            if (u8.length > 100) return `[Uint8Array length=${u8.length}]`;
             try {
-                // CRC32 Test
-                const crc = crc32(strToU8("test"));
-                print(`CRC32(b"test"): ${crc}`, "success"); // Expected: 0c7e7fd8
-                print("");
-
-                // Key Generation
-                print("[Setup] Generating Keys...", "info");
-                const rsa = new RSA1();
-                const [pub0, pri0] = await rsa.genkey(2048);
-                const ecc = new ECC1();
-                const [pub1, pri1] = await ecc.genkey();
-                const m = new Opsec();
-
-                // rw test
-                print("[Test] Read/Write", "info");
-                let w = new TestWriter();
-                await w.write(new Uint8Array(128 * 4));
-                await m.write(w, strToU8("Hello, world!"));
-                let r = new TestReader(w.getValue());
-                print(`Result: ${u8ToStr(await m.read(r))}`);
-
-                // PBKDF2 Test
-                print("\n[Test] PBKDF2 Mode", "info");
-                m.msg = "msg-test"; m.smsg = "smsg-test"; m.size = 1024; m.name = "name-test"; m.bodyAlgo = "gcm1"; m.contAlgo = "zip1";
-                const encPbk = await m.encpw("pbk1", "password", "keyfile");
-                m.view(encPbk);
-                await m.decpw("password", "keyfile");
-                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
-                m.reset();
-
-                // Argon2 Test
-                print("\n[Test] Argon2 Mode", "info");
-                m.msg = "msg-test"; m.smsg = "smsg-test";
-                const encArg = await m.encpw("arg1", "password");
-                m.view(encArg);
-                await m.decpw("password");
-                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
-                m.reset();
-
-                // RSA Test
-                print("\n[Test] RSA Mode", "info");
-                m.msg = "msg-test"; m.smsg = "smsg-test"; m.size = 1024; m.name = "name-test"; m.bodyAlgo = "gcm1"; m.contAlgo = "zip1";
-                const encRSA = await m.encpub("rsa1", pub0, pri0);
-                m.view(encRSA);
-                await m.decpub(pri0, pub0);
-                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
-                m.reset();
-
-                // ECC Test
-                print("\n[Test] ECC Mode", "info");
-                m.msg = "msg-test"; m.smsg = "smsg-test";
-                const encECC = await m.encpub("ecc1", pub1, pri1);
-                m.view(encECC);
-                await m.decpub(pri1, pub1);
-                print(`Result: ${m.msg}, ${m.smsg}, ${m.size}, ${m.name}, ${m.bodyAlgo}, ${m.contAlgo}, BodyKeyLen: ${m.bodyKey.length}`);
-
-                print("\n[Done] All tests finished successfully.", "success");
+                return `${Array.from(u8).map(b => b.toString()).join(' ')}`;
             } catch (e) {
-                print(`\n[Exception] ${e.message}`, "error");
-                console.error(e);
+                return "[Error formatting bytes]";
             }
         }
     </script>
+
+    <script>
+        function fromBase64(str) {
+            return Uint8Array.from(atob(str), c => c.charCodeAt(0));
+        }
+
+        async function runTest() {
+            consoleDiv.innerHTML = "";
+            log("--- Start Test ---", "blue");
+
+            try {
+                const { Opsec, Crc32, AsymMaster, TestReader, TestWriter } = window.LibTest;
+                log(`CRC32 test: ${Crc32("test")}`); // 0c7e7fd8
+
+                log("Generating Asym Keys... (This may take a moment)");
+                const m_rsa1 = new AsymMaster("rsa1");
+                const [pub0, pri0] = await m_rsa1.Genkey();
+                const m_rsa2 = new AsymMaster("rsa2");
+                const [pub1, pri1] = await m_rsa2.Genkey();
+                const m_ecc1 = new AsymMaster("ecc1");
+                const [pub2, pri2] = await m_ecc1.Genkey();
+                const m = new Opsec();
+
+                // 1. Stream (rw) Test
+                log("\n[1] RW Stream Test");
+                const w = new TestWriter();
+                await w.write(new Uint8Array(128 * 4)); // b"\x00" * 128 * 4
+                await m.Write(w, new TextEncoder().encode("Hello, world!"));
+
+                const r = new TestReader(w.getValue());
+                const readResult = await m.Read(r);
+                log(`Result: ${new TextDecoder().decode(readResult)}`);
+
+                // 2. SHA3 Test
+                log("\n[2] SHA3 Test");
+                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
+                let enc = await m.Encpw("sha3", "password", "keyfile");
+                m.View(enc);
+                await m.Decpw("password", "keyfile");
+                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
+                m.Reset();
+
+                // 3. PBKDF2 Test
+                log("\n[3] PBKDF2 Test");
+                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
+                enc = await m.Encpw("pbk1", "password", "keyfile");
+                m.View(enc);
+                await m.Decpw("password", "keyfile");
+                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
+                m.Reset();
+
+                // 4. Argon2 Test
+                log("\n[4] Argon2 Test");
+                m.Msg = "msg-test"; m.Smsg = "smsg-test";
+                enc = await m.Encpw("arg1", "password");
+                m.View(enc);
+                await m.Decpw("password");
+                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
+                m.Reset();
+
+                // 5. RSA1 Test
+                log("\n[5] RSA1 Test");
+                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
+                enc = await m.Encpub("rsa1", pub0, pri0);
+                m.View(enc);
+                await m.Decpub(pri0, pub0);
+                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
+                m.Reset();
+
+                // 6. RSA2 Test
+                log("\n[6] RSA2 Test");
+                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
+                enc = await m.Encpub("rsa2", pub1, pri1);
+                m.View(enc);
+                await m.Decpub(pri1, pub1);
+                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
+                m.Reset();
+
+                // 7. ECC Test
+                log("\n[7] ECC1 Test");
+                m.Msg = "msg-test"; m.Smsg = "smsg-test";
+                enc = await m.Encpub("ecc1", pub2, pri2);
+                m.View(enc);
+                await m.Decpub(pri2, pub2);
+                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
+                m.Reset();
+
+            } catch (e) {
+                console.error(e);
+                log(`ERROR: ${e.message}`, "red");
+                log(e.stack, "gray");
+            }
+            log("--- End Test ---", "blue");
+        }
+    </script>
 </body>
+
 </html>

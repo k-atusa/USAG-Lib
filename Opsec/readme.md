@@ -6,65 +6,67 @@ Secure file container and helper functions based on Bencrypt. Supports password-
 
 #### Supported Methods
 
+- sha3
 - pbk1
 - arg1
 - rsa1
+- rsa2
 - ecc1
 
 #### python
 ```py
-def crc32(data: bytes) -> str
-def encodeInt(data: int, size: int, signed: bool) -> bytes
-def decodeInt(data: bytes, signed: bool) -> int
-def encodeCfg(data: Dict[str, bytes]) -> bytes
-def decodeCfg(data: bytes) -> Dict[str, bytes]
+def Crc32(data: bytes) -> str
+def EncodeInt(data: int, size: int, signed: bool) -> bytes
+def DecodeInt(data: bytes, signed: bool) -> int
+def EncodeCfg(data: Dict[str, bytes]) -> bytes
+def DecodeCfg(data: bytes) -> Dict[str, bytes]
 
 class Opsec:
-    msg: str           # Non-secured message
-    smsg: str          # Secured message
-    size: int          # Body size (-1: no body key)
-    name: str          # Body name
-    bodyKey: bytes     # Body key
-    bodyAlgo: str      # Body algorithm
-    contAlgo: str      # Container algorithm
+    Msg: str           # Non-secured message
+    Smsg: str          # Secured message
+    Size: int          # Body size (-1: no body key)
+    Name: str          # Body name
+    BodyKey: bytes     # Body key
+    BodyAlgo: str      # Body algorithm
+    ContAlgo: str      # Container algorithm
     
-    def reset()
-    def read(ins: io.IOBase, cut: int = 65535) -> bytes
-    def write(outs: io.IOBase, head: bytes)
+    def Reset()
+    def Read(ins: io.IOBase, cut: int = 65535) -> bytes
+    def Write(outs: io.IOBase, head: bytes)
     
-    def encpw(method: str, pw: bytes, kf: bytes = b"") -> bytes
-    def encpub(method: str, public: bytes, private: bytes | None = None) -> bytes
-    def view(data: bytes)
-    def decpw(pw: bytes, kf: bytes = b"")
-    def decpub(private: bytes, public: bytes | None = None)
+    def Encpw(method: str, pw: bytes, kf: bytes = b"") -> bytes
+    def Encpub(method: str, public: bytes, private: bytes | None = None) -> bytes
+    def View(data: bytes)
+    def Decpw(pw: bytes, kf: bytes = b"")
+    def Decpub(private: bytes, public: bytes | None = None)
 ```
 
 #### javascript
 ```js
-function crc32(data: Uint8Array | string): string
-function encodeInt(data: number, size: number): Uint8Array
-function decodeInt(data: Uint8Array): number
-function encodeCfg(data: Object): Uint8Array
-function decodeCfg(data: Uint8Array): Object
+function Crc32(data: Uint8Array | string): string
+function EncodeInt(data: number, size: number): Uint8Array
+function DecodeInt(data: Uint8Array): number
+function EncodeCfg(data: Object): Uint8Array
+function DecodeCfg(data: Uint8Array): Object
 
 class Opsec {
-    msg: String
-    smsg: String
-    size: Number
-    name: String
-    bodyKey: Uint8Array
-    bodyAlgo: String
-    contAlgo: String
+    Msg: String
+    Smsg: String
+    Size: Number
+    Name: String
+    BodyKey: Uint8Array
+    BodyAlgo: String
+    ContAlgo: String
     
-    reset()
-    async function read(ins, cut): Promise<Uint8Array>
-    async function write(outs, head)
+    Reset()
+    async function Read(ins, cut): Promise<Uint8Array>
+    async function Write(outs, head)
     
-    async function encpw(method, pw, kf): Promise<Uint8Array>
-    async function encpub(method, publicBuf, privateBuf): Promise<Uint8Array>
-    function view(data)
-    async function decpw(pw, kf)
-    async function decpub(privateBuf, publicBuf)
+    async function Encpw(method, pw, kf): Promise<Uint8Array>
+    async function Encpub(method, publicBuf, privateBuf): Promise<Uint8Array>
+    function View(data)
+    async function Decpw(pw, kf)
+    async function Decpub(privateBuf, publicBuf)
 }
 ```
 
@@ -100,29 +102,29 @@ type Opsec struct {
 #### java
 ```java
 public class Opsec {
-    public String crc32(byte[] data)
-    public byte[] encodeInt(long data, int size)
-    public long decodeInt(byte[] data)
-    public byte[] encodeCfg(Map<String, byte[]> data) throws IOException
-    public Map<String, byte[]> decodeCfg(byte[] data)
+    public String Crc32(byte[] data)
+    public byte[] EncodeInt(long data, int size)
+    public long DecodeInt(byte[] data)
+    public byte[] EncodeCfg(Map<String, byte[]> data) throws IOException
+    public Map<String, byte[]> DecodeCfg(byte[] data)
     
-    public String msg;
-    public String smsg;
-    public long size;
-    public String name;
-    public byte[] bodyKey;
-    public String bodyAlgo;
-    public String contAlgo;
+    public String Msg;
+    public String Smsg;
+    public long Size;
+    public String Name;
+    public byte[] BodyKey;
+    public String BodyAlgo;
+    public String ContAlgo;
 
-    public void reset()
-    public byte[] read(InputStream ins, int cut) throws IOException
-    public void write(OutputStream outs, byte[] head) throws IOException
+    public void Reset()
+    public byte[] Read(InputStream ins, int cut) throws IOException
+    public void Write(OutputStream outs, byte[] head) throws IOException
 
-    public byte[] encpw(String method, byte[] pw, byte[] kf) throws Exception
-    public byte[] encpub(String method, byte[] publicBytes, byte[] privateBytes) throws Exception
-    public void view(byte[] data)
-    public void decpw(byte[] pw, byte[] kf) throws Exception
-    public void decpub(byte[] privateBytes, byte[] publicBytes) throws Exception
+    public byte[] Encpw(String method, byte[] pw, byte[] kf) throws Exception
+    public byte[] Encpub(String method, byte[] publicBytes, byte[] privateBytes) throws Exception
+    public void View(byte[] data)
+    public void Decpw(byte[] pw, byte[] kf) throws Exception
+    public void Decpub(byte[] privateBytes, byte[] publicBytes) throws Exception
 }
 ```
 

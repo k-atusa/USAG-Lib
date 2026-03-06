@@ -1,5 +1,5 @@
-// test794d : USAG-Lib opsec
 
+// test794d : USAG-Lib opsec
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,7 +21,7 @@ header: (smsg), (size), (name), (bodyKey), (bodyAlgo), (contAlgo), (sign)
 */
 public class Opsec {
     // Outer Layer
-    public String msg; // non-secured message
+    public String Msg; // non-secured message
     private String headAlgo; // header algorithm, [arg1 pbk1 rsa1 ecc1]
     private byte[] salt; // salt
     private byte[] pwHash; // pw hash
@@ -29,37 +29,37 @@ public class Opsec {
     private byte[] encHeadData; // encrypted header data
 
     // Inner Layer
-    public String smsg; // secured message
-    public long size; // full body size, flag for bodyKey generation
-    public String name; // body name
-    public byte[] bodyKey; // body key
-    public String bodyAlgo; // body algorithm, [gcm1 gcmx1]
-    public String contAlgo; // container algorithm, [zip1 tar1]
+    public String Smsg; // secured message
+    public long Size; // full body size, flag for bodyKey generation
+    public String Name; // body name
+    public byte[] BodyKey; // body key
+    public String BodyAlgo; // body algorithm, [gcm1 gcmx1]
+    public String ContAlgo; // container algorithm, [zip1 tar1]
     private byte[] sign; // signature to bodyKey/smsg
 
     public Opsec() {
-        reset();
+        Reset();
     }
 
-    public void reset() {
-        msg = "";
+    public void Reset() {
+        Msg = "";
         headAlgo = "";
         salt = new byte[0];
         pwHash = new byte[0];
         encHeadKey = new byte[0];
         encHeadData = new byte[0];
 
-        smsg = "";
-        size = -1;
-        name = "";
-        bodyKey = new byte[0];
-        bodyAlgo = "";
-        contAlgo = "";
+        Smsg = "";
+        Size = -1;
+        Name = "";
+        BodyKey = new byte[0];
+        BodyAlgo = "";
+        ContAlgo = "";
         sign = new byte[0];
     }
 
     // ========== Helper Functions ==========
-    public static String crc32(byte[] data) {
+    public static String Crc32(byte[] data) {
         CRC32 crc = new CRC32();
         crc.update(data);
         long value = crc.getValue();
@@ -67,7 +67,7 @@ public class Opsec {
                 (value >> 24) & 0xFF); // 8 chars hex string
     }
 
-    public byte[] encodeInt(long data, int size) {
+    public byte[] EncodeInt(long data, int size) {
         ByteBuffer buf = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
         if (size == 1)
             buf.put((byte) data);
@@ -80,7 +80,7 @@ public class Opsec {
         return buf.array();
     }
 
-    public long decodeInt(byte[] data) {
+    public long DecodeInt(byte[] data) {
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
         if (data.length == 1)
             return Byte.toUnsignedInt(buf.get());
@@ -115,7 +115,7 @@ public class Opsec {
     }
 
     // Config Encoding
-    public byte[] encodeCfg(Map<String, byte[]> data) throws IOException {
+    public byte[] EncodeCfg(Map<String, byte[]> data) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         for (Map.Entry<String, byte[]> entry : data.entrySet()) {
             byte[] keyBytes = strToBytes(entry.getKey());
@@ -130,7 +130,7 @@ public class Opsec {
             if (dataLen > 255) {
                 out.write(keyLen + 128);
                 out.write(keyBytes);
-                out.write(encodeInt(dataLen, 2));
+                out.write(EncodeInt(dataLen, 2));
             } else {
                 out.write(keyLen);
                 out.write(keyBytes);
@@ -142,7 +142,7 @@ public class Opsec {
     }
 
     // Config Decoding
-    public Map<String, byte[]> decodeCfg(byte[] data) {
+    public Map<String, byte[]> DecodeCfg(byte[] data) {
         Map<String, byte[]> result = new HashMap<>();
         ByteBuffer buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
         while (buf.hasRemaining()) {
@@ -170,7 +170,7 @@ public class Opsec {
     }
 
     // read stream, return opsec header
-    public byte[] read(InputStream ins, int cut) throws IOException {
+    public byte[] Read(InputStream ins, int cut) throws IOException {
         int c = 0;
         while (true) {
             byte[] buf4 = ins.readNBytes(4);
@@ -178,10 +178,10 @@ public class Opsec {
 
             if (Arrays.equals(buf4, strToBytes("YAS2"))) {
                 byte[] buf2 = ins.readNBytes(2);
-                long size = decodeInt(buf2);
+                long size = DecodeInt(buf2);
                 if (size == 65535) {
                     buf2 = ins.readNBytes(2);
-                    size += decodeInt(buf2);
+                    size += DecodeInt(buf2);
                 }
                 byte[] packet = new byte[(int) size];
                 int totalRead = 0;
@@ -203,14 +203,14 @@ public class Opsec {
     }
 
     // write opsec header to stream
-    public void write(OutputStream outs, byte[] head) throws IOException {
+    public void Write(OutputStream outs, byte[] head) throws IOException {
         outs.write(strToBytes("YAS2"));
         int size = head.length;
         if (size < 65535) {
-            outs.write(encodeInt(size, 2));
+            outs.write(EncodeInt(size, 2));
         } else if (size <= 65535 * 2) {
-            outs.write(encodeInt(65535, 2));
-            outs.write(encodeInt(size - 65535, 2));
+            outs.write(EncodeInt(65535, 2));
+            outs.write(EncodeInt(size - 65535, 2));
         } else {
             throw new IOException("Data size too big: " + size);
         }
@@ -219,143 +219,145 @@ public class Opsec {
 
     private byte[] wrapHead() throws IOException {
         Map<String, byte[]> cfg = new HashMap<>();
-        if (!smsg.isEmpty())
-            cfg.put("smsg", strToBytes(smsg));
-        if (size >= 0) {
-            if (size < 65536)
-                cfg.put("sz", encodeInt(size, 2));
-            else if (size < 4294967296L)
-                cfg.put("sz", encodeInt(size, 4));
+        if (!Smsg.isEmpty())
+            cfg.put("smsg", strToBytes(Smsg));
+        if (Size >= 0) {
+            if (Size < 65536)
+                cfg.put("sz", EncodeInt(Size, 2));
+            else if (Size < 4294967296L)
+                cfg.put("sz", EncodeInt(Size, 4));
             else
-                cfg.put("sz", encodeInt(size, 8));
+                cfg.put("sz", EncodeInt(Size, 8));
         }
-        if (!name.isEmpty())
-            cfg.put("nm", strToBytes(name));
-        if (bodyKey.length > 0)
-            cfg.put("bkey", bodyKey);
-        if (!bodyAlgo.isEmpty())
-            cfg.put("bodyal", strToBytes(bodyAlgo));
-        if (!contAlgo.isEmpty())
-            cfg.put("contal", strToBytes(contAlgo));
+        if (!Name.isEmpty())
+            cfg.put("nm", strToBytes(Name));
+        if (BodyKey.length > 0)
+            cfg.put("bkey", BodyKey);
+        if (!BodyAlgo.isEmpty())
+            cfg.put("bodyal", strToBytes(BodyAlgo));
+        if (!ContAlgo.isEmpty())
+            cfg.put("contal", strToBytes(ContAlgo));
         if (sign.length > 0)
             cfg.put("sgn", sign);
-        return encodeCfg(cfg);
+        return EncodeCfg(cfg);
     }
 
     private void unwrapHead(byte[] data) {
-        Map<String, byte[]> cfg = decodeCfg(data);
+        Map<String, byte[]> cfg = DecodeCfg(data);
         if (cfg.containsKey("smsg"))
-            smsg = bytesToStr(cfg.get("smsg"));
+            Smsg = bytesToStr(cfg.get("smsg"));
         if (cfg.containsKey("sz"))
-            size = decodeInt(cfg.get("sz"));
+            Size = DecodeInt(cfg.get("sz"));
         if (cfg.containsKey("nm"))
-            name = bytesToStr(cfg.get("nm"));
+            Name = bytesToStr(cfg.get("nm"));
         if (cfg.containsKey("bkey"))
-            bodyKey = cfg.get("bkey");
+            BodyKey = cfg.get("bkey");
         if (cfg.containsKey("bodyal"))
-            bodyAlgo = bytesToStr(cfg.get("bodyal"));
+            BodyAlgo = bytesToStr(cfg.get("bodyal"));
         if (cfg.containsKey("contal"))
-            contAlgo = bytesToStr(cfg.get("contal"));
+            ContAlgo = bytesToStr(cfg.get("contal"));
         if (cfg.containsKey("sgn"))
             sign = cfg.get("sgn");
     }
 
     // encrypt with password
-    public byte[] encpw(String method, byte[] pw, byte[] kf) throws Exception {
+    public byte[] Encpw(String method, byte[] pw, byte[] kf) throws Exception {
         Bencrypt worker = new Bencrypt();
-        if (!method.equals("arg1") && !method.equals("pbk1")) {
-            throw new IllegalArgumentException("Unsupported method: " + method);
-        }
         headAlgo = method;
-        salt = worker.random(16);
-        if (size >= 0) {
-            bodyKey = worker.random(44);
+        salt = worker.Random(16);
+        if (Size >= 0) {
+            BodyKey = worker.Random(44);
         }
         byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
         byte[] mkey;
         String verifyLbl, keygenLbl;
 
         // generate password hash, encrypt header
-        if (method.equals("arg1")) {
+        if (method.equals("sha3")) {
+            mkey = Bencrypt.SHA3512(concat(salt, combinedPw));
+            verifyLbl = "PWHASH_OPSEC_SHA3512";
+            keygenLbl = "KEYGEN_OPSEC_SHA3512";
+        } else if (method.equals("pbk1")) {
+            mkey = Bencrypt.pbkdf2(combinedPw, salt, 1000000, 64);
+            verifyLbl = "PWHASH_OPSEC_PBKDF2";
+            keygenLbl = "KEYGEN_OPSEC_PBKDF2";
+        } else if (method.equals("arg1")) {
             String hashStr = worker.argon2Hash(combinedPw, salt);
             mkey = strToBytes(hashStr);
             verifyLbl = "PWHASH_OPSEC_ARGON2";
             keygenLbl = "KEYGEN_OPSEC_ARGON2";
         } else {
-            mkey = worker.pbkdf2(combinedPw, salt, 1000000, 64);
-            verifyLbl = "PWHASH_OPSEC_PBKDF2";
-            keygenLbl = "KEYGEN_OPSEC_PBKDF2";
+            throw new IllegalArgumentException("Unsupported method: " + method);
         }
-        pwHash = worker.genkey(mkey, verifyLbl, 32);
-        byte[] hkey = worker.genkey(mkey, keygenLbl, 44);
+        pwHash = Bencrypt.genkey(mkey, verifyLbl, 32);
+        byte[] hkey = Bencrypt.genkey(mkey, keygenLbl, 44);
 
         // Encrypt Header using SymMaster
         byte[] headData = wrapHead();
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
-        encHeadData = sm.enBin(headData);
+        encHeadData = sm.EnBin(headData);
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
-        if (!msg.isEmpty())
-            cfg.put("msg", strToBytes(msg));
+        if (!Msg.isEmpty())
+            cfg.put("msg", strToBytes(Msg));
         cfg.put("headal", strToBytes(headAlgo));
         cfg.put("salt", salt);
         cfg.put("pwh", pwHash);
         cfg.put("ehd", encHeadData);
-        return encodeCfg(cfg);
+        return EncodeCfg(cfg);
     }
 
     // encrypt with public key, sign if private key is not null
-    public byte[] encpub(String method, byte[] publicBytes, byte[] privateBytes) throws Exception {
+    public byte[] Encpub(String method, byte[] publicBytes, byte[] privateBytes) throws Exception {
         Bencrypt worker = new Bencrypt();
-        if (!method.equals("rsa1") && !method.equals("ecc1")) {
-            throw new IllegalArgumentException("Unsupported method: " + method);
-        }
         headAlgo = method;
-        if (size >= 0) {
-            bodyKey = worker.random(44);
+        if (Size >= 0) {
+            BodyKey = worker.Random(44);
         }
 
         // Init Master & Sign
         Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(method);
-        am.loadkey(publicBytes, privateBytes);
+        am.Loadkey(publicBytes, privateBytes);
 
         if (privateBytes != null) {
-            byte[] s = (bodyKey.length > 0) ? bodyKey : strToBytes(smsg);
-            sign = am.sign(s);
+            byte[] s = (BodyKey.length > 0) ? BodyKey : strToBytes(Smsg);
+            sign = am.Sign(s);
         }
 
         // encrypt header
         byte[] headData = wrapHead();
-        if (method.equals("rsa1")) {
+        if (method.equals("rsa1") || method.equals("rsa2")) {
             // RSA Hybrid: Encrypt Key with RSA, Data with AES
-            byte[] hkey = worker.random(44);
-            encHeadKey = am.encrypt(hkey);
+            byte[] hkey = worker.Random(44);
+            encHeadKey = am.Encrypt(hkey);
 
             Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
-            encHeadData = sm.enBin(headData);
-        } else {
+            encHeadData = sm.EnBin(headData);
+        } else if (method.equals("ecc1")) {
             // ECC Hybrid: Handled internally by ECC1 class
-            encHeadData = am.encrypt(headData);
+            encHeadData = am.Encrypt(headData);
+        } else {
+            throw new IllegalArgumentException("Unsupported method: " + method);
         }
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
-        if (!msg.isEmpty())
-            cfg.put("msg", strToBytes(msg));
+        if (!Msg.isEmpty())
+            cfg.put("msg", strToBytes(Msg));
         cfg.put("headal", strToBytes(headAlgo));
         if (encHeadKey.length > 0)
             cfg.put("ehk", encHeadKey);
         cfg.put("ehd", encHeadData);
-        return encodeCfg(cfg);
+        return EncodeCfg(cfg);
     }
 
     // load outer layer of header
-    public void view(byte[] data) {
-        reset();
-        Map<String, byte[]> cfg = decodeCfg(data);
+    public void View(byte[] data) {
+        Reset();
+        Map<String, byte[]> cfg = DecodeCfg(data);
         if (cfg.containsKey("msg"))
-            msg = bytesToStr(cfg.get("msg"));
+            Msg = bytesToStr(cfg.get("msg"));
         if (cfg.containsKey("headal"))
             headAlgo = bytesToStr(cfg.get("headal"));
         if (cfg.containsKey("salt"))
@@ -369,60 +371,61 @@ public class Opsec {
     }
 
     // decrypt with password
-    public void decpw(byte[] pw, byte[] kf) throws Exception {
+    public void Decpw(byte[] pw, byte[] kf) throws Exception {
         Bencrypt worker = new Bencrypt();
         if (headAlgo.isEmpty())
             throw new IllegalStateException("Call view() first");
-        if (!headAlgo.equals("arg1") && !headAlgo.equals("pbk1")) {
-            throw new IllegalArgumentException("Unsupported method: " + headAlgo);
-        }
         byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
         byte[] mkey;
         String verifyLbl, keygenLbl;
 
         // check password
-        if (headAlgo.equals("arg1")) {
+        if (headAlgo.equals("sha3")) {
+            mkey = Bencrypt.SHA3512(concat(salt, combinedPw));
+            verifyLbl = "PWHASH_OPSEC_SHA3512";
+            keygenLbl = "KEYGEN_OPSEC_SHA3512";
+        } else if (headAlgo.equals("pbk1")) {
+            mkey = Bencrypt.pbkdf2(combinedPw, salt, 1000000, 64);
+            verifyLbl = "PWHASH_OPSEC_PBKDF2";
+            keygenLbl = "KEYGEN_OPSEC_PBKDF2";
+        } else if (headAlgo.equals("arg1")) {
             String hashStr = worker.argon2Hash(combinedPw, salt);
             mkey = strToBytes(hashStr);
             verifyLbl = "PWHASH_OPSEC_ARGON2";
             keygenLbl = "KEYGEN_OPSEC_ARGON2";
         } else {
-            mkey = worker.pbkdf2(combinedPw, salt, 1000000, 64);
-            verifyLbl = "PWHASH_OPSEC_PBKDF2";
-            keygenLbl = "KEYGEN_OPSEC_PBKDF2";
+            throw new IllegalArgumentException("Unsupported method: " + headAlgo);
         }
-        byte[] calcHash = worker.genkey(mkey, verifyLbl, 32);
+        byte[] calcHash = Bencrypt.genkey(mkey, verifyLbl, 32);
         if (!Arrays.equals(calcHash, pwHash))
             throw new SecurityException("Incorrect password");
 
         // decrypt header
-        byte[] hkey = worker.genkey(mkey, keygenLbl, 44);
+        byte[] hkey = Bencrypt.genkey(mkey, keygenLbl, 44);
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
-        byte[] decryptedHead = sm.deBin(encHeadData);
+        byte[] decryptedHead = sm.DeBin(encHeadData);
         if (decryptedHead == null)
             throw new SecurityException("AES decryption failed");
         unwrapHead(decryptedHead);
     }
 
     // decrypt with private key, verify if public key is not null
-    public void decpub(byte[] privateBytes, byte[] publicBytes) throws Exception {
-        Bencrypt worker = new Bencrypt();
+    public void Decpub(byte[] privateBytes, byte[] publicBytes) throws Exception {
         if (headAlgo.isEmpty())
             throw new IllegalStateException("Call view() first");
-        if (!headAlgo.equals("rsa1") && !headAlgo.equals("ecc1")) {
-            throw new IllegalArgumentException("Unsupported method: " + headAlgo);
-        }
         Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(headAlgo);
-        am.loadkey(publicBytes, privateBytes);
+        am.Loadkey(publicBytes, privateBytes);
 
         // decrypt header
         byte[] decryptedHead;
-        if (headAlgo.equals("rsa1")) {
-            byte[] hkey = am.decrypt(encHeadKey);
+        if (headAlgo.equals("rsa1") || headAlgo.equals("rsa2")) {
+            byte[] hkey = am.Decrypt(encHeadKey);
             Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
-            decryptedHead = sm.deBin(encHeadData);
+            decryptedHead = sm.DeBin(encHeadData);
+        } else if (headAlgo.equals("ecc1")) {
+            decryptedHead = am.Decrypt(encHeadData);
         } else {
-            decryptedHead = am.decrypt(encHeadData);
+            throw new IllegalArgumentException("Unsupported method: " + headAlgo);
         }
         if (decryptedHead == null)
             throw new SecurityException("Decryption failed");
@@ -430,8 +433,8 @@ public class Opsec {
 
         // verify if public key is not null
         if (publicBytes != null) {
-            byte[] s = (bodyKey.length > 0) ? bodyKey : strToBytes(smsg);
-            if (!am.verify(s, sign)) {
+            byte[] s = (BodyKey.length > 0) ? BodyKey : strToBytes(Smsg);
+            if (!am.Verify(s, sign)) {
                 throw new SecurityException("Signature verification failed");
             }
         }
