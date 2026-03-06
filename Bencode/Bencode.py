@@ -94,12 +94,12 @@ class Bencode: # Base-N encoder
             ba.append(byte_val)
         return bytes(ba)
 
-def Encode(data: bytes) -> str:
+def Encode64(data: bytes) -> str:
     if len(data) == 0:
         return ""
     return base64.b64encode(data).decode('ascii')
 
-def Decode(data: str) -> bytes:
+def Decode64(data: str) -> bytes:
     data = data.replace("\r", "").replace("\n", "").replace(" ", "")
     if data == "":
         return b""

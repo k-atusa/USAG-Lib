@@ -1,10 +1,31 @@
 // test789b : USAG-Lib bencode
+const isNode = (typeof window === 'undefined')
 
-if (typeof isNode === 'undefined') {
-    window.isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+// Helper for Base64 (Env agnostic)
+function _toBase64(uint8Array) {
+    if (isNode) {
+        return Buffer.from(uint8Array).toString('base64');
+    } else {
+        let binary = '';
+        const len = uint8Array.byteLength;
+        for (let i = 0; i < len; i++) binary += String.fromCharCode(uint8Array[i]);
+        return btoa(binary);
+    }
 }
 
-class Bencode { // Base-N encoder
+function _fromBase64(str) {
+    if (isNode) {
+        return new Uint8Array(Buffer.from(str, 'base64'));
+    } else {
+        const binary = atob(str);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+}
+
+export class Bencode { // Base-N encoder
     static _CHARS = [];
     static _REV_MAP = {};
     static _THRESHOLD = 32164;
@@ -34,7 +55,7 @@ class Bencode { // Base-N encoder
         }
 
         if (isBase64 && data.length === 0) return "";
-        if (isBase64) return this._toBase64(data);
+        if (isBase64) return _toBase64(data);
         return this._encodeUnicode(data);
     }
 
@@ -45,33 +66,9 @@ class Bencode { // Base-N encoder
         const firstCharCode = data.charCodeAt(0);
         // Base64 Check: ASCII < 128 AND not escape char
         if (firstCharCode < 128 && data[0] !== Bencode._ESCAPE_CHAR) {
-            return this._fromBase64(data);
+            return _fromBase64(data);
         } else {
             return this._decodeUnicode(data);
-        }
-    }
-
-    // Helper for Base64 (Env agnostic)
-    _toBase64(uint8Array) {
-        if (isNode) {
-            return Buffer.from(uint8Array).toString('base64');
-        } else {
-            let binary = '';
-            const len = uint8Array.byteLength;
-            for (let i = 0; i < len; i++) binary += String.fromCharCode(uint8Array[i]);
-            return btoa(binary);
-        }
-    }
-
-    _fromBase64(str) {
-        if (isNode) {
-            return new Uint8Array(Buffer.from(str, 'base64'));
-        } else {
-            const binary = atob(str);
-            const len = binary.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-            return bytes;
         }
     }
 
@@ -156,13 +153,21 @@ class Bencode { // Base-N encoder
         deBit();
         return new Uint8Array(ba);
     }
-
-    Encode(data) { return this.encode(data, true); }
-    Decode(data) { return this.decode(data); }
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = Bencode;
-} else if (typeof window !== 'undefined') {
-    window.Bencode = Bencode;
+export function Encode64(data) {
+    // Ensure data is Uint8Array
+    if (typeof data === 'string') {
+        data = new TextEncoder().encode(data);
+    } else if (!(data instanceof Uint8Array)) {
+        data = new Uint8Array(data);
+    }
+    if (data.length === 0) return "";
+    return _toBase64(data);
+}
+
+export function Decode64(data) {
+    data = data.replace(/[\r\n ]/g, ""); // Remove whitespace
+    if (data === "") return new Uint8Array(0);
+    return _fromBase64(data);
 }

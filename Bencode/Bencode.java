@@ -129,11 +129,11 @@ public class Bencode {
         return ba.toByteArray();
     }
 
-    public String Encode(byte[] data) {
+    public static String Encode64(byte[] data) {
         if (data.length == 0) return "";
         return Base64.getEncoder().encodeToString(data);
     }
-    public byte[] Decode(String data) {
+    public static byte[] Decode64(String data) {
         String cleaned = data.replace("\r", "").replace("\n", "").replace(" ", "");
         if (cleaned.isEmpty()) return new byte[0];
         return Base64.getDecoder().decode(cleaned);

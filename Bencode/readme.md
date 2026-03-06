@@ -8,44 +8,27 @@ warning: Base-32k is deprecated, just use standard Base64.
 
 #### python
 ```py
-class Bencode:
-    def encode(data: bytes, isBase64: bool) -> str
-    def decode(data: str) -> bytes
-
-def Encode(data: bytes) -> str
-def Decode(data: str) -> bytes
+def Encode64(data: bytes) -> str
+def Decode64(data: str) -> bytes
 ```
 
 #### javascript
 ```js
-class Bencode {
-    function encode(data: Uint8Array, isBase64: boolean): string
-    function decode(data: string): Uint8Array
-
-    function Encode(data: Uint8Array): string
-    function Decode(data: string): Uint8Array
-}
+function Encode64(data: Uint8Array): string
+function Decode64(data: string): Uint8Array
 ```
 
 #### golang
 ```go
-struct Bencode {
-    func Encode(data []byte, isBase64 bool) string
-    func Decode(data string) ([]byte, error)
-}
-
-func Encode(data []byte) string
-func Decode(data string) ([]byte, error)
+func Encode64(data []byte) string
+func Decode64(data string) ([]byte, error)
 ```
 
 #### java
 ```java
 class Bencode {
-    String encode(byte[] data, boolean isBase64)
-    byte[] decode(String data)
-
-    String Encode(byte[] data)
-    byte[] Decode(String data)
+    String Encode64(byte[] data)
+    byte[] Decode64(String data)
 }
 ```
 

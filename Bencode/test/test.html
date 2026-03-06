@@ -1,10 +1,13 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bencode JS Test</title>
-    <script src="../Bencode.js"></script>
+    <title>Test</title>
     <style>
         body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
         #console { 
@@ -22,17 +25,23 @@
     </style>
 </head>
 <body>
-
-    <h1>Basio.js Library Test</h1>
+    <h1>Library Test</h1>
     <p>test will be executed on your browser</p>
     <button onclick="runTest()">(Run Test)</button>
     <br><br>
     <div id="console">Ready...</div>
 
+    <script type="module">
+        import {Encode64, Decode64} from '../Bencode.js';
+        window.Bencode = {
+            "Encode64": Encode64,
+            "Decode64": Decode64
+        }
+    </script>
+
     <script>
-        // printer
         const consoleDiv = document.getElementById('console');
-        function log(message, color = '') {
+        function log(message, color = '') { // printer
             const span = document.createElement('span');
             span.textContent = message + "\n";
             if (color) span.style.color = color;
@@ -40,56 +49,30 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
             console.log(message);
         }
-
-        // Uint8Array to hex string
-        function formatBytes(u8) {
+        function formatBytes(u8) { // array to hex string
             if (u8.length > 20) return `[Uint8Array length=${u8.length}]`;
             return `b"${Array.from(u8).map(b => '\\x' + b.toString(16).padStart(2, '0')).join('')}"`;
         }
+    </script>
 
+    <script>
         async function runTest() {
             consoleDiv.innerHTML = "";
-            log("--- Start Test ---", "#569cd6");
-
+            log("--- Start Test ---", "blue");
             try {
-                const m = new Bencode();
-                const textStr = "안녕하세요, 카투사 프로그래밍 클럽 라이브러리 테스트입니다. Hello, world!";
-                const text = new TextEncoder().encode(textStr);
-                const data = [
-                    new Uint8Array([]),
-                    new Uint8Array([0x00]),
-                    new Uint8Array([0x12, 0x34]),
-                    new Uint8Array([0x3f, 0xff]),
-                    new Uint8Array([0xff, 0xee, 0xff, 0xff, 0xff, 0xdc, 0xff, 0xff]),
-                    new Uint8Array([0xff, 0x00, 0x00, 0x01, 0xff, 0x00, 0x00, 0x01, 0x10])
-                ];
+                const t0 = new TextEncoder().encode("");
+                const t1 = new TextEncoder().encode("abc");
+                const t2 = new TextEncoder().encode("라이브러리 테스트 코드입니다.");
 
-                // Encode Base64
-                let test = m.encode(text, true);
-                let decoded = m.decode(test);
-                log(`${test} : ${new TextDecoder().decode(decoded)}`);
-
-                // Encode Base32k
-                test = m.encode(text, false);
-                decoded = m.decode(test);
-                log(`${test} : ${new TextDecoder().decode(decoded)}`);
-
-                // Binary Data Loop
-                for (let i = 0; i < data.length; i++) {
-                    test = m.encode(data[i], false);
-                    decoded = m.decode(test);
-                    log(`${test} : ${formatBytes(decoded)}`);
-                }
-
-                // Basic Encode
-                test = m.Encode(text);
-                decoded = m.Decode(test);
-                log(`${test} : ${new TextDecoder().decode(decoded)}`);
+                log(`"": ${new TextDecoder().decode(Bencode.Decode64(Bencode.Encode64(t0)))}`);
+                log(`"abc": ${new TextDecoder().decode(Bencode.Decode64(Bencode.Encode64(t1)))}`);
+                log(`"라이브러리 테스트 코드입니다.": ${new TextDecoder().decode(Bencode.Decode64(Bencode.Encode64(t2)))}`);
 
             } catch (e) {
                 console.error(e);
                 log(`ERROR: ${e.message}`, "red");
             }
+            log("--- End Test ---", "blue");
         }
     </script>
 </body>

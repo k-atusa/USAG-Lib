@@ -1,4 +1,4 @@
-# USAG-Lib v1.0.0
+# USAG-Lib v1.1.0
 
 Universal Security Assistant Gear - Library
 
@@ -119,3 +119,10 @@ source ~/.profile
 
 go version
 ```
+
+# Coding Conventions
+
+- Name module with `PascalCase`. (MyModule.ext)
+- Name global variable, function and class with `PascalCase`. (MyClass)
+- Name local/private object with `camelCase`, Adding underbar is allowed. (isCond, _table)
+- Write short, readable, non-verbose code.
