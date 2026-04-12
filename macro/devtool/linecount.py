@@ -1,5 +1,6 @@
 # test805 : linecount
 import os
+import requests
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
@@ -18,8 +19,18 @@ GITHUB_COLORS = {
     "md": "#083fa1"
 }
 
+GITHUB_LANG_MAP = {
+    "Python": "py", "C": "c", "C++": "cpp", "C#": "cs",
+    "CSS": "css", "Dart": "dart", "Go": "go", "HTML": "html",
+    "Java": "java", "JavaScript": "js", "Kotlin": "kt",
+    "Lua": "lua", "PHP": "php", "R": "r", "Ruby": "rb",
+    "Rust": "rs", "Shell": "sh", "TypeScript": "ts",
+    "Jupyter Notebook": "py"
+}
+
 DEFAULT_COLOR = "#cccccc"
 
+# helper functions
 def get_color(ext):
     return GITHUB_COLORS.get(ext, DEFAULT_COLOR)
 
@@ -82,7 +93,8 @@ def draw_github_style(data_dict, title, unit_text):
     plt.tight_layout()
     plt.show()
 
-def main():
+# get data from local
+def local():
     target_path = os.path.abspath(path)
     valid_ext = CODE_EXT.union(DATA_EXT)
 
@@ -117,14 +129,61 @@ def main():
                     pass
     print("Analyzing structure completed!")
 
-    # 4가지 모드 그리기
+    # supports 4 modes
     draw_github_style(lines_by_code, "Lines of Code by Language", "Lines")
     draw_github_style(bytes_by_code, "Code Size by Language", "Bytes")
     draw_github_style(count_by_ext, "File Count by Extension", "Files")
     draw_github_style(bytes_by_ext, "Total Size by Extension", "Bytes")
 
+# get data from github
+def remote(target_name):
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    bytes_by_code = {e: 0 for e in CODE_EXT}
+    repos = []
+    page = 1
+    
+    # get all repos from github
+    print("Analyzing structure started...")
+    while True:
+        repos_url = f"https://api.github.com/users/{target_name}/repos?per_page=100&page={page}"
+        response = requests.get(repos_url, headers=headers)
+        
+        if response.status_code != 200:
+            print(f"failed to get data: {response.status_code}")
+            return
+            
+        page_data = response.json()
+        if not page_data:
+            break
+            
+        repos.extend(page_data)
+        page += 1
+
+    # add all repo bytes
+    original_repos = repo if include_forks else [repo for repo in repos if not repo.get("fork")] # exclude forked repos
+    for repo in original_repos:
+        repo_name = repo["name"]
+        langs_url = repo["languages_url"]
+        
+        lang_response = requests.get(langs_url, headers=headers)
+        if lang_response.status_code == 200:
+            lang_data = lang_response.json()
+            for lang_name, bytes_count in lang_data.items():
+                ext = GITHUB_LANG_MAP.get(lang_name)
+                if ext and ext in bytes_by_code:
+                    bytes_by_code[ext] += bytes_count
+
+    print("Analyzing structure completed!")
+    draw_github_style(bytes_by_code, "Code Size by Language", "Bytes")
+
 # setup values
 path = "./" # count target folder path
 exclude_dirs = {".git", "node_modules", "build", "bin", "pkg", "target", ".idea", "venv"} # folder name that ignored
+include_forks = False # count forked repos too
 
-main()
+# local()
+# remote("taewook427")

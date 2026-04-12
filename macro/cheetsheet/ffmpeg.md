@@ -43,6 +43,15 @@ ffmpeg -i input.mkv -c:v libx264 -b:v 2500k -maxrate 2500k -bufsize 5000k -c:a a
 | H.265 (HEVC) | libx265 | hevc_nvenc | hevc_qsv | hevc_amf | hevc_videotoolbox |
 | AV1 | libsvtav1 | av1_nvenc | av1_qsv | av1_amf | av1_videotoolbox |
 
+| Resolution | H264 30f | H264 60f | AV1 30f | AV1 60f |
+| :--- | :--- | :--- | :--- | :--- |
+| 640:360 | 0.9 Mbps | 1.3 Mbps | 0.54 Mbps | 0.78 Mbps |
+| 854:480 | 1.6 Mbps | 2.7 Mbps | 0.96 Mbps | 1.62 Mbps |
+| 1280:720 | 2.7 Mbps | 3.7 Mbps | 1.35 Mbps | 1.85 Mbps |
+| 1920:1080 | 4.5 Mbps | 6.0 Mbps | 2.25 Mbps | 3.0 Mbps |
+| 2560:1440 | 10.0 Mbps | 14.0 Mbps | 4.5 Mbps | 6.0 Mbps |
+| 3840:2160 | 25.0 Mbps | 35.0 Mbps | 11.0 Mbps | 15.0 Mbps |
+
 | Format | encoder |
 | :--- | :--- |
 | AAC | aac |
@@ -66,3 +75,9 @@ ffmpeg -i input.mp4 -vf scale=1280:-2 -fpsmax 30 -c:a copy output.mp4
 | HD (720p) | scale=1280:720 |
 | SD (480p) | scale=854:480 |
 | 360p | scale=640:360 |
+
+| Option | fast | medium | slow |
+| :--- | :--- | :--- | :--- |
+| -preset | fast | medium | slower |
+| -crf (H264) | 23 | 21 | 18 |
+| -crf (AV1) | 30 |27 | 24 |
