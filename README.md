@@ -125,4 +125,5 @@ go version
 - Name module with `PascalCase`. (MyModule.ext)
 - Name global variable, function and class with `PascalCase`. (MyClass)
 - Name local/private object with `camelCase`, Adding underbar is allowed. (isCond, _table)
+- Name filename of documents (README, LICENSE) all capital, but extensions should be always lower.
 - Write short, readable, unified, non-verbose code.
