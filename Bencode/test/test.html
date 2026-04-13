@@ -59,14 +59,21 @@
         async function runTest() {
             consoleDiv.innerHTML = "";
             log("--- Start Test ---", "blue");
-            try {
-                const t0 = new TextEncoder().encode("");
-                const t1 = new TextEncoder().encode("abc");
-                const t2 = new TextEncoder().encode("라이브러리 테스트 코드입니다.");
+            const decoder = new TextDecoder();
 
-                log(`"": ${new TextDecoder().decode(Bencode.Decode64(Bencode.Encode64(t0)))}`);
-                log(`"abc": ${new TextDecoder().decode(Bencode.Decode64(Bencode.Encode64(t1)))}`);
-                log(`"라이브러리 테스트 코드입니다.": ${new TextDecoder().decode(Bencode.Decode64(Bencode.Encode64(t2)))}`);
+            try {
+                const data = ["", "abc", "라이브러리 테스트 코드입니다.", "ABCD".repeat(64)];
+                for (const i of data) {
+                    let en = Bencode.Encode64(i);
+                    let de = Bencode.Decode64(en);
+                    log(en);
+                    log(i === decoder.decode(de));
+
+                    en = Bencode.Encode64(i, "#", 8, 3);
+                    de = Bencode.Decode64(en, "#");
+                    log(en);
+                    log(i === decoder.decode(de));
+                }
 
             } catch (e) {
                 console.error(e);

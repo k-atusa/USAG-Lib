@@ -4,11 +4,17 @@ import java.nio.charset.StandardCharsets;
 
 public class test {
     public static void main(String[] args) {
-        byte[] t0 = "".getBytes(StandardCharsets.UTF_8);
-        byte[] t1 = "abc".getBytes(StandardCharsets.UTF_8);
-        byte[] t2 = "라이브러리 테스트 코드입니다.".getBytes(StandardCharsets.UTF_8);
-        System.out.println(new String(Bencode.Decode64(Bencode.Encode64(t0)), StandardCharsets.UTF_8));
-        System.out.println(new String(Bencode.Decode64(Bencode.Encode64(t1)), StandardCharsets.UTF_8));
-        System.out.println(new String(Bencode.Decode64(Bencode.Encode64(t2)), StandardCharsets.UTF_8));
+        String[] data = {"", "abc", "라이브러리 테스트 코드입니다.", "ABCD".repeat(64)};
+        for (String i: data) {
+            byte[] b = i.getBytes(StandardCharsets.UTF_8);
+            String en = Bencode.Encode64(b, null, 0, 0);
+            String de = new String(Bencode.Decode64(en, null), StandardCharsets.UTF_8);
+            System.out.println(en);
+            System.out.println(i.equals(de));
+            en = Bencode.Encode64(b, "#", 8, 3);
+            de = new String(Bencode.Decode64(en, "#"), StandardCharsets.UTF_8);
+            System.out.println(en);
+            System.out.println(i.equals(de));
+        }
     }
 }

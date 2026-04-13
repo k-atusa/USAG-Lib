@@ -1,141 +1,89 @@
 // test789d : USAG-Lib bencode
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public class Bencode {
-    private final List<Character> CHARS = new ArrayList<>();
-    private final Map<Character, Integer> REV_MAP = new HashMap<>();
-    private final int THRESHOLD = 32164;
-    private final char ESCAPE_CHAR = '.';
+    private static final Set<String> SPLITABLE = new HashSet<>(Arrays.asList(
+        "!", "@", "#", "$", "%", "^", "&", "*", "~", "|"
+    ));
 
-    public Bencode() {
-        // Korean letters (U+AC00-U+D7A3): 11172
-        for (int i = 0; i < 11172; i++) {
-            this.CHARS.add((char) (0xAC00 + i));
+    public static String Encode64(byte[] data, String spliter, int linenum, int colnum) {
+        if (linenum <= 0) {
+            linenum = 40;
         }
-        // CJK letters (U+4E00-U+9FFF): 20992
-        for (int i = 0; i < 20992; i++) {
-            this.CHARS.add((char) (0x4E00 + i));
+        if (colnum <= 0) {
+            colnum = 10;
         }
-        for (int i = 0; i < this.CHARS.size(); i++) {
-            this.REV_MAP.put(this.CHARS.get(i), i);
+        String raw = "";
+        if (data != null && data.length > 0) {
+            raw = Base64.getEncoder().encodeToString(data);
         }
-    }
 
-    public String encode(byte[] data, boolean isBase64) {
-        if (isBase64 && data.length == 0) return "";
-        if (isBase64) {
-            return Base64.getEncoder().encodeToString(data);
+        // check spliter
+        if (spliter == null || spliter.isEmpty()) {
+            return raw;
         }
-        return encodeUnicode(data);
-    }
-
-    public byte[] decode(String data) {
-        String cleaned = data.replace("\r", "").replace("\n", "").replace(" ", "");
-        if (cleaned.isEmpty()) return new byte[0];
-
-        if (cleaned.charAt(0) < 128 && cleaned.charAt(0) != this.ESCAPE_CHAR) {
-            return Base64.getDecoder().decode(cleaned);
-        } else {
-            return decodeUnicode(cleaned);
+        if (!SPLITABLE.contains(spliter)) {
+            throw new IllegalArgumentException("invalid spliter option");
         }
-    }
 
-    private String encodeUnicode(byte[] data) {
-        StringBuilder result = new StringBuilder();
-        int acc = 0;
-        int bits = 0;
+        // split text
+        List<String> lines = new ArrayList<>();
+        for (int i = 0; i < raw.length(); i += linenum) {
+            lines.add(raw.substring(i, Math.min(i + linenum, raw.length())));
+        }
+        List<List<String>> cols = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i += colnum) {
+            cols.add(lines.subList(i, Math.min(i + colnum, lines.size())));
+        }
 
-        for (byte b : data) {
-            acc = (acc << 8) | (b & 0xFF); // Java byte is signed, need mask
-            bits += 8;
-            while (bits >= 15) {
-                bits -= 15;
-                int val = (acc >> bits) & 0x7FFF;
-                acc = (bits == 0) ? 0 : acc & ((1 << bits) - 1);
-                
-                if (val < this.THRESHOLD) {
-                    result.append(this.CHARS.get(val));
-                } else {
-                    int offset = val - this.THRESHOLD;
-                    result.append(this.ESCAPE_CHAR).append(this.CHARS.get(offset));
+        // assemble text
+        StringBuilder sb = new StringBuilder();
+        sb.append(spliter).append("START").append(spliter).append("\n");
+
+        int totalCols = cols.size();
+        for (int i = 0; i < totalCols; i++) {
+            sb.append(spliter).append(i + 1).append("/").append(totalCols).append(spliter).append("\n");
+            List<String> col = cols.get(i);
+            for (int j = 0; j < col.size(); j++) {
+                sb.append(col.get(j));
+                if (j < col.size() - 1) {
+                    sb.append("\n");
                 }
             }
+            sb.append("\n"); 
         }
+        sb.append(spliter).append("END").append(spliter);
 
-        // pad leftover
-        int val = ((acc << 1) | 1) << (14 - bits);
-        if (val < this.THRESHOLD) {
-            result.append(this.CHARS.get(val));
-        } else {
-            int offset = val - this.THRESHOLD;
-            result.append(this.ESCAPE_CHAR).append(this.CHARS.get(offset));
-        }
-        return result.toString();
+        return sb.toString();
     }
 
-    private byte[] decodeUnicode(String data) {
-        java.io.ByteArrayOutputStream ba = new java.io.ByteArrayOutputStream();
-        int acc = 0;
-        int bits = 0;
-        int i = 0;
-        int n = data.length();
+    public static byte[] Decode64(String data, String spliter) {
+        data = data.replace("\r", "").replace("\n", "").replace(" ", "");
+        if (spliter != null && !spliter.isEmpty() && !SPLITABLE.contains(spliter)) {
+            throw new IllegalArgumentException("invalid spliter option");
+        }
 
-        while (i < n) {
-            char c = data.charAt(i);
-            i++;
-            int val = 0;
-
-            if (c == this.ESCAPE_CHAR) {
-                if (i >= n) throw new RuntimeException("invalid escape");
-                char nextChar = data.charAt(i);
-                i++;
-                val = this.REV_MAP.getOrDefault(nextChar, 0) + this.THRESHOLD;
-            } else {
-                val = this.REV_MAP.getOrDefault(c, 0);
+        // remove comments
+        if (spliter != null && !spliter.isEmpty()) {
+            String[] parts = data.split(Pattern.quote(spliter), -1);
+            StringBuilder pureData = new StringBuilder();
+            for (int i = 0; i < parts.length; i += 2) {
+                pureData.append(parts[i]);
             }
-
-            acc = (acc << 15) | val;
-            bits += 15;
-
-            while (i < n && bits >= 8) {
-                bits -= 8;
-                int byteVal = (acc >> bits) & 0xFF;
-                acc = (bits == 0) ? 0 : acc & ((1 << bits) - 1);
-                ba.write(byteVal);
-            }
+            data = pureData.toString();
         }
 
-        // Cut until last 1
-        while (bits > 0 && (acc & 1) == 0) {
-            acc >>= 1;
-            bits--;
+        // decode
+        if (data.isEmpty()) {
+            return new byte[0];
         }
-        if (bits > 0) {
-            acc >>= 1;
-            bits--;
-        }
-        while (bits >= 8) {
-            bits -= 8;
-            int byteVal = (acc >> bits) & 0xFF;
-            acc = (bits == 0) ? 0 : acc & ((1 << bits) - 1);
-            ba.write(byteVal);
-        }
-
-        return ba.toByteArray();
-    }
-
-    public static String Encode64(byte[] data) {
-        if (data.length == 0) return "";
-        return Base64.getEncoder().encodeToString(data);
-    }
-    public static byte[] Decode64(String data) {
-        String cleaned = data.replace("\r", "").replace("\n", "").replace(" ", "");
-        if (cleaned.isEmpty()) return new byte[0];
-        return Base64.getDecoder().decode(cleaned);
+        return Base64.getDecoder().decode(data);
     }
 }

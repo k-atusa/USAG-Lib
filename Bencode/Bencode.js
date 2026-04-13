@@ -1,7 +1,9 @@
 // test789b : USAG-Lib bencode
 const isNode = (typeof window === 'undefined');
 
-// Helper for Base64 (Env agnostic)
+// ===== helpers =====
+const splitable = new Set(["!", "@", "#", "$", "%", "^", "&", "*", "~", "|"]);
+
 function _toBase64(uint8Array) {
     if (isNode) {
         return Buffer.from(uint8Array).toString('base64');
@@ -25,149 +27,68 @@ function _fromBase64(str) {
     }
 }
 
-export class Bencode { // Base-N encoder
-    static _CHARS = [];
-    static _REV_MAP = {};
-    static _THRESHOLD = 32164;
-    static _ESCAPE_CHAR = ".";
-    static {
-        // 1. Korean letters (U+AC00-U+D7A3): 11172
-        for (let i = 0; i < 11172; i++) {
-            Bencode._CHARS.push(String.fromCharCode(0xAC00 + i));
-        }
-        // 2. CJK letters (U+4E00-U+9FFF): 20992
-        for (let i = 0; i < 20992; i++) {
-            Bencode._CHARS.push(String.fromCharCode(0x4E00 + i));
-        }
-        // Build reverse map
-        Bencode._CHARS.forEach((char, idx) => {
-            Bencode._REV_MAP[char] = idx;
-        });
-    }
-    constructor() {}
-
-    encode(data, isBase64) {
-        // Ensure data is Uint8Array
-        if (typeof data === 'string') {
-            data = new TextEncoder().encode(data);
-        } else if (!(data instanceof Uint8Array)) {
-            data = new Uint8Array(data);
-        }
-
-        if (isBase64 && data.length === 0) return "";
-        if (isBase64) return _toBase64(data);
-        return this._encodeUnicode(data);
-    }
-
-    decode(data) {
-        data = data.replace(/[\r\n ]/g, ""); // Remove whitespace
-        if (data === "") return new Uint8Array(0);
-
-        const firstCharCode = data.charCodeAt(0);
-        // Base64 Check: ASCII < 128 AND not escape char
-        if (firstCharCode < 128 && data[0] !== Bencode._ESCAPE_CHAR) {
-            return _fromBase64(data);
-        } else {
-            return this._decodeUnicode(data);
-        }
-    }
-
-    _encodeUnicode(data) {
-        let result = [];
-        let acc = 0;
-        let bits = 0;
-
-        for (let i = 0; i < data.length; i++) {
-            acc = (acc << 8) | data[i];
-            bits += 8;
-            while (bits >= 15) {
-                bits -= 15;
-                const val = (acc >> bits) & 0x7FFF; // get upper 15-bits
-                // reset acc logic: keep only lower 'bits'
-                acc = (bits === 0) ? 0 : acc & ((1 << bits) - 1);
-
-                if (val < Bencode._THRESHOLD) {
-                    result.push(Bencode._CHARS[val]);
-                } else {
-                    const offset = val - Bencode._THRESHOLD;
-                    result.push(Bencode._ESCAPE_CHAR + Bencode._CHARS[offset]);
-                }
-            }
-        }
-
-        // Pad leftover
-        const val = ((acc << 1) | 1) << (14 - bits);
-        if (val < Bencode._THRESHOLD) {
-            result.push(Bencode._CHARS[val]);
-        } else {
-            const offset = val - Bencode._THRESHOLD;
-            result.push(Bencode._ESCAPE_CHAR + Bencode._CHARS[offset]);
-        }
-        return result.join("");
-    }
-
-    _decodeUnicode(data) {
-        const ba = [];
-        let acc = 0;
-        let bits = 0;
-        let i = 0;
-        const n = data.length;
-
-        const deBit = () => { // bit decoder lambda
-            while (bits >= 8) {
-                bits -= 8;
-                const byteVal = (acc >> bits) & 0xFF;
-                acc = (bits === 0) ? 0 : acc & ((1 << bits) - 1);
-                ba.push(byteVal);
-            }
-        }
-
-        while (i < n) {
-            const char = data[i];
-            i++;
-            let val = 0;
-
-            if (char === Bencode._ESCAPE_CHAR) {
-                if (i >= n) throw new Error("invalid escape");
-                const nextChar = data[i];
-                i++;
-                val = (Bencode._REV_MAP[nextChar] || 0) + Bencode._THRESHOLD;
-            } else {
-                val = Bencode._REV_MAP[char] || 0;
-            }
-
-            acc = (acc << 15) | val;
-            bits += 15;
-            if (i < n) deBit();
-        }
-
-        // Cut until last 1 is found
-        while (bits > 0 && (acc & 1) === 0) {
-            acc >>= 1;
-            bits -= 1;
-        }
-        if (bits > 0) {
-            acc >>= 1;
-            bits -= 1;
-        }
-        deBit();
-        return new Uint8Array(ba);
-    }
-}
-
-export function Encode64(data) {
-    // Ensure data is Uint8Array
+// ===== main =====
+export function Encode64(data, spliter = "", linenum = 40, colnum = 10) {
+    // convert data to Uint8Array
     if (typeof data === 'string') {
         data = new TextEncoder().encode(data);
     } else if (!(data instanceof Uint8Array)) {
-        data = new Uint8Array(data);
+        data = new Uint8Array(data || []);
     }
-    if (data.length === 0) return "";
-    return _toBase64(data);
+
+    // encode to base64
+    let raw = "";
+    if (data.length > 0) {
+        raw = _toBase64(data);
+    }
+
+    // check spliter
+    if (spliter === "") {
+        return raw;
+    }
+    if (!splitable.has(spliter)) {
+        throw new Error("invalid spliter option");
+    }
+
+    // split text
+    const lines = [];
+    for (let i = 0; i < raw.length; i += linenum) {
+        lines.push(raw.slice(i, i + linenum));
+    }
+    const cols = [];
+    for (let i = 0; i < lines.length; i += colnum) {
+        cols.push(lines.slice(i, i + colnum));
+    }
+
+    // assemble text
+    let res = `${spliter}START${spliter}\n`;
+    const totalCols = cols.length;
+    for (let i = 0; i < totalCols; i++) {
+        res += `${spliter}${i + 1}/${totalCols}${spliter}\n${cols[i].join('\n')}\n`;
+    }
+    res += `${spliter}END${spliter}`;
+    return res;
 }
 
-export function Decode64(data) {
-    data = data.replace(/[\r\n ]/g, ""); // Remove whitespace
-    if (data === "") return new Uint8Array(0);
+export function Decode64(data, spliter = "") {
+    data = data.replace(/[\r\n ]/g, "");
+    if (spliter !== "" && !splitable.has(spliter)) {
+        throw new Error("invalid spliter option");
+    }
+
+    // remove comment
+    if (spliter !== "") {
+        const parts = data.split(spliter);
+        let pureData = "";
+        for (let i = 0; i < parts.length; i += 2) {
+            pureData += parts[i];
+        }
+        data = pureData;
+    }
+
+    // decode
+    if (data === "") {
+        return new Uint8Array(0);
+    }
     return _fromBase64(data);
 }

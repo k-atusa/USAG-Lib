@@ -3,165 +3,81 @@
 package Bencode
 
 import (
-	"bytes"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 )
 
-// Base-N Encoder
-type Bencode struct {
-	chars     []rune
-	revMap    map[rune]int
-	Threshold int
-	Escape    rune
+var splitable = map[string]bool{
+	"!": true, "@": true, "#": true, "$": true, "%": true,
+	"^": true, "&": true, "*": true, "~": true, "|": true,
 }
 
-func (e *Bencode) Init() {
-	e.chars = make([]rune, 0, 32164)
-	e.revMap = make(map[rune]int)
-	e.Threshold = 32164
-	e.Escape = '.'
+func Encode64(data []byte, spliter string, linenum int, colnum int) (string, error) {
+	if linenum <= 0 {
+		linenum = 40
+	}
+	if colnum <= 0 {
+		colnum = 10
+	}
+	raw := ""
+	if len(data) > 0 {
+		raw = base64.StdEncoding.EncodeToString(data)
+	}
 
-	for i := 0; i < 11172; i++ { // 1. Korean letters
-		e.chars = append(e.chars, rune(0xAC00+i))
+	// check spliter
+	if spliter == "" {
+		return raw, nil
 	}
-	for i := 0; i < 20992; i++ { // 2. CJK letters
-		e.chars = append(e.chars, rune(0x4E00+i))
+	if !splitable[spliter] {
+		return "", errors.New("invalid spliter option")
 	}
-	for idx, char := range e.chars { // Reverse Map
-		e.revMap[char] = idx
+
+	// split raw text
+	var lines []string
+	for i := 0; i < len(raw); i += linenum {
+		end := min(i+linenum, len(raw))
+		lines = append(lines, raw[i:end])
 	}
+	var cols [][]string
+	for i := 0; i < len(lines); i += colnum {
+		end := min(i+colnum, len(lines))
+		cols = append(cols, lines[i:end])
+	}
+
+	// assemble text
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("%sSTART%s\n", spliter, spliter))
+	for i, col := range cols {
+		builder.WriteString(fmt.Sprintf("%s%d/%d%s\n", spliter, i+1, len(cols), spliter))
+		builder.WriteString(strings.Join(col, "\n"))
+		builder.WriteString("\n")
+	}
+	builder.WriteString(fmt.Sprintf("%sEND%s", spliter, spliter))
+	return builder.String(), nil
 }
 
-func (e *Bencode) Encode(data []byte, isBase64 bool) string {
-	if isBase64 && len(data) == 0 {
-		return ""
-	}
-	if isBase64 {
-		return base64.StdEncoding.EncodeToString(data)
-	}
-	return e.encodeUnicode(data)
-}
-
-func (e *Bencode) Decode(data string) ([]byte, error) {
+func Decode64(data string, spliter string) ([]byte, error) {
 	data = strings.ReplaceAll(data, "\r", "")
 	data = strings.ReplaceAll(data, "\n", "")
 	data = strings.ReplaceAll(data, " ", "")
+	if spliter != "" && !splitable[spliter] {
+		return nil, errors.New("invalid spliter option")
+	}
+
+	// remove comments
+	if spliter != "" {
+		parts := strings.Split(data, spliter)
+		var pureData strings.Builder
+		for i := 0; i < len(parts); i += 2 {
+			pureData.WriteString(parts[i])
+		}
+		data = pureData.String()
+	}
+
 	if data == "" {
 		return []byte{}, nil
 	}
-
-	runes := []rune(data)
-	if runes[0] < 128 && runes[0] != e.Escape { // Base64 mode
-		return base64.StdEncoding.DecodeString(data)
-	}
-	return e.decodeUnicode(runes)
-}
-
-func (e *Bencode) encodeUnicode(data []byte) string {
-	var result strings.Builder
-	acc := 0
-	bits := 0
-
-	for _, b := range data {
-		acc = (acc << 8) | int(b)
-		bits += 8
-		for bits >= 15 {
-			bits -= 15
-			val := acc >> bits // Upper 15 bits
-			if bits == 0 {     // reset acc
-				acc = 0
-			} else {
-				acc &= (1 << bits) - 1
-			}
-
-			if val < e.Threshold { // add rune
-				result.WriteRune(e.chars[val])
-			} else {
-				result.WriteRune(e.Escape)
-				result.WriteRune(e.chars[val-e.Threshold])
-			}
-		}
-	}
-
-	// Pad leftover
-	val := ((acc << 1) | 1) << (14 - bits)
-	if val < e.Threshold {
-		result.WriteRune(e.chars[val])
-	} else {
-		result.WriteRune(e.Escape)
-		result.WriteRune(e.chars[val-e.Threshold])
-	}
-	return result.String()
-}
-
-func (e *Bencode) decodeUnicode(runes []rune) ([]byte, error) {
-	var ba bytes.Buffer
-	acc := 0
-	bits := 0
-	n := len(runes)
-	i := 0
-
-	for i < n {
-		char := runes[i]
-		i++
-		val := 0
-
-		// get rune, accumulate 15-bits
-		if char == e.Escape {
-			if i >= n {
-				return nil, errors.New("invalid escape")
-			}
-			nextChar := runes[i]
-			i++
-			val = e.revMap[nextChar] + e.Threshold
-		} else {
-			val = e.revMap[char]
-		}
-		acc = (acc << 15) | val
-		bits += 15
-
-		for i < n && bits >= 8 {
-			bits -= 8
-			byteVal := byte(acc >> bits)
-			if bits == 0 {
-				acc = 0
-			} else {
-				acc &= (1 << bits) - 1
-			}
-			ba.WriteByte(byteVal)
-		}
-	}
-
-	// Cut until last 1
-	for bits > 0 && (acc&1) == 0 {
-		acc >>= 1
-		bits--
-	}
-	if bits > 0 { // cut last 1
-		acc >>= 1
-		bits--
-	}
-	for bits >= 8 {
-		bits -= 8
-		byteVal := byte((acc >> bits) & 0xFF)
-		if bits == 0 {
-			acc = 0
-		} else {
-			acc &= (1 << bits) - 1
-		}
-		ba.WriteByte(byteVal)
-	}
-	return ba.Bytes(), nil
-}
-
-func Encode64(data []byte) string {
-	var e Bencode
-	return e.Encode(data, true)
-}
-
-func Decode64(data string) ([]byte, error) {
-	var e Bencode
-	return e.Decode(data)
+	return base64.StdEncoding.DecodeString(data)
 }

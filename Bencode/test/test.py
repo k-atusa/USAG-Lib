@@ -1,5 +1,12 @@
 import Bencode
 
-print(Bencode.Decode64(Bencode.Encode64(b"")))
-print(Bencode.Decode64(Bencode.Encode64(b"abc")))
-print(Bencode.Decode64(Bencode.Encode64("라이브러리 테스트 코드입니다.".encode("utf-8"))).decode("utf-8"))
+data = [b"", b"abc", "라이브러리 테스트 코드입니다.".encode("utf-8"), b"ABCD"*64]
+
+for i in data:
+    en = Bencode.Encode64(i)
+    print(en)
+    print(i == Bencode.Decode64(en))
+
+    en = Bencode.Encode64(i, spliter="#", linenum=8, colnum=3)
+    print(en)
+    print(i == Bencode.Decode64(en, spliter="#"))
