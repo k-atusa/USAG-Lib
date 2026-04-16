@@ -1,19 +1,6 @@
-import time
-import io
 import os
-import tempfile
+import time
 import Bencrypt
-
-# ========== Settings ==========
-
-# Throughput Test Size
-DATA_SIZE = 16 * 1048576      # 16 MiB (Hash, Random)
-DATA_SIZE_BIG = 256 * 1048576 # 256 MiB (AES)
-
-# Iterations for Latency Tests
-ITER_KDF = 5    # Slow functions (Argon2)
-ITER_KEYGEN = 8 # Key Generation (RSA-2048, ECC)
-ITER_FAST = 50  # Encrypt/Decrypt ops
 
 def fmt_speed(size_bytes, duration):
     mb = size_bytes / (1024 * 1024)
@@ -24,195 +11,90 @@ def fmt_time(count, duration):
     avg_ms = (duration / count) * 1000
     return f"{avg_ms:.2f} ms/op"
 
-def main():
-    print(f"=== Bencrypt Performance Benchmark (Python) ===")
+print("Bencrypt Benchmarks (Python)")
 
-    # 1. Random Generation
-    start = time.perf_counter()
-    _ = Bencrypt.Random(DATA_SIZE)
-    dur = time.perf_counter() - start
-    print(f"[Random] Gen: {fmt_speed(DATA_SIZE, dur)}")
+time.sleep(1)
+print("\n\n===== Basic Functions =====")
+p = [100 * 1048576, 100 * 1048576, 100 * 1048576]
+start = time.time()
+Bencrypt.Random(p[0])
+end = time.time()
+print(f"RandGen: {fmt_speed(p[0], end - start)}")
 
-    # Prepare Data
-    dummy_data = b'\x00' * DATA_SIZE
-    
-    # 2. SHA3 Functions
-    start = time.perf_counter()
-    Bencrypt.SHA3256(dummy_data)
-    dur = time.perf_counter() - start
-    print(f"[SHA3-256]    {fmt_speed(DATA_SIZE, dur)}")
+data = b"\x00" * p[1]
+start = time.time()
+Bencrypt.SHA3256(data)
+end = time.time()
+print(f"SHA3256: {fmt_speed(p[1], end - start)}")
 
-    start = time.perf_counter()
-    Bencrypt.SHA3512(dummy_data)
-    dur = time.perf_counter() - start
-    print(f"[SHA3-512]    {fmt_speed(DATA_SIZE, dur)}")
+data = b"\x00" * p[2]
+start = time.time()
+Bencrypt.SHA3512(data)
+end = time.time()
+print(f"SHA3512: {fmt_speed(p[2], end - start)}")
 
-    # 3. Symmetric GCM1
-    print("-" * 40)
-    dummy_data = b'\x00' * DATA_SIZE_BIG
-    key = b'\x00' * 44
-    m = Bencrypt.SymMaster("gcm1", key)
+time.sleep(1)
+print("\n\n===== Hash Functions =====")
+algos = ["sha3", "pbk2", "arg2"]
+iters = [100000, 5, 5]
+pw, salt = b"\x00" * 64, b"\x00" * 32 # std: 64B password, 32B salt
+for i in range( 0, len(algos) ):
+    w = Bencrypt.HashMaster(algos[i])
+    start = time.time()
+    for j in range(iters[i]):
+        w.KDF(pw, salt)
+    end = time.time()
+    print(f"{algos[i]}: {fmt_time(iters[i], end - start)}")
 
-    # Encrypt
-    start = time.perf_counter()
-    enc_data = m.EnBin(dummy_data)
-    dur = time.perf_counter() - start
-    print(f"[GCM1] Mem Enc: {fmt_speed(DATA_SIZE_BIG, dur)}")
+time.sleep(1)
+print("\n\n===== Symmetric Functions =====")
+data = b"\x00" * 512 * 1048576
+fsize = 512 * 1048576
+with open("temp.bin", "wb") as f:
+    f.write(b"\xff" * fsize)
+algos = ["gcm1", "gcmx1"]
+for algo in algos:
+    w = Bencrypt.SymMaster(algo, b"0" * 44)
+    start = time.time()
+    w.EnBin(data)
+    end = time.time()
+    print(f"{algo} (in-memory): {fmt_speed(len(data), end - start)}")
+    with open("temp.bin", "rb") as f:
+        with open("temp.out", "wb") as t:
+            start = time.time()
+            w.EnFile(f, fsize, t)
+            end = time.time()
+            print(f"{algo} (file): {fmt_speed(fsize, end - start)}")
+    print("")
 
-    # Decrypt
-    start = time.perf_counter()
-    _ = m.DeBin(enc_data)
-    dur = time.perf_counter() - start
-    print(f"[GCM1] Mem Dec: {fmt_speed(DATA_SIZE_BIG, dur)}")
+time.sleep(1)
+print("\n\n===== Asymmetric Functions =====")
+algos = ["rsa1", "rsa2", "ecc1", "pqc1"]
+iters_g = [3, 1, 20, 20]
+iters_c = [25, 25, 50, 50]
+data = b"\x00" * 64 # std: 64B data
+for i in range( 0, len(algos) ):
+    w = Bencrypt.AsymMaster(algos[i])
+    start = time.time()
+    for j in range(iters_g[i]):
+        w.Genkey()
+    end = time.time()
+    print(f"{algos[i]} (genkey): {fmt_time(iters_g[i], end - start)}")
 
-    # File Stream
-    with tempfile.TemporaryDirectory() as tmpdir:
-        f_src_path = os.path.join(tmpdir, "source.bin")
-        f_dst_path = os.path.join(tmpdir, "dest.bin")
-        f_dec_path = os.path.join(tmpdir, "decrypted.bin")
+    start = time.time()
+    for j in range(iters_c[i]):
+        w.Encrypt(data)
+    end = time.time()
+    print(f"{algos[i]} (encrypt): {fmt_time(iters_c[i], end - start)}")
 
-        # Create dummy file
-        with open(f_src_path, 'wb') as f:
-            f.write(dummy_data)
-        
-        # Encrypt
-        with open(f_src_path, 'rb') as f_in, open(f_dst_path, 'wb') as f_out:
-            start = time.perf_counter()
-            m.EnFile(key, f_in, DATA_SIZE_BIG, f_out)
-            dur = time.perf_counter() - start
-            print(f"[GCM1] File Enc: {fmt_speed(DATA_SIZE_BIG, dur)}")
+    start = time.time()
+    for j in range(iters_c[i]):
+        w.Sign(data)
+    end = time.time()
+    print(f"{algos[i]} (sign): {fmt_time(iters_c[i], end - start)}")
+    print("")
 
-        # Decrypt
-        enc_size = os.path.getsize(f_dst_path)
-        with open(f_dst_path, 'rb') as f_in, open(f_dec_path, 'wb') as f_out:
-            start = time.perf_counter()
-            m.DeFile(key, f_in, enc_size, f_out)
-            dur = time.perf_counter() - start
-            print(f"[GCM1] File Dec: {fmt_speed(DATA_SIZE_BIG, dur)}")
-
-    # 4. Symmetric GCMx1
-    print("-" * 40)
-    dummy_data = b'\x00' * DATA_SIZE_BIG
-    key = b'\x00' * 44
-    m = Bencrypt.SymMaster("gcmx1", key)
-
-    # Encrypt
-    start = time.perf_counter()
-    enc_data = m.EnBin(dummy_data)
-    dur = time.perf_counter() - start
-    print(f"[GCMx1] Mem Enc: {fmt_speed(DATA_SIZE_BIG, dur)}")
-
-    # Decrypt
-    start = time.perf_counter()
-    _ = m.DeBin(enc_data)
-    dur = time.perf_counter() - start
-    print(f"[GCMx1] Mem Dec: {fmt_speed(DATA_SIZE_BIG, dur)}")
-
-    # File Stream
-    with tempfile.TemporaryDirectory() as tmpdir:
-        f_src_path = os.path.join(tmpdir, "source.bin")
-        f_dst_path = os.path.join(tmpdir, "dest.bin")
-        f_dec_path = os.path.join(tmpdir, "decrypted.bin")
-
-        # Create dummy file
-        with open(f_src_path, 'wb') as f:
-            f.write(dummy_data)
-        
-        # Encrypt
-        with open(f_src_path, 'rb') as f_in, open(f_dst_path, 'wb') as f_out:
-            start = time.perf_counter()
-            m.EnFile(key, f_in, DATA_SIZE_BIG, f_out)
-            dur = time.perf_counter() - start
-            print(f"GCMx1] File Enc: {fmt_speed(DATA_SIZE_BIG, dur)}")
-
-        # Decrypt
-        enc_size = os.path.getsize(f_dst_path)
-        with open(f_dst_path, 'rb') as f_in, open(f_dec_path, 'wb') as f_out:
-            start = time.perf_counter()
-            m.DeFile(key, f_in, enc_size, f_out)
-            dur = time.perf_counter() - start
-            print(f"[GCMx1] File Dec: {fmt_speed(DATA_SIZE_BIG, dur)}")
-
-    # 5. Asymmetric RSA1
-    print("-" * 40)
-    payload = b"A" * 64
-    m = Bencrypt.AsymMaster("rsa1")
-
-    # Key Gen
-    start = time.perf_counter()
-    for _ in range(ITER_KEYGEN):
-        m.Genkey()
-    dur = time.perf_counter() - start
-    print(f"[RSA1] Genkey : {fmt_time(ITER_KEYGEN, dur)}")
-
-    # Encrypt
-    start = time.perf_counter()
-    for _ in range(ITER_FAST):
-        enc = m.Encrypt(payload)
-    dur = time.perf_counter() - start
-    print(f"[RSA1] Encrypt: {fmt_time(ITER_FAST, dur)}")
-
-    # Decrypt
-    start = time.perf_counter()
-    for _ in range(ITER_FAST):
-        m.Decrypt(enc)
-    dur = time.perf_counter() - start
-    print(f"[RSA1] Decrypt: {fmt_time(ITER_FAST, dur)}")
-    print(f"[RSA1] Sign   : (Similar to Decrypt)")
-
-    # 6. Asymmetric RSA2
-    print("-" * 40)
-    payload = b"A" * 64
-    ITER_KEYGEN = 1
-    m = Bencrypt.AsymMaster("rsa2")
-
-    # Key Gen
-    start = time.perf_counter()
-    for _ in range(ITER_KEYGEN):
-        m.Genkey()
-    dur = time.perf_counter() - start
-    print(f"[RSA2] Genkey : {fmt_time(ITER_KEYGEN, dur)}")
-
-    # Encrypt
-    start = time.perf_counter()
-    for _ in range(ITER_FAST):
-        enc = m.Encrypt(payload)
-    dur = time.perf_counter() - start
-    print(f"[RSA2] Encrypt: {fmt_time(ITER_FAST, dur)}")
-
-    # Decrypt
-    start = time.perf_counter()
-    for _ in range(ITER_FAST):
-        m.Decrypt(enc)
-    dur = time.perf_counter() - start
-    print(f"[RSA2] Decrypt: {fmt_time(ITER_FAST, dur)}")
-    print(f"[RSA2] Sign   : (Similar to Decrypt)")
-
-    # 7. Asymmetric ECC1
-    print("-" * 40)
-    ITER_KEYGEN = 20
-    m = Bencrypt.AsymMaster("ecc1")
-
-    # Key Gen
-    start = time.perf_counter()
-    for _ in range(ITER_KEYGEN):
-        m.Genkey()
-    dur = time.perf_counter() - start
-    print(f"[ECC1] Genkey : {fmt_time(ITER_KEYGEN, dur)}")
-
-    # Encrypt
-    start = time.perf_counter()
-    for _ in range(ITER_FAST):
-        enc = m.Encrypt(payload)
-    dur = time.perf_counter() - start
-    print(f"[ECC1] Encrypt: {fmt_time(ITER_FAST, dur)}")
-
-    # Decrypt
-    start = time.perf_counter()
-    for _ in range(ITER_FAST):
-        m.Decrypt(enc)
-    dur = time.perf_counter() - start
-    print(f"[ECC1] Decrypt: {fmt_time(ITER_FAST, dur)}")
-
-if __name__ == "__main__":
-    main()
+# clean-up
+time.sleep(1)
+os.remove("temp.bin")
+os.remove("temp.out")

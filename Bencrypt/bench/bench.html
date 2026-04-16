@@ -1,15 +1,18 @@
+<!--
+    python -m http.server 8080
+    http://localhost:8080
+-->
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bencrypt Benchmark (JS)</title>
+    <title>Bencrypt Benchmark</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/src/sha3.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js"></script>
     <script type="module">import {x448, ed448} from 'https://esm.sh/@noble/curves@1.4.0/ed448';window.noble = {x448, ed448};</script>
     
-    <script src="../Bencrypt.js"></script>
-
     <style>
         body { font-family: monospace; padding: 20px; background-color: #121212; color: #e0e0e0; }
         #console { 
@@ -19,8 +22,9 @@
             border: 1px solid #333;
             border-radius: 5px; 
             white-space: pre-wrap; 
-            min-height: 400px;
+            min-height: 500px;
             font-size: 14px;
+            overflow-y: auto;
         }
         button { 
             padding: 10px 20px; 
@@ -33,41 +37,37 @@
         }
         button:hover { background-color: #005f9e; }
         button:disabled { background-color: #444; cursor: not-allowed; }
-        .highlight { color: #4ec9b0; }
-        .val { color: #ce9178; }
     </style>
 </head>
 <body>
 
-    <h1>Bencrypt Performance Benchmark (JS)</h1>
-    <p>Tests performance of Crypto operations in Browser environment.</p>
-    <button id="btnRun" onclick="main()">Run Benchmark</button>
+    <h1>Bencrypt Benchmarks (Browser)</h1>
+    <button id="btnRun" onclick="runBenchmark()">Run Benchmark</button>
     <br><br>
     <div id="console">Click 'Run Benchmark' to start...</div>
 
+    <script type="module">
+        import {
+            Random, SHA3256, SHA3512, HashMaster, SymMaster, AsymMaster
+        } from '../Bencrypt.js';
+        
+        window.Bencrypt = {
+            Random, SHA3256, SHA3512, HashMaster, SymMaster, AsymMaster
+        };
+    </script>
+
     <script>
-        // ========== Settings ==========
-        const DATA_SIZE = 16 * 1048576;      // 16 MiB (Hash, Random)
-        const DATA_SIZE_BIG = 256 * 1048576; // 256 MiB (AES)
-
-        // Iterations
-        const ITER_KDF = 5;       // Slow functions
-        let ITER_KEYGEN = 8;      // Key Gen
-        const ITER_FAST = 50;     // Enc/Dec ops
-
-        // Logger
         const consoleDiv = document.getElementById('console');
+        
         function log(msg) {
             consoleDiv.textContent += msg + "\n";
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
-            console.log(msg); // sync to devtools
+            console.log(msg);
         }
 
-        // Formatters
         function fmt_speed(sizeBytes, durationMs) {
             const mb = sizeBytes / (1024 * 1024);
-            const sec = durationMs / 1000;
-            const speed = mb / sec;
+            const speed = mb / (durationMs / 1000);
             return `${speed.toFixed(2)} MiB/s`;
         }
 
@@ -80,200 +80,131 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
-        async function main() {
+        async function runBenchmark() {
             const btn = document.getElementById('btnRun');
             btn.disabled = true;
             consoleDiv.textContent = "";
-            
+
             try {
-                InitBencrypt();
-                log(`=== Bencrypt Performance Benchmark (JS) ===`);
-                log(`Agent: ${navigator.userAgent}`);
-                log(`-------------------------------------------`);
-                
-                await sleep(100); // UI update
+                if (!window.Bencrypt) throw new Error("Bencrypt module is not loaded yet.");
 
-                // 1. Random Generation
+                log("Bencrypt Benchmarks (JS/Browser)");
+                await sleep(100);
+
+                // ===== 1. Basic Functions =====
+                log("\n===== Basic Functions =====");
+                const p = [100 * 1048576, 100 * 1048576, 100 * 1048576]; // 100 MiB
+                
                 let start = performance.now();
-                for (let i = 0; i < DATA_SIZE/32768; i++) {
-                    window.random(32768); // max randgen limit is 65535
+                for (let i = 0; i < p[0] / 32768; i++) {
+                    window.Bencrypt.Random(32768); // 32 KiB limit
                 }
-                let dur = performance.now() - start;
-                log(`[Random] Gen: ${fmt_speed(DATA_SIZE, dur)}`);
-
-                // Prepare Data
-                const dummyData = new Uint8Array(DATA_SIZE); // Zero filled
-                
+                let end = performance.now();
+                log(`RandGen: ${fmt_speed(p[0], end - start)}`);
                 await sleep(50);
 
-                // 2. SHA3 Functions
+                let data = new Uint8Array(p[1]);
                 start = performance.now();
-                window.sha3256(dummyData);
-                dur = performance.now() - start;
-                log(`[SHA3-256]    ${fmt_speed(DATA_SIZE, dur)}`);
-
+                window.Bencrypt.SHA3256(data);
+                end = performance.now();
+                log(`SHA3256: ${fmt_speed(p[1], end - start)}`);
                 await sleep(50);
 
+                data = new Uint8Array(p[2]);
                 start = performance.now();
-                window.sha3512(dummyData);
-                dur = performance.now() - start;
-                log(`[SHA3-512]    ${fmt_speed(DATA_SIZE, dur)}`);
+                window.Bencrypt.SHA3512(data);
+                end = performance.now();
+                log(`SHA3512: ${fmt_speed(p[2], end - start)}`);
+                await sleep(50);
 
-                log("-".repeat(40));
+                // ===== 2. Hash Functions =====
+                log("\n===== Hash Functions =====");
+                const algos_h = ["sha3", "pbk2", "arg2"];
+                const iters_h = [100000, 5, 5];
+                const pw = new Uint8Array(64);
+                const salt = new Uint8Array(32);
 
-                // 3. KDF Functions
-                // PBKDF2
-                start = performance.now();
-                for (let i = 0; i < ITER_KDF; i++) {
-                    await window.pbkdf2("password", "salt_bytes_16_", 100000, 64);
-                }
-                dur = performance.now() - start;
-                log(`[PBKDF2]      ${fmt_time(ITER_KDF, dur)} (iter=100000)`);
-
-                // Argon2
-                if (window.argon2) {
+                for (let i = 0; i < algos_h.length; i++) {
+                    let w = new window.Bencrypt.HashMaster(algos_h[i]);
                     start = performance.now();
-                    for (let i = 0; i < ITER_KDF; i++) {
-                        await window.argon2Hash("password", "salt_bytes_16_");
+                    for (let j = 0; j < iters_h[i]; j++) {
+                        await w.KDF(pw, salt);
                     }
-                    dur = performance.now() - start;
-                    log(`[Argon2id]    ${fmt_time(ITER_KDF, dur)} (m=256MB, t=3, p=4)`);
-                } else {
-                    log("[Argon2id]    Skipped (Module not loaded)");
+                    end = performance.now();
+                    log(`${algos_h[i]}: ${fmt_time(iters_h[i], end - start)}`);
+                    await sleep(50);
                 }
 
-                log("-".repeat(40));
-                
-                // AES Memory Allocation (Might fail on low memory devices)
-                let dummyDataBig;
+                // ===== 3. Symmetric Functions =====
+                log("\n===== Symmetric Functions =====");
+                const symSize = 512 * 1048576; // 512 MiB
+                let symData;
                 try {
-                    dummyDataBig = new Uint8Array(DATA_SIZE_BIG);
-                } catch(e) {
-                    log(`[Error] Failed to allocate 256MB buffer: ${e.message}`);
-                    btn.disabled = false;
-                    return;
+                    symData = new Uint8Array(symSize);
+                } catch (e) {
+                    log(`[Warning] Failed to allocate 512MB for AES test. Skipping Symmetric benchmark. (${e.message})`);
+                    symData = null;
                 }
 
-                // 4. AES-GCM (Memory)
-                const key = new Uint8Array(44); // Zero key
-                const aes = new AES1();
+                if (symData) {
+                    const algos_s = ["gcm1", "gcmx1"];
+                    const key = new Uint8Array(44).fill(0); // 44B Null Key
 
-                // Encrypt
-                start = performance.now();
-                const encData = await aes.enAESGCM(key, dummyDataBig);
-                dur = performance.now() - start;
-                log(`[AES-GCM] Mem Enc: ${fmt_speed(DATA_SIZE_BIG, dur)}`);
-
-                await sleep(50);
-
-                // Decrypt
-                start = performance.now();
-                await aes.deAESGCM(key, encData);
-                dur = performance.now() - start;
-                log(`[AES-GCM] Mem Dec: ${fmt_speed(DATA_SIZE_BIG, dur)}`);
-
-                await sleep(50);
-
-                // 5. AES-GCMx (Memory Stream)
-                // Using TestReader/TestWriter from Bencrypt.js
-                let src = new TestReader(dummyDataBig);
-                let dst = new TestWriter();
-
-                start = performance.now();
-                await aes.enAESGCMx(key, src, DATA_SIZE_BIG, dst);
-                dur = performance.now() - start;
-                log(`[AES-GCMx] Mem Enc: ${fmt_speed(DATA_SIZE_BIG, dur)}`);
-
-                const encStreamData = dst.getValue();
-                src = new TestReader(encStreamData);
-                dst = new TestWriter();
-
-                start = performance.now();
-                await aes.deAESGCMx(key, src, encStreamData.length, dst);
-                dur = performance.now() - start;
-                log(`[AES-GCMx] Mem Dec: ${fmt_speed(DATA_SIZE_BIG, dur)}`);
-
-                // 6. AES-GCMx (File Stream) -> SKIPPED per instruction
-                // log("[AES-GCMx] File Enc: Skipped (Browser Limitation)");
-
-                log("-".repeat(40));
-
-                // 7. RSA
-                const payload = new Uint8Array(64).fill(65); // 'A' * 64
-                const bitsArr = [2048, 4096];
-
-                for (let bits of bitsArr) {
-                    if (bits === 4096) ITER_KEYGEN = 1;
-                    else ITER_KEYGEN = 8;
-
-                    const rsa = new RSA1();
-
-                    // Key Gen
-                    start = performance.now();
-                    for(let i=0; i<ITER_KEYGEN; i++) {
-                        await rsa.genkey(bits);
+                    for (let algo of algos_s) {
+                        let w = new window.Bencrypt.SymMaster(algo, key);
+                        start = performance.now();
+                        await w.EnBin(symData);
+                        end = performance.now();
+                        log(`${algo} (in-memory): ${fmt_speed(symSize, end - start)}`);
+                        // no File IO test
+                        await sleep(50);
                     }
-                    dur = performance.now() - start;
-                    log(`[RSA-${bits}] GenKey : ${fmt_time(ITER_KEYGEN, dur)}`);
+                }
 
-                    // Prepare for Enc/Dec (Load last generated key)
-                    // rsa instance already has keys from last iteration
+                // ===== 4. Asymmetric Functions =====
+                log("\n===== Asymmetric Functions =====");
+                const algos_a = ["rsa1", "rsa2", "ecc1", "pqc1"];
+                const iters_g = [3, 1, 20, 20];
+                const iters_c = [25, 25, 50, 50];
+                const asymData = new Uint8Array(64); // std: 64B data
 
-                    // Encrypt
-                    let enc;
+                for (let i = 0; i < algos_a.length; i++) {
+                    let w = new window.Bencrypt.AsymMaster(algos_a[i]);
+                    
+                    // GenKey Test
                     start = performance.now();
-                    for(let i=0; i<ITER_FAST; i++) {
-                        enc = await rsa.encrypt(payload);
+                    for (let j = 0; j < iters_g[i]; j++) {
+                        await w.Genkey();
                     }
-                    dur = performance.now() - start;
-                    log(`[RSA-${bits}] Encrypt: ${fmt_time(ITER_FAST, dur)}`);
+                    end = performance.now();
+                    log(`${algos_a[i]} (genkey): ${fmt_time(iters_g[i], end - start)}`);
+                    await sleep(10);
 
-                    // Decrypt
+                    // Encrypt Test
                     start = performance.now();
-                    for(let i=0; i<ITER_FAST; i++) {
-                        await rsa.decrypt(enc);
+                    for (let j = 0; j < iters_c[i]; j++) {
+                        await w.Encrypt(asymData);
                     }
-                    dur = performance.now() - start;
-                    log(`[RSA-${bits}] Decrypt: ${fmt_time(ITER_FAST, dur)}`);
-                    log(`[RSA-${bits}] Sign   : (Similar to Decrypt)`);
+                    end = performance.now();
+                    log(`${algos_a[i]} (encrypt): ${fmt_time(iters_c[i], end - start)}`);
+                    await sleep(10);
+
+                    // Sign Test
+                    start = performance.now();
+                    for (let j = 0; j < iters_c[i]; j++) {
+                        await w.Sign(asymData);
+                    }
+                    end = performance.now();
+                    log(`${algos_a[i]} (sign): ${fmt_time(iters_c[i], end - start)}`);
+                    log(""); // Empty line separation
+                    await sleep(10);
                 }
 
-                log("-".repeat(40));
-                ITER_KEYGEN = 20;
+                log("\nBenchmark Finished.");
 
-                // 8. ECC (Curve448)
-                const ecc = new ECC1();
-
-                // Key Gen
-                start = performance.now();
-                for(let i=0; i<ITER_KEYGEN; i++) {
-                    await ecc.genkey();
-                }
-                dur = performance.now() - start;
-                log(`[ECC-448]  GenKey : ${fmt_time(ITER_KEYGEN, dur)}`);
-                
-                // Encrypt (Includes AES Gen + Enc)
-                let encEcc;
-                start = performance.now();
-                for(let i=0; i<ITER_FAST; i++) {
-                    encEcc = await ecc.encrypt(payload);
-                }
-                dur = performance.now() - start;
-                log(`[ECC-448]  Encrypt: ${fmt_time(ITER_FAST, dur)} (Includes AES gen)`);
-
-                // Decrypt
-                start = performance.now();
-                for(let i=0; i<ITER_FAST; i++) {
-                    await ecc.decrypt(encEcc);
-                }
-                dur = performance.now() - start;
-                log(`[ECC-448]  Decrypt: ${fmt_time(ITER_FAST, dur)} (Includes AES gen)`);
-
-                log("Done.");
-
-            } catch (e) {
-                log(`\nERROR: ${e.message}`);
-                console.error(e);
+            } catch (error) {
+                log(`\nERROR: ${error.message}`);
+                console.error(error);
             } finally {
                 btn.disabled = false;
             }
