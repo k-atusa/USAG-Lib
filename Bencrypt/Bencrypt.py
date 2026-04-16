@@ -6,11 +6,9 @@ import io
 import secrets
 import hashlib
 import hmac
-try: # check if argon2 is available
-    from argon2 import PasswordHasher
-    HAS_ARGON2 = True
-except ImportError:
-    HAS_ARGON2 = False
+
+from argon2 import PasswordHasher
+from argon2 import low_level
 
 from Cryptodome.Cipher import AES
 from Cryptodome.PublicKey import RSA
@@ -21,11 +19,8 @@ from Cryptodome.Hash import SHA256, SHA512
 from cryptography.hazmat.primitives.asymmetric import x448, ed448
 from cryptography.hazmat.primitives import serialization
 
-def mkiv(g: bytes, c: int) -> bytearray:
-    g, c = bytearray(g), c.to_bytes(8, 'little')
-    for i in range(0, 8):
-        g[4 + i] ^= c[i]
-    return g
+from pqcrypto.kem.ml_kem_1024 import generate_keypair as mlkem_gen, encrypt as mlkem_enc, decrypt as mlkem_dec
+from pqcrypto.sign.ml_dsa_87 import generate_keypair as mldsa_gen, sign as mldsa_sign, verify as mldsa_verify
 
 # ========== Basic Functions ==========
 def Random(size: int) -> bytes:
@@ -37,30 +32,60 @@ def SHA3256(data: bytes) -> bytes:
 def SHA3512(data: bytes) -> bytes:
     return hashlib.sha3_512(data).digest()
 
+def genkey(data: bytes, lbl: str, size: int) -> bytes: # HMAC-SHA3-512
+    key = hmac.new(data, lbl.encode('utf-8'), hashlib.sha3_512).digest()
+    if size > len(key):
+        raise ValueError("key size too large")
+    return key[:size]
+
+def mkiv(g: bytes, c: int) -> bytearray:
+    g, c = bytearray(g), c.to_bytes(8, 'little')
+    for i in range(0, 8):
+        g[4 + i] ^= c[i]
+    return g
+
+# ========== Hash Function Master ==========
+class HashMaster:
+    def __init__(self, algo: str, hashSize: int = 32, keySize: int = 44):
+        if algo not in ["sha3", "pbk2", "arg2"]:
+            raise ValueError(f"Unsupported algorithm: {algo}")
+        self.algo = algo
+        self.hashSize = hashSize
+        self.keySize = keySize
+    
+    def KDF(self, pw: bytes, salt: bytes) -> Tuple[bytes, bytes]: # (PW storage, user key)
+        lblStore, lblKeygen, master = "", "", None
+        if self.algo == "sha3":
+            lblStore, lblKeygen = "PWHASH_SHA3", "KEYGEN_SHA3"
+            master = SHA3512(salt + pw)
+        elif self.algo == "pbk2":
+            lblStore, lblKeygen = "PWHASH_PBK2", "KEYGEN_PBK2"
+            master = pbkdf2(pw, salt)
+        elif self.algo == "arg2":
+            lblStore, lblKeygen = "PWHASH_ARG2", "KEYGEN_ARG2"
+            master = argon2(pw, salt)
+        else:
+            return (None, None)
+        return genkey(master, lblStore, self.hashSize), genkey(master, lblKeygen, self.keySize)
+    
+# ========== Hash Functions ==========
 def pbkdf2(pw: bytes, salt: bytes, iter: int = 1000000, outsize: int = 64) -> bytes:
     return hashlib.pbkdf2_hmac('sha512', pw, salt, iter, dklen=outsize)
 
-def argon2Hash(pw: bytes, salt: bytes = None) -> str:
-    if not HAS_ARGON2:
-        raise ImportError("Argon2 library is not installed.")
-    p = PasswordHasher(time_cost=3, memory_cost=262144, parallelism=4, hash_len=32, salt_len=16) # fix parameters
+def argon2(pw: bytes, salt: bytes) -> bytes:
+    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=3, memory_cost=262144, parallelism=4, hash_len=48, type=low_level.Type.ID)
+
+def argon2Hash(pw: bytes, salt: bytes | None = None) -> str:
+    p = PasswordHasher(time_cost=3, memory_cost=262144, parallelism=4, hash_len=48, salt_len=16) # fix parameters
     return p.hash(pw) if salt == None else p.hash(pw, salt=salt)
 
 def argon2Verify(hashed: str, pw: bytes) -> bool:
-    if not HAS_ARGON2:
-        raise ImportError("Argon2 library is not installed.")
     p = PasswordHasher()
     try:
         p.verify(hashed, pw)
         return True
     except:
         return False
-
-def genkey(data: bytes, lbl: str, size: int) -> bytes: # HMAC-SHA3-512
-    key = hmac.new(data, lbl.encode('utf-8'), hashlib.sha3_512).digest()
-    if size > len(key):
-        raise ValueError("key size too large")
-    return key[:size]
 
 # ========== Symmetric Encryption Master ==========
 class SymMaster:
@@ -193,13 +218,15 @@ class AES1:
 # ========== Asymmetric Encryption Master ==========
 class AsymMaster:
     def __init__(self, algo: str):
-        if algo not in ["rsa1", "rsa2", "ecc1"]:
+        if algo not in ["rsa1", "rsa2", "ecc1", "pqc1"]:
             raise ValueError(f"Unsupported algorithm: {algo}")
         self.algo = algo
         if self.algo == 'rsa1' or self.algo == 'rsa2':
             self.worker = RSA1()
         elif self.algo == 'ecc1':
             self.worker = ECC1()
+        elif self.algo == 'pqc1':
+            self.worker = PQC1()
 
     def Genkey(self) -> Tuple[bytes, bytes]:
         if self.algo == 'rsa1':
@@ -208,25 +235,27 @@ class AsymMaster:
             return self.worker.genkey(4096)
         elif self.algo == 'ecc1':
             return self.worker.genkey()
+        elif self.algo == 'pqc1':
+            return self.worker.genkey()
 
     def Loadkey(self, public: bytes|None, private: bytes|None):
-        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
             self.worker.loadkey(public, private)
 
     def Encrypt(self, data: bytes) -> bytes:
-        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
             return self.worker.encrypt(data)
 
     def Decrypt(self, data: bytes) -> bytes:
-        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
             return self.worker.decrypt(data)
 
     def Sign(self, data: bytes) -> bytes:
-        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
             return self.worker.sign(data)
 
     def Verify(self, data: bytes, signature: bytes) -> bool:
-        if self.algo in ["rsa1", "rsa2", "ecc1"]:
+        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
             return self.worker.verify(data, signature)
 
 # ========== RSA Encryption ==========
@@ -331,5 +360,104 @@ class ECC1: # Curve448
         try:
             self.pubEd.verify(signature, data)
             return True
+        except:
+            return False
+
+# ========== PQC1 Encryption ==========
+class PQC1:
+    def __init__(self):
+        # ECC Key Objects
+        self.pubX: Optional[x448.X448PublicKey] = None
+        self.priX: Optional[x448.X448PrivateKey] = None
+        self.pubEd: Optional[ed448.Ed448PublicKey] = None
+        self.priEd: Optional[ed448.Ed448PrivateKey] = None
+        
+        # PQC Key Bytes
+        self.pubKEM: Optional[bytes] = None
+        self.priKEM: Optional[bytes] = None
+        self.pubDSA: Optional[bytes] = None
+        self.priDSA: Optional[bytes] = None
+
+    def genkey(self) -> Tuple[bytes, bytes]: # (public, private)
+        # 1. Curve448 key generation
+        self.priX = x448.X448PrivateKey.generate()
+        self.pubX = self.priX.public_key()
+        self.priEd = ed448.Ed448PrivateKey.generate()
+        self.pubEd = self.priEd.public_key()
+
+        # get raw bytes
+        pub0 = self.pubX.public_bytes_raw() # 56B
+        pri0 = self.priX.private_bytes_raw() # 56B
+        pub1 = self.pubEd.public_bytes_raw() # 57B
+        pri1 = self.priEd.private_bytes_raw() # 57B
+
+        # 2. ML-KEM-1024 & ML-DSA-87 key generation
+        self.pubKEM, self.priKEM = mlkem_gen()
+        self.pubDSA, self.priDSA = mldsa_gen()
+
+        # 3. join keys (Public: 4273B, Private: 8177B)
+        pubB = pub0 + pub1 + self.pubKEM + self.pubDSA
+        priB = pri0 + pri1 + self.priKEM + self.priDSA
+        return (pubB, priB)
+
+    def loadkey(self, public: bytes|None, private: bytes|None):
+        if public:
+            if len(public) != 4273: raise ValueError("Invalid PQC1 public key length")
+            self.pubX = x448.X448PublicKey.from_public_bytes(public[:56])
+            self.pubEd = ed448.Ed448PublicKey.from_public_bytes(public[56:113])
+            self.pubKEM = public[113:1681]  # 113 + 1568
+            self.pubDSA = public[1681:4273] # 1681 + 2592
+            
+        if private:
+            if len(private) != 8177: raise ValueError("Invalid PQC1 private key length")
+            self.priX = x448.X448PrivateKey.from_private_bytes(private[:56])
+            self.priEd = ed448.Ed448PrivateKey.from_private_bytes(private[56:113])
+            self.priKEM = private[113:3281]  # 113 + 3168
+            self.priDSA = private[3281:8177] # 3281 + 4896
+
+    def encrypt(self, data: bytes) -> bytes:
+        # 1. Ephemeral X448 tempkey generation
+        tempKey = x448.X448PrivateKey.generate()
+        tempPub = tempKey.public_key().public_bytes_raw()
+        ssvECC = tempKey.exchange(self.pubX) # 56B
+
+        # 2. ML-KEM-1024 Encapsulation
+        kemEnc, ssvKEM = mlkem_enc(self.pubKEM) # Cipher 1568B, Secret 32B
+
+        # 3. Hybrid KDF & Encryption
+        gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 44)
+        enc = SymMaster("gcm1", gcmKey).EnBin(data)
+
+        # [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
+        return tempPub + kemEnc + enc
+
+    def decrypt(self, data: bytes) -> bytes:
+        # 1. seperate data
+        tempPub = data[:56]
+        kemEnc = data[56:1624]
+        enc = data[1624:]
+
+        # 2. Shared Secret Value
+        tempXKey = x448.X448PublicKey.from_public_bytes(tempPub)
+        ssvECC = self.priX.exchange(tempXKey)
+        ssvKEM = mlkem_dec(self.priKEM, kemEnc)
+
+        # 3. Hybrid KDF & Decryption
+        gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 44)
+        return SymMaster("gcm1", gcmKey).DeBin(enc)
+
+    def sign(self, data: bytes) -> bytes:
+        # ECC-Ed448 (114B) + ML-DSA-87 (4627B)
+        edSgn = self.priEd.sign(data)
+        mlSgn = mldsa_sign(self.priDSA, data)
+        return edSgn + mlSgn
+
+    def verify(self, data: bytes, signature: bytes) -> bool:
+        if len(signature) != 4741: return False
+        edSgn = signature[:114]
+        mlSgn = signature[114:]
+        try:
+            self.pubEd.verify(edSgn, data)
+            return mldsa_verify(self.pubDSA, data, mlSgn)
         except:
             return False

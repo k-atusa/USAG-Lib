@@ -43,3 +43,18 @@ Image-related tools
 
 윈도우 전자서명 도구
 Windows digital signature tool (deprecated)
+
+#### pip setup
+
+```bash
+pip install pycryptodomex
+pip install cryptography
+pip install argon2-cffi
+pip install pqcrypto
+pip install requests
+pip install numpy
+pip install matplotlib
+pip install opencv-python
+pip install PyMuPDF
+pip install pyautogui
+```

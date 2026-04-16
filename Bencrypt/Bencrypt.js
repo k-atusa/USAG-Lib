@@ -6,7 +6,9 @@ const deps = {
     argon2: null,
     sha3256: null,
     sha3512: null,
-    noble: null
+    noble: null,
+    ml_kem1024: null,
+    ml_dsa87: null
 };
 if (isNode) {
     try { 
@@ -24,6 +26,13 @@ if (isNode) {
         const nodeArgon2 = await import('argon2');
         deps.argon2 = nodeArgon2.default || nodeArgon2; 
     } catch (e) { console.error('argon2 module not installed'); }
+
+    try {
+        const { ml_kem1024 } = await import('@noble/post-quantum/ml-kem');
+        const { ml_dsa87 } = await import('@noble/post-quantum/ml-dsa');
+        deps.ml_kem1024 = ml_kem1024;
+        deps.ml_dsa87 = ml_dsa87;
+    } catch (e) { console.error('@noble/post-quantum module not installed'); }
 
 } else {
     if (typeof self !== 'undefined' && self.crypto) { deps.crypto = self.crypto; } 
@@ -48,8 +57,16 @@ if (isNode) {
             ed448: webNoble.ed448 
         };
     } catch (e) { console.error('@noble/curves module not installed'); }
+
+    try {
+        const { ml_kem1024 } = await import('https://esm.sh/@noble/post-quantum/ml-kem');
+        const { ml_dsa87 } = await import('https://esm.sh/@noble/post-quantum/ml-dsa');
+        deps.ml_kem1024 = ml_kem1024;
+        deps.ml_dsa87 = ml_dsa87;
+    } catch (e) { console.error('@noble/post-quantum module not installed via CDN'); }
 }
 
+// ========== Helpers ==========
 function toU8(data) {
     if (typeof data === 'string') return new TextEncoder().encode(data);
     if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -110,6 +127,21 @@ function hmac_sha3_512(key, msg) {
     return SHA3512(outerData);
 }
 
+/**
+ * genkey: HMAC-SHA3-512 based key generation
+ * @param {Uint8Array} data 
+ * @param {string} lbl 
+ * @param {number} size 
+ * @returns {Uint8Array}
+ */
+export function genkey(data, lbl, size) {
+    const digest = hmac_sha3_512(data, lbl);
+    if (size > digest.length) {
+        throw new Error("key size too large");
+    }
+    return digest.slice(0, size);
+}
+
 export class TestReader {
     constructor(u8Array) {
         this.data = u8Array; // Uint8Array
@@ -150,7 +182,6 @@ export class TestWriter {
 }
 
 // ========== Basic Functions ==========
-
 /**
  * random: Generate secure random bytes
  * @param {number} size 
@@ -184,6 +215,65 @@ export function SHA3512(data) {
     return new Uint8Array(deps.sha3512.create().update(data).arrayBuffer());
 }
 
+// ========== Hash Function Master ==========
+export class HashMaster {
+    /**
+     * @param {string} algo
+     * @param {number} hashSize 
+     * @param {number} keySize 
+     */
+    constructor(algo, hashSize = 32, keySize = 44) {
+        if (!["sha3", "pbk2", "arg2"].includes(algo)) {
+            throw new Error(`Unsupported algorithm: ${algo}`);
+        }
+        this.algo = algo;
+        this.hashSize = hashSize;
+        this.keySize = keySize;
+    }
+
+    /**
+     * KDF
+     * @param {Uint8Array|string} pw 
+     * @param {Uint8Array|string} salt 
+     * @returns {Promise<[Uint8Array, Uint8Array]>} [PW storage, user key]
+     */
+    async KDF(pw, salt) {
+        let lblStore = "";
+        let lblKeygen = "";
+        let master = null;
+        const pwBuf = toU8(pw);
+        const saltBuf = toU8(salt);
+
+        if (this.algo === "sha3") {
+            lblStore = "PWHASH_SHA3";
+            lblKeygen = "KEYGEN_SHA3";
+            const combined = new Uint8Array(saltBuf.length + pwBuf.length); // merge buffers
+            combined.set(saltBuf, 0);
+            combined.set(pwBuf, saltBuf.length);
+            master = SHA3512(combined);
+
+        } else if (this.algo === "pbk2") {
+            lblStore = "PWHASH_PBK2";
+            lblKeygen = "KEYGEN_PBK2";
+            master = await pbkdf2(pwBuf, saltBuf);
+
+        } else if (this.algo === "arg2") {
+            lblStore = "PWHASH_ARG2";
+            lblKeygen = "KEYGEN_ARG2";
+            master = await argon2(pwBuf, saltBuf);
+
+        } else {
+            return [null, null];
+        }
+
+        return [
+            genkey(master, lblStore, this.hashSize),
+            genkey(master, lblKeygen, this.keySize)
+        ];
+    }
+}
+
+// ========== Hash Functions ==========
 /**
  * pbkdf2
  * @param {Uint8Array|string} pw 
@@ -227,6 +317,44 @@ export async function pbkdf2(pw, salt, iter = 1000000, outsize = 64) {
 }
 
 /**
+ * argon2 (Raw Hash)
+ * @param {Uint8Array|string} pw 
+ * @param {Uint8Array|string} salt 
+ * @returns {Promise<Uint8Array>} 48 bytes raw hash
+ */
+export async function argon2(pw, salt) {
+    const pwBuf = toU8(pw);
+    const saltBuf = toU8(salt);
+    const type = isNode ? deps.argon2.argon2id : deps.argon2.Argon2id;
+
+    if (isNode) {
+        const options = {
+            type: type || 2,
+            timeCost: 3,
+            memoryCost: 262144,
+            parallelism: 4,
+            hashLength: 48,
+            raw: true,
+            salt: saltBuf
+        };
+        const hash = await deps.argon2.hash(pwBuf, options);
+        return new Uint8Array(hash);
+    } else {
+        const options = {
+            pass: pwBuf,
+            salt: saltBuf,
+            type: type || 2,
+            time: 3,
+            mem: 262144,
+            parallelism: 4,
+            hashLen: 48
+        };
+        const res = await deps.argon2.hash(options);
+        return new Uint8Array(res.hash);
+    }
+}
+
+/**
  * argon2Hash
  * @param {Uint8Array|string} pw - Password (or binary data)
  * @param {Uint8Array|string} salt - Salt (Optional, but recommended)
@@ -244,7 +372,7 @@ export async function argon2Hash(pw, salt = null) {
             timeCost: 3,
             memoryCost: 262144,
             parallelism: 4,
-            hashLength: 32,
+            hashLength: 48,
             raw: false // Return encoded string
         };
         if (saltBuf) options.salt = saltBuf;
@@ -257,7 +385,7 @@ export async function argon2Hash(pw, salt = null) {
             time: 3,
             mem: 262144,
             parallelism: 4,
-            hashLen: 32
+            hashLen: 48
         };
         if (saltBuf) {
             options.salt = saltBuf;
@@ -285,21 +413,6 @@ export async function argon2Verify(hashed, pw) {
     } catch (e) {
         return false;
     }
-}
-
-/**
- * genkey: HMAC-SHA3-512 based key generation
- * @param {Uint8Array} data 
- * @param {string} lbl 
- * @param {number} size 
- * @returns {Uint8Array}
- */
-export function genkey(data, lbl, size) {
-    const digest = hmac_sha3_512(data, lbl);
-    if (size > digest.length) {
-        throw new Error("key size too large");
-    }
-    return digest.slice(0, size);
 }
 
 // ========== Symmetric Encryption Master ==========
@@ -647,7 +760,7 @@ class AES1 {
 // ========== Asymetric Encryption Master ==========
 export class AsymMaster {
     /**
-     * @param {string} algo - "rsa1", "rsa2", "ecc1"
+     * @param {string} algo
      */
     constructor(algo) {
         if (algo === "rsa1" || algo === "rsa2") {
@@ -656,6 +769,9 @@ export class AsymMaster {
         } else if (algo === "ecc1") {
             this.algo = algo;
             this.worker = new ECC1();
+        } else if (algo === "pqc1") {
+            this.algo = algo;
+            this.worker = new PQC1();
         } else {
             throw new Error(`Unsupported algorithm: ${algo}`);
         }
@@ -671,6 +787,8 @@ export class AsymMaster {
         } else if (this.algo === "rsa2") {
             return await this.worker.genkey(4096);
         } else if (this.algo === "ecc1") {
+            return await this.worker.genkey();
+        } else if (this.algo === "pqc1") {
             return await this.worker.genkey();
         }
     }
@@ -1066,6 +1184,241 @@ class ECC1 {
             return deps.crypto.verify(null, d, myPubKeyObj, s);
         } else {
             return deps.noble.ed448.verify(s, d, this.pubEd);
+        }
+    }
+}
+
+// ========== PQC1 Encryption ==========
+class PQC1 {
+    constructor() {
+        // ECC Key Objects
+        this.pubX = null; // 56 bytes
+        this.priX = null; // 56 bytes
+        this.pubEd = null; // 57 bytes
+        this.priEd = null; // 57 bytes
+        
+        // PQC Key Bytes
+        this.pubKEM = null; // 1568 bytes
+        this.priKEM = null; // 3168 bytes
+        this.pubDSA = null; // 2592 bytes
+        this.priDSA = null; // 4896 bytes
+    }
+
+    /**
+     * Generate PQC1 Key Pair
+     * @returns {Promise<[Uint8Array, Uint8Array]>} (public, private)
+     */
+    async genkey() {
+        // 1. Curve448 key generation
+        let pub0, pri0, pub1, pri1;
+        if (isNode) {
+            const xKp = deps.crypto.generateKeyPairSync('x448');
+            pub0 = new Uint8Array(xKp.publicKey.export({ format: 'raw', type: 'spki' }));
+            pri0 = new Uint8Array(xKp.privateKey.export({ format: 'raw', type: 'pkcs8' }));
+            
+            const edKp = deps.crypto.generateKeyPairSync('ed448');
+            pub1 = new Uint8Array(edKp.publicKey.export({ format: 'raw', type: 'spki' }));
+            pri1 = new Uint8Array(edKp.privateKey.export({ format: 'raw', type: 'pkcs8' }));
+
+        } else {
+            pri0 = deps.noble.x448.utils.randomPrivateKey();
+            pub0 = deps.noble.x448.getPublicKey(pri0);
+            pri1 = deps.noble.ed448.utils.randomPrivateKey();
+            pub1 = deps.noble.ed448.getPublicKey(pri1);
+        }
+
+        this.priX = pri0; this.pubX = pub0;
+        this.priEd = pri1; this.pubEd = pub1;
+
+        // 2. ML-KEM-1024 & ML-DSA-87 key generation
+        const kemKeys = deps.ml_kem1024.keygen();
+        this.pubKEM = kemKeys.publicKey;
+        this.priKEM = kemKeys.secretKey;
+
+        const dsaKeys = deps.ml_dsa87.keygen();
+        this.pubDSA = dsaKeys.publicKey;
+        this.priDSA = dsaKeys.secretKey;
+
+        // 3. join keys (Public: 4273B, Private: 8177B)
+        const pubB = new Uint8Array(4273);
+        pubB.set(pub0, 0);
+        pubB.set(pub1, 56);
+        pubB.set(this.pubKEM, 113);
+        pubB.set(this.pubDSA, 1681);
+
+        const priB = new Uint8Array(8177);
+        priB.set(pri0, 0);
+        priB.set(pri1, 56);
+        priB.set(this.priKEM, 113);
+        priB.set(this.priDSA, 3281);
+
+        return [pubB, priB];
+    }
+
+    /**
+     * Load PQC1 Key Pair
+     * @param {Uint8Array} publicBuf 
+     * @param {Uint8Array} privateBuf 
+     */
+    async loadkey(publicBuf, privateBuf) {
+        if (publicBuf) {
+            const p = toU8(publicBuf);
+            if (p.length !== 4273) throw new Error("Invalid PQC1 public key length");
+            this.pubX = p.slice(0, 56);
+            this.pubEd = p.slice(56, 113);
+            this.pubKEM = p.slice(113, 1681);
+            this.pubDSA = p.slice(1681, 4273);
+        }
+        if (privateBuf) {
+            const p = toU8(privateBuf);
+            if (p.length !== 8177) throw new Error("Invalid PQC1 private key length");
+            this.priX = p.slice(0, 56);
+            this.priEd = p.slice(56, 113);
+            this.priKEM = p.slice(113, 3281);
+            this.priDSA = p.slice(3281, 8177);
+        }
+    }
+
+    /**
+     * encrypt with public key
+     * @param {Uint8Array} data
+     * @returns {Promise<Uint8Array>}
+     */
+    async encrypt(data) {
+        const d = toU8(data);
+        
+        // 1. Ephemeral X448 tempkey generation
+        let ssvECC, tempPub;
+        if (isNode) {
+            const ephKp = deps.crypto.generateKeyPairSync('x448');
+            tempPub = new Uint8Array(ephKp.publicKey.export({ format: 'raw', type: 'spki' }));
+            const peerKeyObj = deps.crypto.createPublicKey({ key: this.pubX, format: 'raw', type: 'spki' });
+            const sharedSecret = deps.crypto.diffieHellman({
+                privateKey: ephKp.privateKey,
+                publicKey: peerKeyObj
+            });
+            ssvECC = new Uint8Array(sharedSecret);
+        } else {
+            const tempPri = deps.noble.x448.utils.randomPrivateKey();
+            tempPub = deps.noble.x448.getPublicKey(tempPri);
+            ssvECC = deps.noble.x448.getSharedSecret(tempPri, this.pubX);
+        }
+
+        // 2. ML-KEM-1024 Encapsulation
+        const { cipherText: kemEnc, sharedSecret: ssvKEM } = deps.ml_kem1024.encapsulate(this.pubKEM);
+
+        // 3. Hybrid KDF & Encryption
+        const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
+        combinedSecret.set(ssvECC, 0);
+        combinedSecret.set(ssvKEM, ssvECC.length);
+
+        const gcmKey = genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+        let em = new SymMaster("gcm1", gcmKey);
+        const enc = await em.EnBin(d);
+
+        // [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
+        const res = new Uint8Array(56 + 1568 + enc.length);
+        res.set(tempPub, 0);
+        res.set(kemEnc, 56);
+        res.set(enc, 1624);
+        return res;
+    }
+
+    /**
+     * decrypt with private key
+     * @param {Uint8Array} data
+     * @returns {Promise<Uint8Array>}
+     */
+    async decrypt(data) {
+        const d = toU8(data);
+        
+        // 1. separate data
+        const tempPub = d.slice(0, 56);
+        const kemEnc = d.slice(56, 1624);
+        const enc = d.slice(1624);
+
+        // 2. Shared Secret Value
+        let ssvECC;
+        if (isNode) {
+            const ephKeyObj = deps.crypto.createPublicKey({ key: tempPub, format: 'raw', type: 'spki' });
+            const myPriKeyObj = deps.crypto.createPrivateKey({ key: this.priX, format: 'raw', type: 'x448' });
+            const sharedSecret = deps.crypto.diffieHellman({
+                privateKey: myPriKeyObj,
+                publicKey: ephKeyObj
+            });
+            ssvECC = new Uint8Array(sharedSecret);
+        } else {
+            ssvECC = deps.noble.x448.getSharedSecret(this.priX, tempPub);
+        }
+
+        const ssvKEM = deps.ml_kem1024.decapsulate(kemEnc, this.priKEM);
+
+        // 3. Hybrid KDF & Decryption
+        const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
+        combinedSecret.set(ssvECC, 0);
+        combinedSecret.set(ssvKEM, ssvECC.length);
+
+        const gcmKey = genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+        let em = new SymMaster("gcm1", gcmKey);
+        return await em.DeBin(enc);
+    }
+
+    /** * sign with private key
+     * @param {Uint8Array} data
+     * @returns {Promise<Uint8Array>}
+     */
+    async sign(data) {
+        const d = toU8(data);
+        
+        // ECC-Ed448 (114B)
+        let edSgn;
+        if (isNode) {
+            const myPriKeyObj = deps.crypto.createPrivateKey({ key: this.priEd, format: 'raw', type: 'ed448' });
+            edSgn = new Uint8Array(deps.crypto.sign(null, d, myPriKeyObj));
+        } else {
+            edSgn = deps.noble.ed448.sign(d, this.priEd);
+        }
+
+        // ML-DSA-87 (4627B)
+        const mlSgn = deps.ml_dsa87.sign(d, this.priDSA);
+
+        // Join: 114 + 4627 = 4741
+        const res = new Uint8Array(edSgn.length + mlSgn.length); 
+        res.set(edSgn, 0);
+        res.set(mlSgn, edSgn.length);
+        return res;
+    }
+
+    /** * verify with public key
+     * @param {Uint8Array} data
+     * @param {Uint8Array} signature
+     * @returns {Promise<boolean>}
+     */
+    async verify(data, signature) {
+        const d = toU8(data);
+        const s = toU8(signature);
+        
+        if (s.length !== 4741) return false;
+        const edSgn = s.slice(0, 114);
+        const mlSgn = s.slice(114);
+
+        let edValid = false;
+        try {
+            if (isNode) {
+                const myPubKeyObj = deps.crypto.createPublicKey({ key: this.pubEd, format: 'raw', type: 'spki' });
+                edValid = deps.crypto.verify(null, d, myPubKeyObj, edSgn);
+            } else {
+                edValid = deps.noble.ed448.verify(edSgn, d, this.pubEd);
+            }
+        } catch (e) {
+            return false;
+        }
+
+        if (!edValid) return false;
+        try {
+            return deps.ml_dsa87.verify(mlSgn, d, this.pubDSA);
+        } catch (e) {
+            return false;
         }
     }
 }

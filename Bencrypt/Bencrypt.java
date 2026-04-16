@@ -3,7 +3,7 @@
 /*
 * external library BouncyCastle is required
 * desktop: lib/bclib.jar
-* android: gradle dependency org.bouncycastle:bcprov-jdk15to18:1.70
+* android: gradle dependency org.bouncycastle:bcprov-jdk18on:1.78.1
 */
 import org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator;
 import org.bouncycastle.crypto.digests.SHA512Digest;
@@ -56,9 +56,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
 public class Bencrypt {
-    // ========== Basic Functions ==========
-    private final SecureRandom randSrc = new SecureRandom();
-
+    // ========== Helpers ==========
     private static byte[] mkiv(byte[] g, long c) {
         byte[] iv = Arrays.copyOf(g, 12); // base IV 12B
         byte[] counterBytes = ByteBuffer.allocate(8) // counter 8B little endian
@@ -81,6 +79,22 @@ public class Bencrypt {
         return Base64.getDecoder().decode(padded);
     }
 
+    // HMAC-SHA3-512
+    public static byte[] genkey(byte[] data, String lbl, int size) {
+        HMac hmac = new HMac(new SHA3Digest(512));
+        byte[] key = lbl.getBytes(StandardCharsets.UTF_8);
+        hmac.init(new KeyParameter(data)); // Key is data
+        hmac.update(key, 0, key.length); // Message is label
+        byte[] result = new byte[hmac.getMacSize()];
+        hmac.doFinal(result, 0);
+        if (size > result.length) {
+            throw new IllegalArgumentException("key size too large");
+        }
+        return Arrays.copyOf(result, size);
+    }
+
+    // ========== Basic Functions ==========
+    private final SecureRandom randSrc = new SecureRandom();
     public byte[] Random(int size) {
         byte[] bytes = new byte[size];
         this.randSrc.nextBytes(bytes);
@@ -103,9 +117,14 @@ public class Bencrypt {
         return result;
     }
 
-    // set iter, outsize to 0 for default (1000000, 64)
+    // ========== Hash Functions Master ==========
+    public static class HashMaster {
+        private String algo;
+    }
+
+    // ========== Hash Functions ==========
     public static byte[] pbkdf2(byte[] pw, byte[] salt, int iter, int outsize) {
-        if (iter <= 0)
+        if (iter <= 0) // set iter, outsize to 0 for default (1000000, 64)
             iter = 1000000;
         if (outsize <= 0)
             outsize = 64;
@@ -115,10 +134,12 @@ public class Bencrypt {
         return params.getKey();
     }
 
-    // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4,
-    // Len=32, Salt=16
+    public byte[] argon2(byte[] pw, byte[] salt) {
+
+    }
+
     public String argon2Hash(byte[] pw, byte[] salt) {
-        if (salt == null) {
+        if (salt == null) { // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4, Len=48, Salt=16
             salt = this.Random(16);
         }
         Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
@@ -129,7 +150,7 @@ public class Bencrypt {
                 .withSalt(salt);
         Argon2BytesGenerator gen = new Argon2BytesGenerator();
         gen.init(builder.build());
-        byte[] result = new byte[32];
+        byte[] result = new byte[48];
         gen.generateBytes(pw, result, 0, result.length);
 
         // generate formatted string ( $argon2id$v=19$m=262144,t=3,p=4$saltB64$hashB64 )
@@ -180,20 +201,6 @@ public class Bencrypt {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    // HMAC-SHA3-512
-    public static byte[] genkey(byte[] data, String lbl, int size) {
-        HMac hmac = new HMac(new SHA3Digest(512));
-        byte[] key = lbl.getBytes(StandardCharsets.UTF_8);
-        hmac.init(new KeyParameter(data)); // Key is data
-        hmac.update(key, 0, key.length); // Message is label
-        byte[] result = new byte[hmac.getMacSize()];
-        hmac.doFinal(result, 0);
-        if (size > result.length) {
-            throw new IllegalArgumentException("key size too large");
-        }
-        return Arrays.copyOf(result, size);
     }
 
     // ========== Symmetric Encryption Master ==========

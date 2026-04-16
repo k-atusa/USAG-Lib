@@ -1,18 +1,20 @@
 ## Bencrypt
 
-AES, RSA, ECC를 지원하는 암호화 모듈입니다. 현재 표준 권장 알고리즘보다 더 높은 보안 여유를 가지고 있습니다.
+현재 표준 권장 알고리즘보다 더 높은 보안 여유를 지원하는 암호화 모듈입니다.
 
-Encryption module supporting AES, RSA, and ECC. It has a higher security margin than currently recommended standard algorithms.
+Encryption module that supports higher security margin than currently recommended standard algorithms.
 
 options
-- gcm1
-- gcmx1
-- rsa1
-- rsa2
-- ecc1
+Hash: `sha3, pbk2, arg2`
+Symmetric: `gcm1, gcmx1`
+Asymmetric: `rsa1, rsa2, ecc1, pqc1`
 
 #### python
 ```py
+class HashMaster:
+    def __init__(algo: str, hashSize: int = 32, keySize: int = 44) -> None
+    def KDF(pw: bytes, salt: bytes) -> (bytes, bytes)
+    
 class SymMaster:
     def __init__(algo: str, key: bytes) -> None
     def AfterSize(size: int) -> int
@@ -24,7 +26,7 @@ class SymMaster:
 
 class AsymMaster:
     def __init__(algo: str) -> None
-    def Genkey() -> Tuple[bytes, bytes]
+    def Genkey() -> (bytes, bytes)
     def Loadkey(public: bytes | None, private: bytes | None)
     def Encrypt(data: bytes) -> bytes
     def Decrypt(data: bytes) -> bytes
@@ -38,6 +40,11 @@ def SHA3512(data: bytes) -> bytes
 
 #### javascript
 ```js
+class HashMaster {
+    constructor(algo: string, hashSize: number, keySize: number)
+    async function KDF(pw, salt): Promise<[Uint8Array, Uint8Array]>
+}
+
 class SymMaster {
     constructor(algo: string, key: Uint8Array)
     AfterSize(size: number): number
@@ -65,6 +72,11 @@ function SHA3512(data: Uint8Array | string): Uint8Array
 
 #### golang
 ```go
+struct HashMaster {
+    func Init(algo string, hashSize int, keySize int)
+    func KDF(pw []byte, salt []byte) ([]byte, []byte, error)
+}
+
 struct SymMaster {
     func Init(algo string, key []byte)
     func AfterSize(size int64) int64
@@ -93,6 +105,11 @@ func SHA3512(data []byte) []byte
 #### java
 ```java
 class Bencrypt {
+    static class HashMaster {
+        HashMaster(String algo, int hashSize, int keySize)
+        byte[][] KDF(byte[] pw, byte[] salt)
+    }
+    
     static class SymMaster {
         SymMaster(String algo, byte[] key)
         long AfterSize(long size)
@@ -120,50 +137,68 @@ class Bencrypt {
 }
 ```
 
-## Format Standard
+## Usage
 
 #### Hash Functions
 
-비밀번호(저 엔트로피) + Salt(결정적 동작을 위해 저장됨) --(Argon2id/PBKDF2)-> Master Secret(고 엔트로피) --(서로 다른 라벨로 HMAC)-> 비밀번호 저장해시, 세션 키
+- Used for data validation and key derivation
+- Password (Low Entropy) + Salt (Stored for deterministic behavior) --(Hash/KDF)-> Master Secret (High Entropy) --(HMAC with different labels)-> Password Storage Hash, Session Key
 
-Password (Low Entropy) + Salt (Stored for deterministic behavior) --(Argon2id/PBKDF2)-> Master Secret (High Entropy) --(HMAC with different labels)-> Password Storage Hash, Session Key
+#### Symmetric Encryption
 
-- SHA3-256/512: SHA3 해시함수입니다. 데이터 변조를 탐지하는데 사용합니다.
-SHA3 hash functions. Used to detect data tampering.
-- PBKDF2: 비밀번호를 저장하는 해시함수입니다. 기본 파라미터는  `Hash=SHA-512, Iter=1000000, Outsize=64B`입니다.
-Hash function for storing passwords. Default parameters are `Hash=SHA-512, Iter=1000000, Outsize=64B`.
-- Argon2id: 비밀번호를 저장하는 최신 해시함수입니다. 파라미터는 `Time=3, Memory=262144, Parallel=4, Outsize=32B`입니다. 한 번 계산에 256MiB의 메모리가 필요합니다.
-Modern hash function for storing passwords. Parameters are `Time=3, Memory=262144, Parallel=4, Outsize=32B`. Requires 256MiB of memory per calculation.
-- genkey: 해시함수 결과물을 세션 키로 만드는 해시함수입니다. `HMAC-SHA3-512` 기반입니다.
-Hash function to generate session keys from hash results. Based on `HMAC-SHA3-512`.
+- Used for large object encryption
+- AES-256 is considered safe even in the era of quantum computers
+
+#### Asymmetric Encryption
+
+- Used for communication between users
+- Use PQC algorithms for data used after year 2040 or for long-term storage
+- You may use ECC for non-stored short-term data
+
+## Format Standard
+
+#### SHA3
+
+- Supports SHA3-256/512. HashMaster and HMAC genkey is based on SHA3-512
+- It can be used for linking subsystems, not directly hashing raw password
+- Method `sha3` parameter: single SHA3-512
+
+#### PBKDF2
+
+- classic key derivation function
+- Method `pbk2` parameter: `Hash=SHA-512, Iter=1000000, Outsize=64B`
+
+#### Argon2id
+
+- Modern key derivation function
+- Method `arg2` parameter: `Time=3, Memory=262144, Parallel=4, Outsize=48B`, requires 256MiB
 
 #### AES-GCM
 
-키는 44바이트 고정으로, 앞 12바이트를 iv, 뒤 32바이트를 key로 사용합니다.
-Key is fixed at 44 bytes; the first 12 bytes are used as IV, and the last 32 bytes as the Key.
-- GCM 모드는 결과로 태그가 붙은 암호문을 내보냅니다. 형식: `[CipherText][Tag 16B]`
-GCM mode: Outputs ciphertext with a tag appended. Format: `[CipherText][Tag 16B]`
-- GCMx 모드는 입력은 1MiB로 나눠서 독립적인 iv(기본 iv[4:12] XOR counter)를 적용합니다. 출력에는 태그가 붙은 청크를 그대로 이어붙여 씁니다. 형식: `[CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`
-GCMx mode: Divides input into 1MiB chunks and applies independent IVs (Base IV[4:12] XOR counter). The output consists of concatenated tagged chunks. Format: `[CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`
+- 44B integrated key: `[iv 12B][key 32B]`
+- Method `gcm1` format: `[CipherText][Tag 16B]`
+- Method `gcmx1` format: `[CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`, Divides input into 1MiB chunks and applies independent IVs (Base IV[4:12] XOR counter).
+- **Each Message Must Have Their Own Key**: Do not use same key twice, derive key from random source or use random salt (use Opsec layer)
 
 #### RSA
 
-- 지원 비트: 2048, 4096
-​Supported bits: 2048, 4096
-- 키 형식: 공개키(PKIX-DER), 개인키(PKCS8-DER) 형식의 바이트 배열입니다.
-Key format: Byte arrays in Public Key (PKIX-DER) and Private Key (PKCS8-DER) formats.
-- 암호화: `OAEP-SHA-512`를 사용합니다.
-Encryption: Uses OAEP-SHA-512.
-- 서명: `PKCS#1 v1.5 SHA-256`을 사용합니다.
-Signing: Uses `PKCS#1 v1.5 SHA-256`.
+- Legacy asymmetric algorithm
+- Method `rsa1` is RSA-2048 and `rsa2` is RSA-4096
+- Key format: PKIX-DER for public key and PKCS8-DER for private key
+- OAEP-SHA-512 for encryption and PKCS#1 v1.5 SHA-256 for signature
 
 #### ECC
 
-- 타원곡선: 생성 과정이 투명한 `Curve448`을 사용합니다.
-Elliptic Curve: Uses Curve448, which has a transparent generation process.
-- 키 형식: 공개키와 개인키 모두 113바이트 고정 길이 키를 사용합니다. 형식: `[X448 56B][Ed448 57B]`
-Key format: Both public and private keys use fixed-length 113-byte keys. Format: `[X448 56B][Ed448 57B]`
-- 암호화: 임시 키를 생성하고 수신자 공개키와 섞어 ECDH 공유 비밀키를 생성합니다. 이후 AES-GCM으로 데이터를 암호화합니다. 형식: `[KeyLen 1B][TempKey][CipherText][Tag 16B]`
-Encryption: Generates an ephemeral key and mixes it with the recipient's public key to generate an ECDH shared secret. Then encrypts data using AES-GCM. Format: `[KeyLen 1B][TempKey][CipherText][Tag 16B]`
-- 서명: ECDSA Ed448로 서명합니다.
-Signing: Signs using ECDSA Ed448.
+- Modern asymmetric algorithm using Curve448, which is independent from NSA issues
+- Key format: `[X448 56B][Ed448 57B]` for both public and private key
+- Encryption: `[KeyLen 1B][TempKey][CipherText][Tag 16B]`
+- Signature: raw bytes using ECDSA Ed448
+
+#### PQC1
+
+- Hybrid model using both Curve448 and NIST FIPS 203/204
+- Safe after post-quantum attacks
+- Public Key: `[ECC-X448 56B][ECC-Ed448 57B][ML-KEM1024 1568B][ML-DSA87 2592B]` (4273B)
+- Private Key: `[ECC-X448 56B][ECC-Ed448 57B][ML-KEM1024 3168B][ML-DSA87 4896B]` (8177B)
+- Encryption: `[Temp ECC-X448 56B][Temp ML-KEM1024 1568B][CipherText][Tag 16B]` with HMAC(ECDH + ML-SSV)
+- Signature: `[ECC-Ed448 114B][ML-DSA87 4627B]` (4741B), both parts are verified
