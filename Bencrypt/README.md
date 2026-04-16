@@ -5,9 +5,9 @@
 Encryption module that supports higher security margin than currently recommended standard algorithms.
 
 options
-Hash: `sha3, pbk2, arg2`
-Symmetric: `gcm1, gcmx1`
-Asymmetric: `rsa1, rsa2, ecc1, pqc1`
+- Hash: `sha3, pbk2, arg2`
+- Symmetric: `gcm1, gcmx1`
+- Asymmetric: `rsa1, rsa2, ecc1, pqc1`
 
 #### python
 ```py
