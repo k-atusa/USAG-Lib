@@ -58,3 +58,7 @@ pip install opencv-python
 pip install PyMuPDF
 pip install pyautogui
 ```
+
+#### pkg.go.dev Update
+
+`https://pkg.go.dev/github.com/k-atusa/USAG-Lib@vX.Y.Z`

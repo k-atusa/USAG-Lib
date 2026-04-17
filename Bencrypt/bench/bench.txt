@@ -1,1 +1,185 @@
 Env[OS: Windows 11, CPU: i5-13600KF, RAM: 32GB, GPU: RTX-3060 12GB, SSD: SK-P31 1TB]
+
+
+
+Bencrypt Benchmarks (Python)
+
+===== Basic Functions =====
+RandGen: 3226.44 MiB/s
+SHA3256: 698.66 MiB/s
+SHA3512: 379.87 MiB/s
+
+===== Hash Functions =====
+sha3: 0.01 ms/op
+pbk2: 491.07 ms/op
+arg2: 128.22 ms/op
+
+===== Symmetric Functions =====
+gcm1 (in-memory): 1123.48 MiB/s
+gcm1 (file): 550.88 MiB/s
+
+gcmx1 (in-memory): 340.22 MiB/s
+gcmx1 (file): 756.61 MiB/s
+
+===== Asymmetric Functions =====
+rsa1 (genkey): 913.63 ms/op
+rsa1 (encrypt): 0.32 ms/op
+rsa1 (sign): 2.17 ms/op
+
+rsa2 (genkey): 11613.88 ms/op
+rsa2 (encrypt): 1.15 ms/op
+rsa2 (sign): 12.24 ms/op
+
+ecc1 (genkey): 1.29 ms/op
+ecc1 (encrypt): 0.53 ms/op
+ecc1 (sign): 0.22 ms/op
+
+pqc1 (genkey): 0.76 ms/op
+pqc1 (encrypt): 0.64 ms/op
+pqc1 (sign): 0.69 ms/op
+
+
+
+Bencrypt Benchmarks (JS/Browser FireFox)
+
+===== Basic Functions =====
+RandGen: 558.66 MiB/s
+SHA3256: 60.31 MiB/s
+SHA3512: 33.93 MiB/s
+
+===== Hash Functions =====
+sha3: 0.03 ms/op
+pbk2: 151.20 ms/op
+arg2: 577.80 ms/op
+
+===== Symmetric Functions =====
+gcm1 (in-memory): 1510.32 MiB/s
+gcmx1 (in-memory): 717.09 MiB/s
+
+===== Asymmetric Functions =====
+rsa1 (genkey): 28.33 ms/op
+rsa1 (encrypt): 0.04 ms/op
+rsa1 (sign): 1.24 ms/op
+
+rsa2 (genkey): 320.00 ms/op
+rsa2 (encrypt): 0.12 ms/op
+rsa2 (sign): 5.48 ms/op
+
+ecc1 (genkey): 2.40 ms/op
+ecc1 (encrypt): 4.06 ms/op
+ecc1 (sign): 0.66 ms/op
+
+pqc1 (genkey): 6.25 ms/op
+pqc1 (encrypt): 5.18 ms/op
+pqc1 (sign): 10.92 ms/op
+
+
+
+Bencrypt Benchmarks (JS/Browser Chrome)
+
+===== Basic Functions =====
+RandGen: 1814.88 MiB/s
+SHA3256: 71.89 MiB/s
+SHA3512: 40.89 MiB/s
+
+===== Hash Functions =====
+sha3: 0.02 ms/op
+pbk2: 314.24 ms/op
+arg2: 777.08 ms/op
+
+===== Symmetric Functions =====
+gcm1 (in-memory): 1282.89 MiB/s
+gcmx1 (in-memory): 604.70 MiB/s
+
+===== Asymmetric Functions =====
+rsa1 (genkey): 18.03 ms/op
+rsa1 (encrypt): 0.02 ms/op
+rsa1 (sign): 0.38 ms/op
+
+rsa2 (genkey): 520.40 ms/op
+rsa2 (encrypt): 0.05 ms/op
+rsa2 (sign): 2.64 ms/op
+
+ecc1 (genkey): 1.26 ms/op
+ecc1 (encrypt): 1.89 ms/op
+ecc1 (sign): 0.36 ms/op
+
+pqc1 (genkey): 4.39 ms/op
+pqc1 (encrypt): 2.56 ms/op
+pqc1 (sign): 8.41 ms/op
+
+
+
+Bencrypt Benchmarks (Java)
+
+===== Basic Functions =====
+RandGen: 435.80 MiB/s
+SHA3256: 464.57 MiB/s
+SHA3512: 277.56 MiB/s
+
+===== Hash Functions =====
+sha3: 0.00 ms/op
+pbk2: 737.59 ms/op
+arg2: 493.23 ms/op
+
+===== Symmetric Functions =====
+gcm1 (in-memory): 106.15 MiB/s
+gcm1 (file): 116.62 MiB/s
+
+gcmx1 (in-memory): 1471.86 MiB/s
+gcmx1 (file): 1161.01 MiB/s
+
+===== Asymmetric Functions =====
+rsa1 (genkey): 50.24 ms/op
+rsa1 (encrypt): 0.21 ms/op
+rsa1 (sign): 0.78 ms/op
+
+rsa2 (genkey): 1230.35 ms/op
+rsa2 (encrypt): 0.16 ms/op
+rsa2 (sign): 4.19 ms/op
+
+ecc1 (genkey): 0.92 ms/op
+ecc1 (encrypt): 0.42 ms/op
+ecc1 (sign): 0.13 ms/op
+
+pqc1 (genkey): 1.79 ms/op
+pqc1 (encrypt): 0.74 ms/op
+pqc1 (sign): 0.93 ms/op
+
+
+
+Bencrypt Benchmarks (Go)
+
+===== Basic Functions =====
+RandGen: 3554.76 MiB/s
+SHA3256: 553.94 MiB/s
+SHA3512: 310.22 MiB/s
+
+===== Hash Functions =====
+sha3: 0.00 ms/op
+pbk2: 344.13 ms/op
+arg2: 111.01 ms/op
+
+===== Symmetric Functions =====
+gcm1 (in-memory): 4037.34 MiB/s
+gcm1 (file): 570.36 MiB/s
+
+gcmx1 (in-memory): 3746.33 MiB/s
+gcmx1 (file): 4406.23 MiB/s
+
+===== Asymmetric Functions =====
+rsa1 (genkey): 56.33 ms/op
+rsa1 (encrypt): 0.00 ms/op
+rsa1 (sign): 0.40 ms/op
+
+rsa2 (genkey): 507.22 ms/op
+rsa2 (encrypt): 0.36 ms/op
+rsa2 (sign): 3.71 ms/op
+
+ecc1 (genkey): 0.00 ms/op
+ecc1 (encrypt): 0.21 ms/op
+ecc1 (sign): 0.00 ms/op
+
+pqc1 (genkey): 0.00 ms/op
+pqc1 (encrypt): 0.21 ms/op
+pqc1 (sign): 0.21 ms/op
