@@ -48,8 +48,8 @@ for i in range( 0, len(algos) ):
 
 time.sleep(1)
 print("\n\n===== Symmetric Functions =====")
-data = b"\x00" * 512 * 1048576
-fsize = 512 * 1048576
+fsize = 512 * 1048576 # 512MiB
+data = b"\x00" * fsize
 with open("temp.bin", "wb") as f:
     f.write(b"\xff" * fsize)
 algos = ["gcm1", "gcmx1"]

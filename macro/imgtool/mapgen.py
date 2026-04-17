@@ -1,4 +1,4 @@
-# testXXX : mapgen
+# test808 : mapgen
 import csv
 import json
 import os

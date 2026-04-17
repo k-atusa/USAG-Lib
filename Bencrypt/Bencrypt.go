@@ -29,8 +29,30 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	"github.com/cloudflare/circl/dh/x448"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/cloudflare/circl/sign/ed448"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 )
+
+// ========== Basic Functions ==========
+func Random(size int) []byte {
+	b := make([]byte, size)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(err) // Cryptographic RNG failure is usually fatal
+	}
+	return b
+}
+
+func SHA3256(data []byte) []byte {
+	hash := sha3.Sum256(data)
+	return hash[:]
+}
+
+func SHA3512(data []byte) []byte {
+	hash := sha3.Sum512(data)
+	return hash[:]
+}
 
 type aesResult struct {
 	data []byte
@@ -53,38 +75,100 @@ func mkiv(g []byte, c uint64) []byte {
 	return iv
 }
 
-// ========== Basic Functions ==========
-func Random(size int) []byte {
-	b := make([]byte, size)
-	_, err := rand.Read(b)
-	if err != nil {
-		panic(err) // Cryptographic RNG failure is usually fatal
+// make key using HMAC-SHA3-512
+func Genkey(data []byte, lbl string, size int) ([]byte, error) {
+	h := hmac.New(func() hash.Hash { return sha3.New512() }, data)
+	h.Write([]byte(lbl))
+	key := h.Sum(nil)
+	if size > len(key) {
+		return nil, errors.New("key size too large")
 	}
-	return b
+	return key[:size], nil
 }
 
-func SHA3256(data []byte) []byte {
-	hash := sha3.Sum256(data)
-	return hash[:]
+// ========== Hash Function Master ==========
+type HashMaster struct {
+	algo     string
+	hashSize int
+	keySize  int
 }
 
-func SHA3512(data []byte) []byte {
-	hash := sha3.Sum512(data)
-	return hash[:]
+func (hm *HashMaster) Init(algo string, hashSize int, keySize int) error {
+	if hashSize <= 0 {
+		hashSize = 32 // default 32B
+	}
+	if keySize <= 0 {
+		keySize = 44 // default 44B
+	}
+	switch algo {
+	case "sha3", "pbk2", "arg2":
+		hm.algo = algo
+		hm.hashSize = hashSize
+		hm.keySize = keySize
+	default:
+		return errors.New("unsupported algorithm: " + algo)
+	}
+	return nil
 }
 
-// default iter=1000000, outsize=64
+func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
+	if hm.hashSize <= 0 || hm.keySize <= 0 {
+		return nil, nil, errors.New("invalid hash or key size")
+	}
+	var lblStore, lblKeygen string
+	var master []byte
+
+	// get master secret
+	switch hm.algo {
+	case "sha3":
+		lblStore, lblKeygen = "PWHASH_SHA3", "KEYGEN_SHA3"
+		data := make([]byte, 0, len(salt)+len(pw))
+		data = append(data, salt...)
+		data = append(data, pw...)
+		master = SHA3512(data)
+	case "pbk2":
+		lblStore, lblKeygen = "PWHASH_PBK2", "KEYGEN_PBK2"
+		master = Pbkdf2(pw, salt, 1000000, 64)
+	case "arg2":
+		lblStore, lblKeygen = "PWHASH_ARG2", "KEYGEN_ARG2"
+		master = Argon2(pw, salt)
+	default:
+		return nil, nil, errors.New("algorithm not set")
+	}
+
+	// generate keys
+	storeKey, err := Genkey(master, lblStore, hm.hashSize)
+	if err != nil {
+		return nil, nil, err
+	}
+	userKey, err := Genkey(master, lblKeygen, hm.keySize)
+	if err != nil {
+		return nil, nil, err
+	}
+	return storeKey, userKey, nil
+}
+
+// ========== Hash Functions ==========
 func Pbkdf2(pw []byte, salt []byte, iter int, outsize int) []byte {
 	if iter <= 0 {
-		iter = 1000000
+		iter = 1000000 // default iter=1000000
 	}
 	if outsize <= 0 {
-		outsize = 64
+		outsize = 64 // default outsize=64
 	}
 	return pbkdf2.Key(pw, salt, iter, outsize, sha512.New)
 }
 
-// fixxed parameters: Time=3, Mem=262144(256MB), Parallel=4, HashLen=32
+func Argon2(pw []byte, salt []byte) []byte {
+	const (
+		time    = 3
+		memory  = 262144
+		threads = 4
+		keyLen  = 48
+	)
+	return argon2.IDKey(pw, salt, time, memory, threads, keyLen)
+}
+
 func Argon2Hash(pw []byte, salt []byte) string {
 	if salt == nil {
 		salt = Random(16)
@@ -93,8 +177,8 @@ func Argon2Hash(pw []byte, salt []byte) string {
 		time    = 3
 		memory  = 262144
 		threads = 4
-		keyLen  = 32
-	)
+		keyLen  = 48
+	) // Time=3, Mem=262144(256MB), Parallel=4, HashLen=32
 
 	hash := argon2.IDKey(pw, salt, time, memory, threads, keyLen)
 	b64Salt := base64.RawStdEncoding.EncodeToString(salt) // base64 with no padding
@@ -131,17 +215,6 @@ func Argon2Verify(hashed string, pw []byte) bool {
 	// Re-hash, const-time compare
 	newHash := argon2.IDKey(pw, salt, time, memory, threads, uint32(len(originalHash)))
 	return hmac.Equal(originalHash, newHash)
-}
-
-// make key using HMAC-SHA3-512
-func Genkey(data []byte, lbl string, size int) ([]byte, error) {
-	h := hmac.New(func() hash.Hash { return sha3.New512() }, data)
-	h.Write([]byte(lbl))
-	key := h.Sum(nil)
-	if size > len(key) {
-		return nil, errors.New("key size too large")
-	}
-	return key[:size], nil
 }
 
 // ========== Master Class ==========
@@ -570,9 +643,10 @@ func (a *AES1) DeAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 
 // ========== Asymetric Encryption Master ==========
 type AsymMaster struct {
-	Algo string // algo: "rsa1", "rsa2", "ecc1"
+	Algo string // algo: "rsa1", "rsa2", "ecc1", "pqc1"
 	rsa  *RSA1
 	ecc  *ECC1
+	pqc1 *PQC1
 }
 
 func (am *AsymMaster) Init(algo string) error {
@@ -583,6 +657,9 @@ func (am *AsymMaster) Init(algo string) error {
 	case "ecc1":
 		am.Algo = algo
 		am.ecc = new(ECC1)
+	case "pqc1":
+		am.Algo = algo
+		am.pqc1 = new(PQC1)
 	default:
 		return errors.New("unsupported algorithm: " + algo)
 	}
@@ -598,6 +675,8 @@ func (am *AsymMaster) Genkey() ([]byte, []byte, error) {
 		return am.rsa.Genkey(4096)
 	case "ecc1":
 		return am.ecc.Genkey()
+	case "pqc1":
+		return am.pqc1.Genkey()
 	}
 	return nil, nil, errors.New("algorithm not set")
 }
@@ -608,6 +687,8 @@ func (am *AsymMaster) Loadkey(public []byte, private []byte) error {
 		return am.rsa.Loadkey(public, private)
 	case "ecc1":
 		return am.ecc.Loadkey(public, private)
+	case "pqc1":
+		return am.pqc1.Loadkey(public, private)
 	}
 	return errors.New("algorithm not set")
 }
@@ -618,6 +699,8 @@ func (am *AsymMaster) Encrypt(data []byte) ([]byte, error) {
 		return am.rsa.Encrypt(data)
 	case "ecc1":
 		return am.ecc.Encrypt(data)
+	case "pqc1":
+		return am.pqc1.Encrypt(data)
 	}
 	return nil, errors.New("algorithm not set")
 }
@@ -628,6 +711,8 @@ func (am *AsymMaster) Decrypt(data []byte) ([]byte, error) {
 		return am.rsa.Decrypt(data)
 	case "ecc1":
 		return am.ecc.Decrypt(data)
+	case "pqc1":
+		return am.pqc1.Decrypt(data)
 	}
 	return nil, errors.New("algorithm not set")
 }
@@ -638,6 +723,8 @@ func (am *AsymMaster) Sign(data []byte) ([]byte, error) {
 		return am.rsa.Sign(data)
 	case "ecc1":
 		return am.ecc.Sign(data)
+	case "pqc1":
+		return am.pqc1.Sign(data)
 	}
 	return nil, errors.New("algorithm not set")
 }
@@ -648,6 +735,8 @@ func (am *AsymMaster) Verify(data []byte, signature []byte) bool {
 		return am.rsa.Verify(data, signature)
 	case "ecc1":
 		return am.ecc.Verify(data, signature)
+	case "pqc1":
+		return am.pqc1.Verify(data, signature)
 	}
 	return false
 }
@@ -894,4 +983,348 @@ func (e *ECC1) Verify(data []byte, signature []byte) bool {
 		return false
 	}
 	return ed448.Verify(e.PubEd, data, signature, "")
+}
+
+// ========== PQC1 Encryption ==========
+type PQC1 struct {
+	// ECC Keys
+	PubX   *x448.Key
+	PrivX  *x448.Key
+	PubEd  ed448.PublicKey
+	PrivEd ed448.PrivateKey
+
+	// PQC Key Bytes (Raw Bytes Storage)
+	PubKEM  []byte
+	PrivKEM []byte
+	PubDSA  []byte
+	PrivDSA []byte
+}
+
+func (p *PQC1) Genkey() ([]byte, []byte, error) {
+	var wg sync.WaitGroup
+	wg.Add(4)
+
+	// local variables
+	var err1, err2, err3, err4 error
+	var pubX, privX x448.Key
+	var pubEd ed448.PublicKey
+	var privEd ed448.PrivateKey
+	var pubKEM, privKEM, pubDSA, privDSA []byte
+
+	// 1-1. Curve448 X448 Key Generation
+	go func() {
+		defer wg.Done()
+		if _, err := io.ReadFull(rand.Reader, privX[:]); err != nil {
+			err1 = err
+			return
+		}
+		x448.KeyGen(&pubX, &privX)
+	}()
+
+	// 1-2. Curve448 Ed448 Key Generation
+	go func() {
+		defer wg.Done()
+		pubEd, privEd, err2 = ed448.GenerateKey(rand.Reader)
+	}()
+
+	// 2-1. ML-KEM-1024 Key Generation
+	go func() {
+		defer wg.Done()
+		kemPub, kemPriv, err := mlkem1024.Scheme().GenerateKeyPair()
+		if err != nil {
+			err3 = err
+			return
+		}
+		pubKEM, _ = kemPub.MarshalBinary()
+		privKEM, _ = kemPriv.MarshalBinary()
+	}()
+
+	// 2-2. ML-DSA-87 Key Generation
+	go func() {
+		defer wg.Done()
+		dsaPub, dsaPriv, err := mldsa87.Scheme().GenerateKey()
+		if err != nil {
+			err4 = err
+			return
+		}
+		pubDSA, _ = dsaPub.MarshalBinary()
+		privDSA, _ = dsaPriv.MarshalBinary()
+	}()
+
+	// wait for all key generations to finish
+	wg.Wait()
+	if err1 != nil {
+		return nil, nil, err1
+	}
+	if err2 != nil {
+		return nil, nil, err2
+	}
+	if err3 != nil {
+		return nil, nil, err3
+	}
+	if err4 != nil {
+		return nil, nil, err4
+	}
+
+	// 3. Save and Key Join
+	p.PubX, p.PrivX = &pubX, &privX
+	p.PubEd, p.PrivEd = pubEd, privEd
+	p.PubKEM, p.PrivKEM = pubKEM, privKEM
+	p.PubDSA, p.PrivDSA = pubDSA, privDSA
+
+	pub0 := pubX[:]
+	pri0 := privX[:]
+	pub1 := []byte(pubEd)
+	pri1 := privEd.Seed() // 57B seed
+
+	pubB := make([]byte, 0, 4273)
+	pubB = append(pubB, pub0...)
+	pubB = append(pubB, pub1...)
+	pubB = append(pubB, p.PubKEM...)
+	pubB = append(pubB, p.PubDSA...)
+
+	priB := make([]byte, 0, 8177)
+	priB = append(priB, pri0...)
+	priB = append(priB, pri1...)
+	priB = append(priB, p.PrivKEM...)
+	priB = append(priB, p.PrivDSA...)
+
+	return pubB, priB, nil
+}
+
+func (p *PQC1) Loadkey(public []byte, private []byte) error {
+	if public != nil {
+		if len(public) != 4273 {
+			return errors.New("invalid PQC1 public key length")
+		}
+		p.PubX = new(x448.Key)
+		copy(p.PubX[:], public[:56])
+
+		p.PubEd = make(ed448.PublicKey, 57)
+		copy(p.PubEd, public[56:113])
+
+		p.PubKEM = make([]byte, 1568)
+		copy(p.PubKEM, public[113:1681])
+
+		p.PubDSA = make([]byte, 2592)
+		copy(p.PubDSA, public[1681:4273])
+	}
+
+	if private != nil {
+		if len(private) != 8177 {
+			return errors.New("invalid PQC1 private key length")
+		}
+		p.PrivX = new(x448.Key)
+		copy(p.PrivX[:], private[:56])
+
+		p.PrivEd = ed448.NewKeyFromSeed(private[56:113])
+
+		p.PrivKEM = make([]byte, 3168)
+		copy(p.PrivKEM, private[113:3281])
+
+		p.PrivDSA = make([]byte, 4896)
+		copy(p.PrivDSA, private[3281:8177])
+	}
+	return nil
+}
+
+func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// local variables
+	var err1, err2 error
+	var tempPub, ssvECC x448.Key
+	var kemEnc, ssvKEM []byte
+
+	// 1. Ephemeral X448 tempkey generation & ECDH
+	go func() {
+		defer wg.Done()
+		var tempPriv x448.Key
+		if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
+			err1 = err
+			return
+		}
+		x448.KeyGen(&tempPub, &tempPriv)
+
+		if !x448.Shared(&ssvECC, &tempPriv, p.PubX) {
+			err1 = errors.New("ECDH key exchange failed")
+		}
+	}()
+
+	// 2. ML-KEM-1024 Encapsulation
+	go func() {
+		defer wg.Done()
+		kemPub, err := mlkem1024.Scheme().UnmarshalBinaryPublicKey(p.PubKEM)
+		if err != nil {
+			err2 = err
+			return
+		}
+		kemEnc, ssvKEM, err2 = mlkem1024.Scheme().Encapsulate(kemPub)
+	}()
+
+	// wait for all encryptions to finish
+	wg.Wait()
+	if err1 != nil {
+		return nil, err1
+	}
+	if err2 != nil {
+		return nil, err2
+	}
+
+	// 3. Hybrid KDF & Encryption
+	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
+	sharedSecret = append(sharedSecret, ssvECC[:]...)
+	sharedSecret = append(sharedSecret, ssvKEM...)
+
+	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
+	if err != nil {
+		return nil, err
+	}
+	em := new(SymMaster)
+	em.Init("gcm1", gcmKey)
+	enc, err := em.EnBin(data)
+	if err != nil {
+		return nil, err
+	}
+
+	// [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
+	out := make([]byte, 0, 56+1568+len(enc))
+	out = append(out, tempPub[:]...)
+	out = append(out, kemEnc...)
+	out = append(out, enc...)
+	return out, nil
+}
+
+func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
+	if len(data) < 56+1568+16 {
+		return nil, errors.New("data too short")
+	}
+
+	// 1. Seperate data
+	tempPub := data[:56]
+	kemEnc := data[56:1624]
+	enc := data[1624:]
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// local variables
+	var err1, err2 error
+	var ssvECC x448.Key
+	var ssvKEM []byte
+
+	// 2-1. Shared Secret Value (ECC)
+	go func() {
+		defer wg.Done()
+		var tempXKey x448.Key
+		copy(tempXKey[:], tempPub)
+		if !x448.Shared(&ssvECC, p.PrivX, &tempXKey) {
+			err1 = errors.New("ECDH key exchange failed")
+		}
+	}()
+
+	// 2-2. Shared Secret Value (KEM)
+	go func() {
+		defer wg.Done()
+		kemPriv, err := mlkem1024.Scheme().UnmarshalBinaryPrivateKey(p.PrivKEM)
+		if err != nil {
+			err2 = err
+			return
+		}
+		ssvKEM, err2 = mlkem1024.Scheme().Decapsulate(kemPriv, kemEnc)
+	}()
+
+	// wait for all decryptions to finish
+	wg.Wait()
+	if err1 != nil {
+		return nil, err1
+	}
+	if err2 != nil {
+		return nil, err2
+	}
+
+	// 3. Hybrid KDF & Decryption
+	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
+	sharedSecret = append(sharedSecret, ssvECC[:]...)
+	sharedSecret = append(sharedSecret, ssvKEM...)
+
+	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
+	if err != nil {
+		return nil, err
+	}
+	em := new(SymMaster)
+	em.Init("gcm1", gcmKey)
+	return em.DeBin(enc)
+}
+
+func (p *PQC1) Sign(data []byte) ([]byte, error) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// local variables
+	var edSgn, mlSgn []byte
+	var err2 error
+
+	// 1. ECC-Ed448 Sign
+	go func() {
+		defer wg.Done()
+		edSgn = ed448.Sign(p.PrivEd, data, "")
+	}()
+
+	// 2. ML-DSA-87 Sign
+	go func() {
+		defer wg.Done()
+		dsaPriv, err := mldsa87.Scheme().UnmarshalBinaryPrivateKey(p.PrivDSA)
+		if err != nil {
+			err2 = err
+			return
+		}
+		mlSgn = mldsa87.Scheme().Sign(dsaPriv, data, nil)
+	}()
+
+	// wait for all signatures to finish
+	wg.Wait()
+	if err2 != nil {
+		return nil, err2
+	}
+
+	// Join Signatures (114B + 4627B = 4741B)
+	out := make([]byte, 0, len(edSgn)+len(mlSgn))
+	out = append(out, edSgn...)
+	out = append(out, mlSgn...)
+	return out, nil
+}
+
+func (p *PQC1) Verify(data []byte, signature []byte) bool {
+	if len(signature) != 4741 {
+		return false
+	}
+	edSgn := signature[:114]
+	mlSgn := signature[114:]
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// local variables
+	var edOk, dsaOk bool
+
+	// 1. ECC-Ed448 Verify
+	go func() {
+		defer wg.Done()
+		edOk = ed448.Verify(p.PubEd, data, edSgn, "")
+	}()
+
+	// 2. ML-DSA-87 Verify
+	go func() {
+		defer wg.Done()
+		dsaPub, err := mldsa87.Scheme().UnmarshalBinaryPublicKey(p.PubDSA)
+		if err != nil {
+			return
+		}
+		dsaOk = mldsa87.Scheme().Verify(dsaPub, data, mlSgn, nil)
+	}()
+
+	wg.Wait()
+	return edOk && dsaOk // Both signatures must be valid
 }

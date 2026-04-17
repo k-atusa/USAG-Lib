@@ -41,7 +41,7 @@ def SHA3512(data: bytes) -> bytes
 #### javascript
 ```js
 class HashMaster {
-    constructor(algo: string, hashSize: number, keySize: number)
+    constructor(algo: string, hashSize: number = 32, keySize: number = 44)
     async function KDF(pw, salt): Promise<[Uint8Array, Uint8Array]>
 }
 
@@ -107,6 +107,7 @@ func SHA3512(data []byte) []byte
 class Bencrypt {
     static class HashMaster {
         HashMaster(String algo, int hashSize, int keySize)
+        HashMaster(String algo)
         byte[][] KDF(byte[] pw, byte[] salt)
     }
     

@@ -3,8 +3,40 @@
 /*
 * external library BouncyCastle is required
 * desktop: lib/bclib.jar
-* android: gradle dependency org.bouncycastle:bcprov-jdk18on:1.78.1
+* android: gradle dependency org.bouncycastle:bcprov-jdk18on:1.84
 */
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.LinkedList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.Arrays;
+
+import java.security.SecureRandom;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.OAEPParameterSpec;
+import javax.crypto.spec.PSource;
+
+import org.bouncycastle.crypto.params.ParametersWithRandom;
 import org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator;
 import org.bouncycastle.crypto.digests.SHA512Digest;
 import org.bouncycastle.crypto.params.KeyParameter;
@@ -23,37 +55,21 @@ import org.bouncycastle.crypto.params.Ed448PublicKeyParameters;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.agreement.X448Agreement;
 import org.bouncycastle.crypto.signers.Ed448Signer;
+import org.bouncycastle.crypto.SecretWithEncapsulation;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.LinkedList;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.Arrays;
-
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.OAEPParameterSpec;
-import javax.crypto.spec.PSource;
-
-import java.security.SecureRandom;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.Signature;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.spec.MGF1ParameterSpec;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMParameters;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMKeyGenerationParameters;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMKeyPairGenerator;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMPublicKeyParameters;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMPrivateKeyParameters;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMGenerator;
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMExtractor;
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAParameters;
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAKeyGenerationParameters;
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAKeyPairGenerator;
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAPublicKeyParameters;
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAPrivateKeyParameters;
+import org.bouncycastle.pqc.crypto.mldsa.MLDSASigner;
 
 public class Bencrypt {
     // ========== Helpers ==========
@@ -120,6 +136,53 @@ public class Bencrypt {
     // ========== Hash Functions Master ==========
     public static class HashMaster {
         private String algo;
+        private int hashSize;
+        private int keySize;
+
+        public HashMaster(String algo, int hashSize, int keySize) {
+            if (!algo.equals("sha3") && !algo.equals("pbk2") && !algo.equals("arg2")) {
+                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
+            }
+            this.algo = algo;
+            this.hashSize = hashSize;
+            this.keySize = keySize;
+        }
+
+        public HashMaster(String algo) {
+            this(algo, 32, 44); // default hashSize=32 bytes, keySize=44 bytes
+        }
+
+        public byte[][] KDF(byte[] pw, byte[] salt) {
+            String lblStore = "", lblKeygen = "";
+            byte[] master = null;
+
+            if (this.algo.equals("sha3")) {
+                lblStore = "PWHASH_SHA3";
+                lblKeygen = "KEYGEN_SHA3";
+                byte[] combined = new byte[salt.length + pw.length];
+                System.arraycopy(salt, 0, combined, 0, salt.length);
+                System.arraycopy(pw, 0, combined, salt.length, pw.length);
+                master = Bencrypt.SHA3512(combined);
+
+            } else if (this.algo.equals("pbk2")) {
+                lblStore = "PWHASH_PBK2";
+                lblKeygen = "KEYGEN_PBK2";
+                master = Bencrypt.pbkdf2(pw, salt, 1000000, 64);
+
+            } else if (this.algo.equals("arg2")) {
+                lblStore = "PWHASH_ARG2";
+                lblKeygen = "KEYGEN_ARG2";
+                master = Bencrypt.argon2(pw, salt);
+
+            } else {
+                return new byte[0][0];
+            }
+
+            return new byte[][] {
+                    Bencrypt.genkey(master, lblStore, this.hashSize),
+                    Bencrypt.genkey(master, lblKeygen, this.keySize)
+            };
+        }
     }
 
     // ========== Hash Functions ==========
@@ -134,8 +197,18 @@ public class Bencrypt {
         return params.getKey();
     }
 
-    public byte[] argon2(byte[] pw, byte[] salt) {
-
+    public static byte[] argon2(byte[] pw, byte[] salt) {
+        Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                .withVersion(Argon2Parameters.ARGON2_VERSION_13)
+                .withIterations(3)
+                .withMemoryAsKB(262144)
+                .withParallelism(4)
+                .withSalt(salt);
+        Argon2BytesGenerator gen = new Argon2BytesGenerator();
+        gen.init(builder.build());
+        byte[] result = new byte[48];
+        gen.generateBytes(pw, result, 0, result.length);
+        return result;
     }
 
     public String argon2Hash(byte[] pw, byte[] salt) {
@@ -454,9 +527,10 @@ public class Bencrypt {
         private String algo;
         private Bencrypt.RSA1 worker0;
         private Bencrypt.ECC1 worker1;
+        private Bencrypt.PQC1 worker2;
 
         /**
-         * @param algo "rsa1", "rsa2", "ecc1"
+         * @param algo "rsa1", "rsa2", "ecc1", "pqc1"
          */
         public AsymMaster(String algo) {
             switch (algo) {
@@ -467,6 +541,10 @@ public class Bencrypt {
                 case "ecc1":
                     this.algo = algo;
                     this.worker1 = new Bencrypt.ECC1();
+                    break;
+                case "pqc1":
+                    this.algo = algo;
+                    this.worker2 = new Bencrypt.PQC1();
                     break;
                 default:
                     throw new IllegalArgumentException("Unsupported algorithm: " + algo);
@@ -481,6 +559,8 @@ public class Bencrypt {
                 return this.worker0.genkey(4096);
             } else if (this.algo.equals("ecc1")) {
                 return this.worker1.genkey();
+            } else if (this.algo.equals("pqc1")) {
+                return this.worker2.genkey();
             }
             return null;
         }
@@ -490,39 +570,53 @@ public class Bencrypt {
                 this.worker0.loadkey(publicBuf, privateBuf);
             } else if (this.algo.equals("ecc1")) {
                 this.worker1.loadkey(publicBuf, privateBuf);
+            } else if (this.algo.equals("pqc1")) {
+                this.worker2.loadkey(publicBuf, privateBuf);
             }
         }
 
         public byte[] Encrypt(byte[] data) throws Exception {
             if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
                 return this.worker0.encrypt(data);
-            } else {
-                return this.worker1.encrypt(data);
+            } else if (this.algo.equals("ecc1")) {
+                 return this.worker1.encrypt(data);
+            } else if (this.algo.equals("pqc1")) {
+                return this.worker2.encrypt(data);
             }
+            return null;
         }
 
         public byte[] Decrypt(byte[] data) throws Exception {
             if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
                 return this.worker0.decrypt(data);
-            } else {
+            } else if (this.algo.equals("ecc1")) {
                 return this.worker1.decrypt(data);
+            } else if (this.algo.equals("pqc1")) {
+                return this.worker2.decrypt(data);
             }
+            return null;
         }
 
         public byte[] Sign(byte[] data) throws Exception {
             if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
                 return this.worker0.sign(data);
-            } else {
+            } else if (this.algo.equals("ecc1")) {
                 return this.worker1.sign(data);
+            } else if (this.algo.equals("pqc1")) {
+                return this.worker2.sign(data);
             }
+            return null;
         }
 
         public boolean Verify(byte[] data, byte[] signature) {
             if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
                 return this.worker0.verify(data, signature);
-            } else {
+            } else if (this.algo.equals("ecc1")) {
                 return this.worker1.verify(data, signature);
+            } else if (this.algo.equals("pqc1")) {
+                return this.worker2.verify(data, signature);
             }
+            return false;
         }
     }
 
@@ -728,6 +822,216 @@ public class Bencrypt {
                 signer.init(false, this.pubEd);
                 signer.update(data, 0, data.length);
                 return signer.verifySignature(signature);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+    }
+
+    // ========== PQC1 Encryption ==========
+    @SuppressWarnings("deprecation") // JCA Standards are not compatible with USAG-Lib Standards (Python)
+    public static class PQC1 {
+        // ECC Key Objects
+        public X448PublicKeyParameters pubX = null;
+        public X448PrivateKeyParameters priX = null;
+        public Ed448PublicKeyParameters pubEd = null;
+        public Ed448PrivateKeyParameters priEd = null;
+        
+        // Lightweight PQC Key Objects
+        private MLKEMPublicKeyParameters kemPub = null;
+        private MLKEMPrivateKeyParameters kemPri = null;
+        private MLDSAPublicKeyParameters dsaPub = null;
+        private MLDSAPrivateKeyParameters dsaPri = null;
+
+        // PQC Raw Key Bytes
+        public byte[] pubKEM = null;
+        public byte[] priKEM = null;
+        public byte[] pubDSA = null;
+        public byte[] priDSA = null;
+
+        public byte[][] genkey() throws Exception {
+            SecureRandom rnd = new SecureRandom();
+
+            // 1. Curve448 key generation
+            X448KeyPairGenerator xGen = new X448KeyPairGenerator();
+            xGen.init(new X448KeyGenerationParameters(rnd));
+            AsymmetricCipherKeyPair xKp = xGen.generateKeyPair();
+            this.pubX = (X448PublicKeyParameters) xKp.getPublic();
+            this.priX = (X448PrivateKeyParameters) xKp.getPrivate();
+
+            Ed448KeyPairGenerator edGen = new Ed448KeyPairGenerator();
+            edGen.init(new Ed448KeyGenerationParameters(rnd));
+            AsymmetricCipherKeyPair edKp = edGen.generateKeyPair();
+            this.pubEd = (Ed448PublicKeyParameters) edKp.getPublic();
+            this.priEd = (Ed448PrivateKeyParameters) edKp.getPrivate();
+
+            byte[] pub0 = this.pubX.getEncoded(); 
+            byte[] pri0 = this.priX.getEncoded(); 
+            byte[] pub1 = this.pubEd.getEncoded(); 
+            byte[] pri1 = this.priEd.getEncoded(); 
+
+            // 2. ML-KEM-1024 key generation
+            MLKEMKeyPairGenerator kemKpg = new MLKEMKeyPairGenerator();
+            kemKpg.init(new MLKEMKeyGenerationParameters(rnd, MLKEMParameters.ml_kem_1024));
+            AsymmetricCipherKeyPair kemKp = kemKpg.generateKeyPair();
+            this.kemPub = (MLKEMPublicKeyParameters) kemKp.getPublic();
+            this.kemPri = (MLKEMPrivateKeyParameters) kemKp.getPrivate();
+            this.pubKEM = this.kemPub.getEncoded();
+            this.priKEM = this.kemPri.getEncoded();
+
+            // 3. ML-DSA-87 key generation
+            MLDSAKeyPairGenerator dsaKpg = new MLDSAKeyPairGenerator();
+            dsaKpg.init(new MLDSAKeyGenerationParameters(rnd, MLDSAParameters.ml_dsa_87));
+            AsymmetricCipherKeyPair dsaKp = dsaKpg.generateKeyPair();
+            this.dsaPub = (MLDSAPublicKeyParameters) dsaKp.getPublic();
+            this.dsaPri = (MLDSAPrivateKeyParameters) dsaKp.getPrivate();
+            this.pubDSA = this.dsaPub.getEncoded();
+            this.priDSA = this.dsaPri.getEncoded();
+
+            // 4. Join keys (Public: 4273B, Private: 8177B)
+            byte[] pubB = new byte[4273];
+            System.arraycopy(pub0, 0, pubB, 0, 56);
+            System.arraycopy(pub1, 0, pubB, 56, 57);
+            System.arraycopy(this.pubKEM, 0, pubB, 113, 1568);
+            System.arraycopy(this.pubDSA, 0, pubB, 1681, 2592);
+
+            byte[] priB = new byte[8177];
+            System.arraycopy(pri0, 0, priB, 0, 56);
+            System.arraycopy(pri1, 0, priB, 56, 57);
+            System.arraycopy(this.priKEM, 0, priB, 113, 3168);
+            System.arraycopy(this.priDSA, 0, priB, 3281, 4896);
+
+            return new byte[][] { pubB, priB };
+        }
+
+        public void loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
+            if (publicBuf != null) {
+                if (publicBuf.length != 4273) throw new IllegalArgumentException("Invalid PQC1 public key length");
+                this.pubX = new X448PublicKeyParameters(Arrays.copyOfRange(publicBuf, 0, 56), 0);
+                this.pubEd = new Ed448PublicKeyParameters(Arrays.copyOfRange(publicBuf, 56, 113), 0);
+                this.pubKEM = Arrays.copyOfRange(publicBuf, 113, 1681);
+                this.pubDSA = Arrays.copyOfRange(publicBuf, 1681, 4273);
+
+                // No JCA wrappers, Direct Lightweight Load
+                this.kemPub = new MLKEMPublicKeyParameters(MLKEMParameters.ml_kem_1024, this.pubKEM);
+                this.dsaPub = new MLDSAPublicKeyParameters(MLDSAParameters.ml_dsa_87, this.pubDSA);
+            }
+            if (privateBuf != null) {
+                if (privateBuf.length != 8177) throw new IllegalArgumentException("Invalid PQC1 private key length");
+                this.priX = new X448PrivateKeyParameters(Arrays.copyOfRange(privateBuf, 0, 56), 0);
+                this.priEd = new Ed448PrivateKeyParameters(Arrays.copyOfRange(privateBuf, 56, 113), 0);
+                this.priKEM = Arrays.copyOfRange(privateBuf, 113, 3281);
+                this.priDSA = Arrays.copyOfRange(privateBuf, 3281, 8177);
+
+                // No JCA wrappers, Direct Lightweight Load
+                this.kemPri = new MLKEMPrivateKeyParameters(MLKEMParameters.ml_kem_1024, this.priKEM);
+                this.dsaPri = new MLDSAPrivateKeyParameters(MLDSAParameters.ml_dsa_87, this.priDSA);
+            }
+        }
+
+        public byte[] encrypt(byte[] data) throws Exception {
+            SecureRandom rnd = new SecureRandom();
+
+            // 1. Ephemeral X448 tempkey generation
+            X448KeyPairGenerator xGen = new X448KeyPairGenerator();
+            xGen.init(new X448KeyGenerationParameters(rnd));
+            AsymmetricCipherKeyPair tempKp = xGen.generateKeyPair();
+            X448PublicKeyParameters tempPub = (X448PublicKeyParameters) tempKp.getPublic();
+            X448PrivateKeyParameters tempPri = (X448PrivateKeyParameters) tempKp.getPrivate();
+
+            X448Agreement agreement = new X448Agreement();
+            agreement.init(tempPri);
+            byte[] ssvECC = new byte[agreement.getAgreementSize()];
+            agreement.calculateAgreement(this.pubX, ssvECC, 0);
+
+            // 2. ML-KEM-1024 Encapsulation
+            MLKEMGenerator kemGen = new MLKEMGenerator(rnd);
+            SecretWithEncapsulation kemSec = kemGen.generateEncapsulated(this.kemPub);
+            byte[] ssvKEM = kemSec.getSecret();
+            byte[] kemEnc = kemSec.getEncapsulation();
+
+            // 3. Hybrid KDF & Encryption
+            byte[] combinedSecret = new byte[ssvECC.length + ssvKEM.length];
+            System.arraycopy(ssvECC, 0, combinedSecret, 0, ssvECC.length);
+            System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
+
+            byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+            Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
+            byte[] enc = worker.EnBin(data);
+
+            byte[] tempPubB = tempPub.getEncoded();
+            byte[] res = new byte[tempPubB.length + kemEnc.length + enc.length];
+            System.arraycopy(tempPubB, 0, res, 0, tempPubB.length);
+            System.arraycopy(kemEnc, 0, res, tempPubB.length, kemEnc.length);
+            System.arraycopy(enc, 0, res, tempPubB.length + kemEnc.length, enc.length);
+            return res;
+        }
+
+        public byte[] decrypt(byte[] data) throws Exception {
+            // 1. Separate data
+            byte[] tempPub = Arrays.copyOfRange(data, 0, 56);
+            byte[] kemEnc = Arrays.copyOfRange(data, 56, 1624);
+            byte[] enc = Arrays.copyOfRange(data, 1624, data.length);
+
+            // 2. Shared Secret Value
+            X448PublicKeyParameters tempXKey = new X448PublicKeyParameters(tempPub, 0);
+            X448Agreement agreement = new X448Agreement();
+            agreement.init(this.priX);
+            byte[] ssvECC = new byte[agreement.getAgreementSize()];
+            agreement.calculateAgreement(tempXKey, ssvECC, 0);
+
+            // ML-KEM-1024 Decapsulation 
+            MLKEMExtractor kemExt = new MLKEMExtractor(this.kemPri);
+            byte[] ssvKEM = kemExt.extractSecret(kemEnc);
+
+            // 3. Hybrid KDF & Decryption
+            byte[] combinedSecret = new byte[ssvECC.length + ssvKEM.length];
+            System.arraycopy(ssvECC, 0, combinedSecret, 0, ssvECC.length);
+            System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
+
+            byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+            Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
+            return worker.DeBin(enc);
+        }
+
+        public byte[] sign(byte[] data) throws Exception {
+            SecureRandom rnd = new SecureRandom();
+
+            // ECC-Ed448 
+            Ed448Signer edSigner = new Ed448Signer(new byte[0]);
+            edSigner.init(true, this.priEd);
+            edSigner.update(data, 0, data.length);
+            byte[] edSgn = edSigner.generateSignature();
+
+            // ML-DSA-87
+            MLDSASigner mlSigner = new MLDSASigner();
+            mlSigner.init(true, new ParametersWithRandom(this.dsaPri, rnd));
+            mlSigner.update(data, 0, data.length);
+            byte[] mlSgn = mlSigner.generateSignature();
+
+            byte[] res = new byte[edSgn.length + mlSgn.length];
+            System.arraycopy(edSgn, 0, res, 0, edSgn.length);
+            System.arraycopy(mlSgn, 0, res, edSgn.length, mlSgn.length);
+            return res;
+        }
+
+        public boolean verify(byte[] data, byte[] signature) {
+            if (signature.length != 4741) return false;
+            byte[] edSgn = Arrays.copyOfRange(signature, 0, 114);
+            byte[] mlSgn = Arrays.copyOfRange(signature, 114, 4741);
+
+            try {
+                // ECC-Ed448 verify
+                Ed448Signer edSigner = new Ed448Signer(new byte[0]);
+                edSigner.init(false, this.pubEd);
+                edSigner.update(data, 0, data.length);
+                if (!edSigner.verifySignature(edSgn)) return false;
+
+                // ML-DSA-87 verify
+                MLDSASigner mlSigner = new MLDSASigner();
+                mlSigner.init(false, this.dsaPub);
+                mlSigner.update(data, 0, data.length);
+                return mlSigner.verifySignature(mlSgn);
             } catch (Exception e) {
                 return false;
             }
