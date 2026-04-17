@@ -17,6 +17,7 @@ Summary of CLI tool usage
 Code-related tools for devs
 
 - codecount: 로컬 저장소나 원격 저장소 코드 규모 표시기 Code size indicator for local or remote repositories
+- githubview: 깃허브 유저나 조직 레포 통계 보기 Shows statistics of repos from github user/organization
 - embed_bin: 작은 데이터를 소스코드에 임베딩 Embed small data into source code
 - tkcolor: tkinter 색상 표시 Tkinter color display
 
