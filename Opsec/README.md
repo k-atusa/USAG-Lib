@@ -6,12 +6,8 @@ Secure file container and helper functions based on Bencrypt. Supports password-
 
 #### Supported Methods
 
-- sha3
-- pbk1
-- arg1
-- rsa1
-- rsa2
-- ecc1
+- pw-mode: `sha3, pbk2, arg2`
+- pub-mode: `rsa1, rsa2, ecc1, pqc1`
 
 #### python
 ```py
@@ -22,23 +18,24 @@ def EncodeCfg(data: Dict[str, bytes]) -> bytes
 def DecodeCfg(data: bytes) -> Dict[str, bytes]
 
 class Opsec:
-    Msg: str           # Non-secured message
-    Smsg: str          # Secured message
-    Size: int          # Body size (-1: no body key)
-    Name: str          # Body name
-    BodyKey: bytes     # Body key
-    BodyAlgo: str      # Body algorithm
-    ContAlgo: str      # Container algorithm
+    Msg: str
+    MsgInfo: bytes
+    Smsg: str
+    SmsgInfo: bytes
+    BodyAlgo: str
+    BodyKey: bytes
+    BodySize: int
+    BodyInfo: bytes
     
     def Reset()
     def Read(ins: io.IOBase, cut: int = 65535) -> bytes
     def Write(outs: io.IOBase, head: bytes)
     
     def Encpw(method: str, pw: bytes, kf: bytes = b"") -> bytes
-    def Encpub(method: str, public: bytes, private: bytes | None = None) -> bytes
+    def Encpub(method: str, peerPub: bytes, myPri: bytes | None = None) -> bytes
     def View(data: bytes)
     def Decpw(pw: bytes, kf: bytes = b"")
-    def Decpub(private: bytes, public: bytes | None = None)
+    def Decpub(myPri: bytes, myPub: bytes | None = None, peerPub: bytes | None = None)
 ```
 
 #### javascript
@@ -50,23 +47,24 @@ function EncodeCfg(data: Object): Uint8Array
 function DecodeCfg(data: Uint8Array): Object
 
 class Opsec {
-    Msg: String
-    Smsg: String
-    Size: Number
-    Name: String
+    Msg: string
+    MsgInfo: Uint8Array
+    Smsg: string
+    SmsgInfo: Uint8Array
+    BodyAlgo: string
     BodyKey: Uint8Array
-    BodyAlgo: String
-    ContAlgo: String
+    BodySize: number
+    BodyInfo: Uint8Array
     
     Reset()
     async function Read(ins, cut): Promise<Uint8Array>
     async function Write(outs, head)
     
     async function Encpw(method, pw, kf): Promise<Uint8Array>
-    async function Encpub(method, publicBuf, privateBuf): Promise<Uint8Array>
+    async function Encpub(method, peerPub, myPri = null): Promise<Uint8Array>
     function View(data)
     async function Decpw(pw, kf)
-    async function Decpub(privateBuf, publicBuf)
+    async function Decpub(myPri, myPub = null, peerPub = null)
 }
 ```
 
@@ -79,23 +77,24 @@ func EncodeCfg(data map[string][]byte) ([]byte, error)
 func DecodeCfg(data []byte) map[string][]byte
 
 type Opsec struct {
-    Msg         string
-    Smsg        string
-    Size        int64
-    Name        string
-    BodyKey     []byte
-    BodyAlgo    string
-    ContAlgo    string
+    Msg string
+    MsgInfo []byte
+    Smsg string
+    SmsgInfo []byte
+    BodyAlgo string
+    BodyKey []byte
+    BodySize int64
+    BodyInfo []byte
 
     func Reset()
     func Read(r io.Reader, cut int) ([]byte, error)
     func Write(w io.Writer, head []byte) error
     
     func Encpw(method string, pw []byte, kf []byte) ([]byte, error)
-    func Encpub(method string, public []byte, private []byte) ([]byte, error)
+    func Encpub(method string, peerPub []byte, myPri []byte) ([]byte, error)
     func View(data []byte)
     func Decpw(pw []byte, kf []byte) error
-    func Decpub(private []byte, public []byte) error
+    func Decpub(myPri []byte, myPub []byte, peerPub []byte) error
 }
 ```
 
@@ -109,22 +108,23 @@ public class Opsec {
     public Map<String, byte[]> DecodeCfg(byte[] data)
     
     public String Msg;
+    public byte[] MsgInfo;
     public String Smsg;
-    public long Size;
-    public String Name;
-    public byte[] BodyKey;
+    public byte[] SmsgInfo;
     public String BodyAlgo;
-    public String ContAlgo;
+    public byte[] BodyKey;
+    public long BodySize;
+    public byte[] BodyInfo;
 
     public void Reset()
     public byte[] Read(InputStream ins, int cut) throws IOException
     public void Write(OutputStream outs, byte[] head) throws IOException
 
     public byte[] Encpw(String method, byte[] pw, byte[] kf) throws Exception
-    public byte[] Encpub(String method, byte[] publicBytes, byte[] privateBytes) throws Exception
+    public byte[] Encpub(String method, byte[] peerPub, byte[] myPri) throws Exception
     public void View(byte[] data)
     public void Decpw(byte[] pw, byte[] kf) throws Exception
-    public void Decpub(byte[] privateBytes, byte[] publicBytes) throws Exception
+    public void Decpub(byte[] myPri, byte[] myPub, byte[] peerPub) throws Exception
 }
 ```
 
@@ -146,38 +146,29 @@ Opsec containers can include meaningless data or decoy files at the beginning an
 The file is identified by the magic number "YAS2" located at a multiple of 128 bytes.
 Following this, the first 2 bytes determine the header size. If this value is 65535, the next 2 bytes are also read and added to the header size. The maximum header size is 131070 bytes.
 
-#### Header Fields
+#### Header Structure
 
-다음 항목은 헤더에 그대로 노출됩니다.
-- msg: 일반 메세지.
-- headal: 헤더 암호화 알고리즘. 다음 중 하나여야 합니다: [arg1, pbk1, rsa1, ecc1]
-- salt: pw-mode에서 사용하는 salt.
-- pwh: pw-mode에서 사용하는 비밀번호 검증용 해시.
-- ehk: rsa-mode용 암호화된 헤더 정보 키.
-- ehd: 암호화된 헤더 정보.
+- hal (headAlgo): 헤더 암호화 알고리즘 Header encryption algorithm
+- msg: 공개 메세지 **누구나 변조 가능** Public message **Modifiable by anyone**
+- minf (msgInfo): 공개 보조정보 (RSA 보조 암호화 키 등) Public auxiliary information (ex. RSA auxiliary encryption keys)
+- salt: pw-mode salt
+- pwh (pwHash): pw-mode password hash
+- ehd (encHeadData): 암호화된 헤더 정보 (다음 내용을 포함한다) Encrypted header data, which contains the following:
+    - smsg (secureMsg): 비밀 메세지 Private message
+    - sinf (secureInfo): 비밀 보조정보 (메세지 ID 등) Private auxiliary information (ex. Message ID)
+    - bal (bodyAlgo): 본문 암호화 알고리즘 Body encryption algorithm
+    - bkey (bodyKey): 본문 암호화 키 Body encryption key
+    - bsz (bodySize): 본문 크기 Actual size of the body
+    - binf (bodyInfo): 본문 보조정보 (패키징 알고리즘 등) Body auxiliary information (ex. packaging algorithms)
+    - sgn (signature): 발신자 서명 (다음 내용을 합해 서명한다) Sender’s digital signature, generated by signing the following:
+        - hal: 헤더 암호화 알고리즘 Header encryption algorithm
+        - peerPub: 수신자 공개키 Receiver public key
+        - smsg: 비밀 메세지 Private message
+        - sinf: 비밀 보조정보 Private auxiliary information
 
-The following fields are exposed in the header as-is:
-- ​msg: General message.
-- ​headal: Header encryption algorithm. Must be one of: [arg1, pbk1, rsa1, ecc1]
-- ​salt: Salt used in pw-mode.
-- ​pwh: Password verification hash used in pw-mode.
-- ​ehk: Encrypted header information key for rsa-mode.
-- ​ehd: Encrypted header information.
+- 헤더 노출 공개 필드 Publicly Exposed: `headAlgo, msg, msgInfo, salt, pwHash`
+- 발신자 부인 불가 암호화 필드 Sender Non-Deniable: `secureMsg, secureInfo`
+- 발신자 부인 가능 암호화 필드 Sender Deniable: `bodyAlgo, bodyKey, bodySize, bodyInfo` (informations about body)
 
-다음 항목은 암호화되어 헤더에 들어갑니다.
-- smsg: 비밀 메세지.
-- nm: 원본 파일명.
-- sz: 원본 데이터 크기. -1로 설정될 경우 body가 없는 경우라 `body key`를 생성하지 않습니다.
-- bkey: 본문 키.
-- bodyal: 본문 암호화 알고리즘. 다음 중 하나여야 합니다: [gcm1, gcmx1]
-- contal: 평문 컨테이너 종류. 다음 중 하나여야 합니다: [zip1, tar1]
-- sgn: 전자서명 데이터. bkey가 존재한다면 bkey에 서명하고, 아니라면 smsg에 서명합니다.
-
-The following fields are encrypted and stored within the header:
-- ​smsg: Secret message.
-- ​nm: Original filename.
-- ​sz: Original data size. If set to -1, it indicates no body, so a body key is not generated.
-- ​bkey: Body key.
-- ​bodyal: Body encryption algorithm. Must be one of: [gcm1, gcmx1]
-- ​contal: Plaintext container type. Must be one of: [zip1, tar1]
-​sgn: Digital signature data. Signs bkey if it exists, otherwise signs smsg.
+비밀번호 모드는 발신자 검증을 지원하지 않으며, 공개키 모드는 서명을 포함하지 않는 익명 발송도 가능합니다.
+pw-mode does not support sender verification. You can transmit anonymously by omitting the signature with pub-mode.

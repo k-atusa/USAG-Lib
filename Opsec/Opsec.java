@@ -1,4 +1,3 @@
-
 // test794d : USAG-Lib opsec
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

@@ -1,6 +1,6 @@
 // test794b : USAG-Lib opsec
 const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
-const { Random, SHA3512, pbkdf2, argon2Hash, genkey, SymMaster, AsymMaster } = await import(BencryptURL);
+const { Random, HashMaster, SymMaster, AsymMaster } = await import(BencryptURL);
 
 // Helper: Concatenate Uint8Arrays
 function concat(arrays) {
@@ -158,35 +158,31 @@ export function DecodeCfg(data) {
     return result;
 }
 
-/*
-Opsec Header Handler, !!! DO NOT REUSE THIS OBJECT !!! reset after reading body key
-  pw: (msg), headAlgo, salt, pwHash, encHeadData
-  rsa: (msg), headAlgo, encHeadKey, encHeadData
-  ecc: (msg), headAlgo, encHeadData
-  header: (smsg), (size), (name), (bodyKey), (bodyAlgo), (contAlgo), (sign)
-*/
+// Opsec header handler
 export class Opsec {
     constructor() {
         this.Reset();
+        this.SaltLen = 32;
     }
 
+    // reset after reading BodyKey
     Reset() {
-        // Outer Layer
-        this.Msg = "";                        // non-secured message
-        this._headAlgo = "";                   // header algorithm, [arg1 pbk1 rsa1 ecc1]
-        this._salt = new Uint8Array(0);        // salt
-        this._pwHash = new Uint8Array(0);      // pw hash
-        this._encHeadKey = new Uint8Array(0);  // encrypted header key
-        this._encHeadData = new Uint8Array(0); // encrypted header data
+        this._headAlgo = "";
+        this.Msg = "";
+        this.MsgInfo = new Uint8Array(0);
 
-        // Inner Layer
-        this.Smsg = "";                   // secured message
-        this.Size = -1;                   // full body size, flag for bodyKey generation
-        this.Name = "";                   // body name
-        this.BodyKey = new Uint8Array(0); // body key
-        this.BodyAlgo = "";               // body algorithm, [gcm1 gcmx1]
-        this.ContAlgo = "";               // container algorithm, [zip1 tar1]
-        this._sign = new Uint8Array(0);    // signature
+        this._salt = new Uint8Array(0);
+        this._pwHash = new Uint8Array(0);
+        this._encHeadData = new Uint8Array(0);
+
+        this.Smsg = "";
+        this.SmsgInfo = new Uint8Array(0);
+        this._sign = new Uint8Array(0);
+
+        this.BodyAlgo = "";
+        this.BodyKey = new Uint8Array(0);
+        this.BodySize = -1;
+        this.BodyInfo = new Uint8Array(0);
     }
 
     /**
@@ -238,31 +234,31 @@ export class Opsec {
         await outs.write(head);
     }
 
-    _wrapHead() {
+    _wrapEncHead() {
         const cfg = {};
         if (this.Smsg !== "") cfg["smsg"] = this.Smsg;
-        if (this.Size >= 0) {
-            if (this.Size < 65536) cfg["sz"] = EncodeInt(this.Size, 2);
-            else if (this.Size < 4294967296) cfg["sz"] = EncodeInt(this.Size, 4);
-            else cfg["sz"] = EncodeInt(this.Size, 8);
-        }
-        if (this.Name !== "") cfg["nm"] = this.Name;
-        if (this.BodyKey.length > 0) cfg["bkey"] = this.BodyKey;
-        if (this.BodyAlgo !== "") cfg["bodyal"] = this.BodyAlgo;
-        if (this.ContAlgo !== "") cfg["contal"] = this.ContAlgo;
+        if (this.SmsgInfo.length > 0) cfg["sinf"] = this.SmsgInfo;
         if (this._sign.length > 0) cfg["sgn"] = this._sign;
+        if (this.BodyAlgo !== "") cfg["bal"] = this.BodyAlgo;
+        if (this.BodyKey.length > 0) cfg["bkey"] = this.BodyKey;
+        if (this.BodySize >= 0) {
+            if (this.BodySize < 65536) cfg["bsz"] = EncodeInt(this.BodySize, 2);
+            else if (this.BodySize < 4294967296) cfg["bsz"] = EncodeInt(this.BodySize, 4);
+            else cfg["bsz"] = EncodeInt(this.BodySize, 8);
+        }
+        if (this.BodyInfo.length > 0) cfg["binf"] = this.BodyInfo;
         return EncodeCfg(cfg);
     }
 
-    _unwrapHead(data) {
+    _unwrapEncHead(data) {
         const cfg = DecodeCfg(data);
         if (cfg["smsg"]) this.Smsg = u8ToStr(cfg["smsg"]);
-        if (cfg["sz"]) this.Size = DecodeInt(cfg["sz"]);
-        if (cfg["nm"]) this.Name = u8ToStr(cfg["nm"]);
-        if (cfg["bkey"]) this.BodyKey = cfg["bkey"];
-        if (cfg["bodyal"]) this.BodyAlgo = u8ToStr(cfg["bodyal"]);
-        if (cfg["contal"]) this.ContAlgo = u8ToStr(cfg["contal"]);
+        if (cfg["sinf"]) this.SmsgInfo = cfg["sinf"];
         if (cfg["sgn"]) this._sign = cfg["sgn"];
+        if (cfg["bal"]) this.BodyAlgo = u8ToStr(cfg["bal"]);
+        if (cfg["bkey"]) this.BodyKey = cfg["bkey"];
+        if (cfg["bsz"]) this.BodySize = DecodeInt(cfg["bsz"]);
+        if (cfg["binf"]) this.BodyInfo = cfg["binf"];
     }
 
     /**
@@ -273,44 +269,31 @@ export class Opsec {
      * @returns {Uint8Array}
      */
     async Encpw(method, pw, kf = new Uint8Array(0)) {
-        // basic setup
+        // generate random parameters
         this._headAlgo = method;
-        this._salt = Random(16);
-        if (this.Size >= 0) {
+        this._salt = Random(this.SaltLen);
+        if (this.BodySize >= 0) {
             this.BodyKey = Random(44);
         }
+
         const pwBytes = (typeof pw === 'string') ? strToU8(pw) : pw;
         const kfBytes = (typeof kf === 'string') ? strToU8(kf) : kf;
         const combinedPw = concat([pwBytes, kfBytes]);
 
-        // get master key, make pwHash, hkey
-        let mkey, hkey;
-        if (method === "sha3") {
-            mkey = SHA3512(concat(this._salt, combinedPw));
-            this._pwHash = genkey(mkey, "PWHASH_OPSEC_SHA3512", 32);
-            hkey = genkey(mkey, "KEYGEN_OPSEC_SHA3512", 44);
-        } else if (method === "pbk1") {
-            mkey = await pbkdf2(combinedPw, this._salt);
-            this._pwHash = genkey(mkey, "PWHASH_OPSEC_PBKDF2", 32);
-            hkey = genkey(mkey, "KEYGEN_OPSEC_PBKDF2", 44);
-        } else if (method === "arg1") {
-            const mkeyHashStr = await argon2Hash(combinedPw, this._salt);
-            mkey = strToU8(mkeyHashStr);
-            this._pwHash = genkey(mkey, "PWHASH_OPSEC_ARGON2", 32);
-            hkey = genkey(mkey, "KEYGEN_OPSEC_ARGON2", 44);
-        } else {
-            throw new Error(`Unsupported method: ${method}`);
-        }
+        // get pwhash & header key, encrypt header
+        const hm = new HashMaster(method);
+        const [pwHash, hkey] = await hm.KDF(combinedPw, this._salt);
+        this._pwHash = pwHash;
 
-        // encrypt header
-        const headData = this._wrapHead();
+        const headData = this._wrapEncHead();
         const sm = new SymMaster("gcm1", hkey);
         this._encHeadData = await sm.EnBin(headData);
 
-        // wrap message
+        // wrap header
         const cfg = {};
         if (this.Msg !== "") cfg["msg"] = this.Msg;
-        cfg["headal"] = this._headAlgo;
+        if (this.MsgInfo.length > 0) cfg["minf"] = this.MsgInfo;
+        cfg["hal"] = this._headAlgo;
         cfg["salt"] = this._salt;
         cfg["pwh"] = this._pwHash;
         cfg["ehd"] = this._encHeadData;
@@ -320,44 +303,53 @@ export class Opsec {
     /**
      * Encrypt with public key, returns header
      * @param {string} method 
-     * @param {Uint8Array} publicBytes 
-     * @param {Uint8Array|null} privateBytes // sign if privateBytes is not null
+     * @param {Uint8Array} peerPub 
+     * @param {Uint8Array|null} myPri 
      * @returns {Uint8Array}
      */
-    async Encpub(method, publicBytes, privateBytes = null) {
+    async Encpub(method, peerPub, myPri = null) {
+        // generate random parameters
         this._headAlgo = method;
-        if (this.Size >= 0) {
+        if (this.BodySize >= 0) {
             this.BodyKey = Random(44);
         }
 
-        // Init Master & Sign
-        const am = new AsymMaster(method);
-        await am.Loadkey(publicBytes, privateBytes);
-        if (privateBytes !== null) {
-            if (this.BodyKey.length > 0) this._sign = await am.Sign(this.BodyKey);
-            else if (this.Smsg !== "") this._sign = await am.Sign(strToU8(this.Smsg));
+        const peerPubBytes = (typeof peerPub === 'string') ? strToU8(peerPub) : peerPub;
+
+        // sign with private key if provided
+        if (myPri !== null) {
+            const am = new AsymMaster(method);
+            await am.Loadkey(null, myPri);
+            // sign to [hal][peerPub][smsg][sinf]
+            const signTgt = concat([
+                strToU8(method), 
+                peerPubBytes, 
+                strToU8(this.Smsg), 
+                this.SmsgInfo
+            ]);
+            this._sign = await am.Sign(signTgt);
         }
 
-        // Encrypt Header
-        const headData = this._wrapHead();
+        // encrypt header
+        const am = new AsymMaster(method);
+        await am.Loadkey(peerPubBytes, null);
+        const headData = this._wrapEncHead();
+        
         if (method === "rsa1" || method === "rsa2") {
             // RSA Hybrid: Encrypt Key with RSA, Data with AES
             const hkey = Random(44);
-            this._encHeadKey = await am.Encrypt(hkey);
+            this.MsgInfo = await am.Encrypt(hkey);
             const sm = new SymMaster("gcm1", hkey);
             this._encHeadData = await sm.EnBin(headData);
-        } else if (method === "ecc1") {
-            // ECC Hybrid: Handled internally by ECC1 class
-            this._encHeadData = await am.Encrypt(headData);
         } else {
-            throw new Error(`Unsupported method: ${method}`);
+            this._encHeadData = await am.Encrypt(headData);
         }
 
-        // wrap message
+        // wrap header
         const cfg = {};
         if (this.Msg !== "") cfg["msg"] = this.Msg;
-        cfg["headal"] = this._headAlgo;
-        if (this._encHeadKey.length > 0) cfg["ehk"] = this._encHeadKey;
+        if (this.MsgInfo.length > 0) cfg["minf"] = this.MsgInfo;
+        cfg["hal"] = this._headAlgo;
         cfg["ehd"] = this._encHeadData;
         return EncodeCfg(cfg);
     }
@@ -370,10 +362,10 @@ export class Opsec {
         this.Reset();
         const cfg = DecodeCfg(data);
         if (cfg["msg"]) this.Msg = u8ToStr(cfg["msg"]);
-        if (cfg["headal"]) this._headAlgo = u8ToStr(cfg["headal"]);
+        if (cfg["minf"]) this.MsgInfo = cfg["minf"];
+        if (cfg["hal"]) this._headAlgo = u8ToStr(cfg["hal"]);
         if (cfg["salt"]) this._salt = cfg["salt"];
         if (cfg["pwh"]) this._pwHash = cfg["pwh"];
-        if (cfg["ehk"]) this._encHeadKey = cfg["ehk"];
         if (cfg["ehd"]) this._encHeadData = cfg["ehd"];
     }
 
@@ -388,70 +380,64 @@ export class Opsec {
         const kfBytes = (typeof kf === 'string') ? strToU8(kf) : kf;
         const combinedPw = concat([pwBytes, kfBytes]);
 
-        // Derive key
-        let mkey;
-        let verify_lbl = "";
-        let keygen_lbl = "";
-        if (this._headAlgo === "sha3") {
-            mkey = SHA3512(concat(this._salt, combinedPw));
-            verify_lbl = "PWHASH_OPSEC_SHA3512";
-            keygen_lbl = "KEYGEN_OPSEC_SHA3512";
-        } else if (this._headAlgo === "pbk1") {
-            mkey = await pbkdf2(combinedPw, this._salt);
-            verify_lbl = "PWHASH_OPSEC_PBKDF2";
-            keygen_lbl = "KEYGEN_OPSEC_PBKDF2";
-        } else if (this._headAlgo === "arg1") {
-            const mkeyHashStr = await argon2Hash(combinedPw, this._salt);
-            mkey = strToU8(mkeyHashStr);
-            verify_lbl = "PWHASH_OPSEC_ARGON2";
-            keygen_lbl = "KEYGEN_OPSEC_ARGON2";
-        } else {
-            throw new Error(`Unsupported method: ${this._headAlgo}`);
-        }
+        // check parameters, get header key
+        const hm = new HashMaster(this._headAlgo);
+        const [pwHash, hkey] = await hm.KDF(combinedPw, this._salt);
 
-        // check password
-        const calc_hash = genkey(mkey, verify_lbl, 32);
-        if (calc_hash.length !== this._pwHash.length) throw new Error("Incorrect password");
+        // check password (constant time comparison)
+        if (pwHash.length !== this._pwHash.length) throw new Error("Incorrect password");
         let diff = 0;
-        for (let i = 0; i < calc_hash.length; i++) diff |= calc_hash[i] ^ this._pwHash[i];
+        for (let i = 0; i < pwHash.length; i++) {
+            diff |= pwHash[i] ^ this._pwHash[i];
+        }
         if (diff !== 0) throw new Error("Incorrect password");
 
         // decrypt header
-        const hkey = genkey(mkey, keygen_lbl, 44);
         const sm = new SymMaster("gcm1", hkey);
-        this._unwrapHead(await sm.DeBin(this._encHeadData));
+        const headData = await sm.DeBin(this._encHeadData);
+        this._unwrapEncHead(headData);
     }
 
     /**
      * Decrypt with private key
-     * @param {Uint8Array} privateBytes 
-     * @param {Uint8Array|null} publicBytes // verify sign if publicBytes is not null
+     * @param {Uint8Array} myPri 
+     * @param {Uint8Array|null} myPub 
+     * @param {Uint8Array|null} peerPub
      */
-    async Decpub(privateBytes, publicBytes = null) {
+    async Decpub(myPri, myPub = null, peerPub = null) {
+        // check parameters, decrypt header
         if (this._headAlgo === "") throw new Error("Call view() first");
         const am = new AsymMaster(this._headAlgo);
-        await am.Loadkey(publicBytes, privateBytes);
-        let decrypted_head;
-
-        // decrypt header
+        await am.Loadkey(null, myPri);
+        
+        let headData;
         if (this._headAlgo === "rsa1" || this._headAlgo === "rsa2") {
-            const hkey = await am.Decrypt(this._encHeadKey);
+            // RSA Hybrid
+            const hkey = await am.Decrypt(this.MsgInfo);
             const sm = new SymMaster("gcm1", hkey);
-            decrypted_head = await sm.DeBin(this._encHeadData);
-        } else if (this._headAlgo === "ecc1") {
-            decrypted_head = await am.Decrypt(this._encHeadData);
+            headData = await sm.DeBin(this._encHeadData);
         } else {
-            throw new Error(`Unsupported method: ${this._headAlgo}`);
+            headData = await am.Decrypt(this._encHeadData);
         }
-        this._unwrapHead(decrypted_head);
+        this._unwrapEncHead(headData);
 
         // verify sign
-        if (publicBytes !== null) {
-            let s = new Uint8Array(0);
-            if (this.BodyKey.length > 0) s = this.BodyKey;
-            else if (this.Smsg !== "") s = strToU8(this.Smsg);
-            const verified = await am.Verify(s, this._sign);
-            if (!verified) throw new Error(`${this._headAlgo.toUpperCase()} signature verification failed`);
+        if (myPub === null && peerPub === null) return;
+        if (myPub === null || peerPub === null) {
+            if (this._sign.length > 0) throw new Error("Both myPub and peerPub should be provided to verify sign");
+            return;
         }
+
+        const amVerify = new AsymMaster(this._headAlgo);
+        await amVerify.Loadkey(peerPub, null);
+        const signTgt = concat([
+            strToU8(this._headAlgo), 
+            myPub, 
+            strToU8(this.Smsg), 
+            this.SmsgInfo
+        ]);
+        
+        const verified = await amVerify.Verify(signTgt, this._sign);
+        if (!verified) throw new Error("Sign verification failed");
     }
 }

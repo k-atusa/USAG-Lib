@@ -4,7 +4,6 @@
 -->
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -60,6 +59,7 @@
     <script type="module">
         import { Opsec, Crc32 } from '../Opsec.js';
         const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
+        // load TestReader, TestWriter from Bencrypt.js
         const { AsymMaster, TestReader, TestWriter } = await import(BencryptURL);
 
         window.LibTest = {
@@ -81,108 +81,119 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
             console.log(message);
         }
-        function formatBytes(u8) {
-            if (u8.length > 100) return `[Uint8Array length=${u8.length}]`;
-            try {
-                return `${Array.from(u8).map(b => b.toString()).join(' ')}`;
-            } catch (e) {
-                return "[Error formatting bytes]";
+
+        // Helper: Uint8Array comparison
+        function bytesEqual(a, b) {
+            if (a.length !== b.length) return false;
+            for (let i = 0; i < a.length; i++) {
+                if (a[i] !== b[i]) return false;
             }
+            return true;
         }
     </script>
 
     <script>
-        function fromBase64(str) {
-            return Uint8Array.from(atob(str), c => c.charCodeAt(0));
-        }
-
         async function runTest() {
             consoleDiv.innerHTML = "";
-            log("--- Start Test ---", "blue");
+            log("--- Start Test ---", "info");
 
             try {
                 const { Opsec, Crc32, AsymMaster, TestReader, TestWriter } = window.LibTest;
+
+                // CRC32, RW Test
                 log(`CRC32 test: ${Crc32("test")}`); // 0c7e7fd8
 
-                log("Generating Asym Keys... (This may take a moment)");
-                const m_rsa1 = new AsymMaster("rsa1");
-                const [pub0, pri0] = await m_rsa1.Genkey();
-                const m_rsa2 = new AsymMaster("rsa2");
-                const [pub1, pri1] = await m_rsa2.Genkey();
-                const m_ecc1 = new AsymMaster("ecc1");
-                const [pub2, pri2] = await m_ecc1.Genkey();
-                const m = new Opsec();
-
-                // 1. Stream (rw) Test
-                log("\n[1] RW Stream Test");
                 const w = new TestWriter();
                 await w.write(new Uint8Array(128 * 4)); // b"\x00" * 128 * 4
+                const m = new Opsec();
                 await m.Write(w, new TextEncoder().encode("Hello, world!"));
-
+                
                 const r = new TestReader(w.getValue());
                 const readResult = await m.Read(r);
-                log(`Result: ${new TextDecoder().decode(readResult)}`);
+                log(`Read test: ${new TextDecoder().decode(readResult)}\n`);
 
-                // 2. SHA3 Test
-                log("\n[2] SHA3 Test");
-                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
-                let enc = await m.Encpw("sha3", "password", "keyfile");
-                m.View(enc);
-                await m.Decpw("password", "keyfile");
-                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
-                m.Reset();
+                // test parameters
+                const msg = "msg-test";
+                const smsg = "smsg-test";
+                const sinf = new TextEncoder().encode("sinf-test");
+                const bodyalgo = "gcmx1";
+                const bodysize = 1048576;
+                const bodyinfo = new TextEncoder().encode("binf-test");
 
-                // 3. PBKDF2 Test
-                log("\n[3] PBKDF2 Test");
-                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
-                enc = await m.Encpw("pbk1", "password", "keyfile");
-                m.View(enc);
-                await m.Decpw("password", "keyfile");
-                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
-                m.Reset();
+                // pw-mode
+                log("--- pw-mode tests ---", "warn");
+                const methodsPw = ["sha3", "pbk2", "arg2"];
+                for (const method of methodsPw) {
+                    m.Reset();
+                    m.Msg = msg; m.Smsg = smsg; m.SmsgInfo = sinf;
+                    m.BodyAlgo = bodyalgo; m.BodySize = bodysize; m.BodyInfo = bodyinfo;
 
-                // 4. Argon2 Test
-                log("\n[4] Argon2 Test");
-                m.Msg = "msg-test"; m.Smsg = "smsg-test";
-                enc = await m.Encpw("arg1", "password");
-                m.View(enc);
-                await m.Decpw("password");
-                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
-                m.Reset();
+                    const enc = await m.Encpw(method, "password", "keyfile");
+                    const bodykey = m.BodyKey; // get generated BodyKey
 
-                // 5. RSA1 Test
-                log("\n[5] RSA1 Test");
-                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
-                enc = await m.Encpub("rsa1", pub0, pri0);
-                m.View(enc);
-                await m.Decpub(pri0, pub0);
-                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
-                m.Reset();
+                    m.View(enc);
+                    await m.Decpw("password", "keyfile");
 
-                // 6. RSA2 Test
-                log("\n[6] RSA2 Test");
-                m.Msg = "msg-test"; m.Smsg = "smsg-test"; m.Size = 1024; m.Name = "name-test"; m.BodyAlgo = "gcm1"; m.ContAlgo = "zip1";
-                enc = await m.Encpub("rsa2", pub1, pri1);
-                m.View(enc);
-                await m.Decpub(pri1, pub1);
-                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
-                m.Reset();
+                    log(method);
+                    const checks = [
+                        msg === m.Msg,
+                        smsg === m.Smsg,
+                        bytesEqual(sinf, m.SmsgInfo),
+                        bodyalgo === m.BodyAlgo,
+                        bodysize === m.BodySize,
+                        bytesEqual(bodyinfo, m.BodyInfo),
+                        bytesEqual(bodykey, m.BodyKey)
+                    ];
+                    
+                    const resultRow = checks.map(c => c ? "OK" : "FAIL").join(" ");
+                    const allPass = checks.every(c => c);
+                    log(resultRow, allPass ? "success" : "error");
+                }
 
-                // 7. ECC Test
-                log("\n[7] ECC1 Test");
-                m.Msg = "msg-test"; m.Smsg = "smsg-test";
-                enc = await m.Encpub("ecc1", pub2, pri2);
-                m.View(enc);
-                await m.Decpub(pri2, pub2);
-                log(`${m.Msg} | ${m.Smsg} | ${m.Size} | ${m.Name} | ${m.BodyAlgo} | ${m.ContAlgo} | KeyLen:${m.BodyKey.length}`);
-                m.Reset();
+                // pub-mode (from peer to me)
+                log("\n--- pub-mode tests ---", "warn");
+                const methodsPub = ["rsa1", "rsa2", "ecc1", "pqc1"];
+                for (const method of methodsPub) {
+                    log(`Generating keys for ${method}...`);
+                    const me = new AsymMaster(method);
+                    const [myPub, myPri] = await me.Genkey();
+                    const peer = new AsymMaster(method);
+                    const [peerPub, peerPri] = await peer.Genkey();
+
+                    m.Reset();
+                    m.Msg = msg; m.Smsg = smsg; m.SmsgInfo = sinf;
+                    m.BodyAlgo = bodyalgo; m.BodySize = bodysize; m.BodyInfo = bodyinfo;
+
+                    // Encrypt for 'me' (myPub), signed by 'peer' (peerPri)
+                    const enc = await m.Encpub(method, myPub, peerPri);
+                    const bodykey = m.BodyKey; // get generated BodyKey
+
+                    m.View(enc);
+                    // Decrypt using 'me' (myPri), verifying using 'peer' (peerPub)
+                    await m.Decpub(myPri, myPub, peerPub);
+
+                    log(method);
+                    const checks = [
+                        msg === m.Msg,
+                        smsg === m.Smsg,
+                        bytesEqual(sinf, m.SmsgInfo),
+                        bodyalgo === m.BodyAlgo,
+                        bodysize === m.BodySize,
+                        bytesEqual(bodyinfo, m.BodyInfo),
+                        bytesEqual(bodykey, m.BodyKey)
+                    ];
+                    
+                    const resultRow = checks.map(c => c ? "OK" : "FAIL").join(" ");
+                    const allPass = checks.every(c => c);
+                    log(resultRow, allPass ? "success" : "error");
+                }
 
             } catch (e) {
                 console.error(e);
-                log(`ERROR: ${e.message}`, "red");
-                log(e.stack, "gray");
+                log(`ERROR: ${e.message}`, "error");
+                log(e.stack, "error");
             }
-            log("--- End Test ---", "blue");
+            log("\n--- End Test ---", "info");
         }
     </script>
 </body>
