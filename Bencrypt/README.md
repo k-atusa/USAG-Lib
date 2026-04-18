@@ -73,12 +73,12 @@ function SHA3512(data: Uint8Array | string): Uint8Array
 #### golang
 ```go
 struct HashMaster {
-    func Init(algo string, hashSize int, keySize int)
+    func Init(algo string, hashSize int, keySize int) error
     func KDF(pw []byte, salt []byte) ([]byte, []byte, error)
 }
 
 struct SymMaster {
-    func Init(algo string, key []byte)
+    func Init(algo string, key []byte) error
     func AfterSize(size int64) int64
     func Processed() int64
     func EnBin(data []byte) ([]byte, error)
@@ -88,7 +88,7 @@ struct SymMaster {
 }
 
 struct AsymMaster {
-    func Init(algo string)
+    func Init(algo string) error
     func Genkey() ([]byte, []byte, error)
     func Loadkey(public []byte, private []byte) error
     func Encrypt(data []byte) ([]byte, error)
