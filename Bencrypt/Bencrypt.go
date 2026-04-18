@@ -1014,6 +1014,11 @@ func (p *PQC1) Genkey() ([]byte, []byte, error) {
 	// 1-1. Curve448 X448 Key Generation
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err1 = e.(error) // panic to error
+			}
+		}()
 		if _, err := io.ReadFull(rand.Reader, privX[:]); err != nil {
 			err1 = err
 			return
@@ -1024,12 +1029,22 @@ func (p *PQC1) Genkey() ([]byte, []byte, error) {
 	// 1-2. Curve448 Ed448 Key Generation
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err2 = e.(error) // panic to error
+			}
+		}()
 		pubEd, privEd, err2 = ed448.GenerateKey(rand.Reader)
 	}()
 
 	// 2-1. ML-KEM-1024 Key Generation
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err3 = e.(error) // panic to error
+			}
+		}()
 		kemPub, kemPriv, err := mlkem1024.Scheme().GenerateKeyPair()
 		if err != nil {
 			err3 = err
@@ -1042,6 +1057,11 @@ func (p *PQC1) Genkey() ([]byte, []byte, error) {
 	// 2-2. ML-DSA-87 Key Generation
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err4 = e.(error) // panic to error
+			}
+		}()
 		dsaPub, dsaPriv, err := mldsa87.Scheme().GenerateKey()
 		if err != nil {
 			err4 = err
@@ -1140,6 +1160,11 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	// 1. Ephemeral X448 tempkey generation & ECDH
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err1 = e.(error) // panic to error
+			}
+		}()
 		var tempPriv x448.Key
 		if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
 			err1 = err
@@ -1155,6 +1180,11 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	// 2. ML-KEM-1024 Encapsulation
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err2 = e.(error) // panic to error
+			}
+		}()
 		kemPub, err := mlkem1024.Scheme().UnmarshalBinaryPublicKey(p.PubKEM)
 		if err != nil {
 			err2 = err
@@ -1217,6 +1247,11 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	// 2-1. Shared Secret Value (ECC)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err1 = e.(error) // panic to error
+			}
+		}()
 		var tempXKey x448.Key
 		copy(tempXKey[:], tempPub)
 		if !x448.Shared(&ssvECC, p.PrivX, &tempXKey) {
@@ -1227,6 +1262,11 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	// 2-2. Shared Secret Value (KEM)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err2 = e.(error) // panic to error
+			}
+		}()
 		kemPriv, err := mlkem1024.Scheme().UnmarshalBinaryPrivateKey(p.PrivKEM)
 		if err != nil {
 			err2 = err
@@ -1264,17 +1304,27 @@ func (p *PQC1) Sign(data []byte) ([]byte, error) {
 
 	// local variables
 	var edSgn, mlSgn []byte
-	var err2 error
+	var err1, err2 error
 
 	// 1. ECC-Ed448 Sign
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err1 = e.(error) // panic to error
+			}
+		}()
 		edSgn = ed448.Sign(p.PrivEd, data, "")
 	}()
 
 	// 2. ML-DSA-87 Sign
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				err2 = e.(error) // panic to error
+			}
+		}()
 		dsaPriv, err := mldsa87.Scheme().UnmarshalBinaryPrivateKey(p.PrivDSA)
 		if err != nil {
 			err2 = err
@@ -1285,6 +1335,9 @@ func (p *PQC1) Sign(data []byte) ([]byte, error) {
 
 	// wait for all signatures to finish
 	wg.Wait()
+	if err1 != nil {
+		return nil, err1
+	}
 	if err2 != nil {
 		return nil, err2
 	}
@@ -1312,12 +1365,22 @@ func (p *PQC1) Verify(data []byte, signature []byte) bool {
 	// 1. ECC-Ed448 Verify
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				edOk = false // panic to error
+			}
+		}()
 		edOk = ed448.Verify(p.PubEd, data, edSgn, "")
 	}()
 
 	// 2. ML-DSA-87 Verify
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if e := recover(); e != nil {
+				dsaOk = false // panic to error
+			}
+		}()
 		dsaPub, err := mldsa87.Scheme().UnmarshalBinaryPublicKey(p.PubDSA)
 		if err != nil {
 			return
