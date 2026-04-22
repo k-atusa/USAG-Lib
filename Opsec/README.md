@@ -195,7 +195,7 @@ To prevent traffic size analysis attacks, we provide a standardized padding func
 The padding rules based on the input size are as follows (files that are exactly a power of 2 are not padded)
 
 | Original Size | Padding Method | Buckets | Max Overhead |
-| :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- |
 | 0-16KiB | Fixed 4KiB Multiples | - | 4KiB |
 | 16KiB-16MiB | Binary Floating-Point (K=2) | 2 per interval | 50.0% |
 | 16MiB-512MiB | Binary Floating-Point (K=3) | 4 per interval | 25.0% |
