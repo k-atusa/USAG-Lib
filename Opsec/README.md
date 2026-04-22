@@ -187,12 +187,13 @@ pw-mode does not support sender verification. You can transmit anonymously by om
 
 #### Padding Algorithm
 
-트래픽 크기 분석을 방지하기 위해 패딩 함수를 제공합니다.
-입력 크기에 따른 패딩 규칙은 다음과 같습니다.
-(정확히 2의 배수 크기라면 패딩하지 않습니다.)
+트래픽 크기 분석을 방지하기 위해 패딩 함수를 제공합니다. 입력 크기에 따른 패딩 규칙은 다음과 같습니다. (정확히 2의 배수 크기라면 패딩하지 않습니다.)
+Opsec은 원본 크기를 입력하면 패딩으로 추가할 크기를 계산해 반환하는 함수와 패딩 크기만큼 파일스트림에 랜덤값을 쓰는 함수를 제공합니다.
 
 To prevent traffic size analysis attacks, we provide a standardized padding function.
 The padding rules based on the input size are as follows (files that are exactly a power of 2 are not padded)
+Opsec provides a function that calculates and returns the size to be added as padding when the original size is input.
+It also offers a function that writes random values to a file stream corresponding to that padding size.
 
 | Original Size | Padding Method | Buckets | Max Overhead |
 | :--- | :--- | :--- | :--- |
