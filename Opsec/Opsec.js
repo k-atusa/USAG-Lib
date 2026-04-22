@@ -62,6 +62,55 @@ export function Crc32(data) {
 }
 
 /**
+ * Returns size to be padded
+ * @param {number} size
+ */
+export function PadLen(size) {
+    if (size <= 0) return 0;
+
+    // 1. 0-16k: 4k*N
+    if (size <= 16384) {
+        const remainder = size % 4096;
+        if (remainder === 0) return 0;
+        return 4096 - remainder;
+    }
+
+    const bSize = BigInt(size);
+    const bitLen = BigInt(bSize.toString(2).length); // get sup bit position
+    let k;
+    if (bitLen <= 24n) {        // 16k-16m: K=2
+        k = 2n;
+    } else if (bitLen <= 29n) { // 16m-512m: K=3
+        k = 3n;
+    } else if (bitLen <= 33n) { // 512m-8g: K=4
+        k = 4n;
+    } else {                    // 8g+: K=5
+        k = 5n;
+    }
+
+    // mask and ceiling
+    const shift = bitLen - k;
+    const mask = (1n << shift) - 1n;
+    if ((bSize & mask) === 0n) { // on border size is not padded
+        return 0;
+    }
+
+    // return actual padding length
+    const aftersize = ((bSize >> shift) + 1n) << shift;
+    return Number(aftersize - bSize);
+}
+
+/**
+ * Add padding at the end
+ * @param {Object} f 
+ * @param {number} size 
+ */
+export async function PadFile(f, size) {
+    for (let i = 0; i < Math.floor(size / 32768); i++) await f.write(Random(32768));
+    if (size % 32768 > 0) await f.write(Random(size % 32768));
+}
+
+/**
  * Little Endian Integer Encoding
  * @param {number} data 
  * @param {number} size 

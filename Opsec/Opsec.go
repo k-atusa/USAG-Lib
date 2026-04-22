@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"math/bits"
 
 	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
 )
@@ -21,6 +22,61 @@ func Crc32(data []byte) string {
 	buf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(buf, checksum)
 	return hex.EncodeToString(buf)
+}
+
+func PadLen(size int64) int64 {
+	if size <= 0 {
+		return 0
+	}
+
+	// 1. 0-16k: 4k*N
+	if size <= 16384 {
+		remainder := size % 4096
+		if remainder == 0 {
+			return 0
+		}
+		return 4096 - remainder
+	}
+
+	// get sup bit position
+	bitLen := bits.Len64(uint64(size))
+	var k int
+	if bitLen <= 24 { // 16k-16m: K=2
+		k = 2
+	} else if bitLen <= 29 { // 16m-512m: K=3
+		k = 3
+	} else if bitLen <= 33 { // 512m-8g: K=4
+		k = 4
+	} else { // 8g+: K=5
+		k = 5
+	}
+
+	// mask and ceiling
+	shift := bitLen - k
+	mask := (int64(1) << shift) - 1
+	if size&mask == 0 { // on border size is not padded
+		return 0
+	}
+
+	// return actual padding length
+	aftersize := ((size >> shift) + 1) << shift
+	return aftersize - size
+}
+
+func PadFile(f io.Writer, size int64) error {
+	for i := int64(0); i < size/4194304; i++ {
+		_, err := f.Write(Bencrypt.Random(4194304))
+		if err != nil {
+			return err
+		}
+	}
+	if size%4194304 != 0 {
+		_, err := f.Write(Bencrypt.Random(int(size % 4194304)))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func EncodeInt(data uint64, size int) []byte {

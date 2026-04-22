@@ -57,7 +57,7 @@
     <div id="console">Ready...</div>
 
     <script type="module">
-        import { Opsec, Crc32 } from '../Opsec.js';
+        import { Opsec, Crc32, PadLen } from '../Opsec.js';
         const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
         // load TestReader, TestWriter from Bencrypt.js
         const { AsymMaster, TestReader, TestWriter } = await import(BencryptURL);
@@ -65,6 +65,7 @@
         window.LibTest = {
             Opsec,
             Crc32,
+            PadLen,
             AsymMaster,
             TestReader,
             TestWriter
@@ -98,10 +99,13 @@
             log("--- Start Test ---", "info");
 
             try {
-                const { Opsec, Crc32, AsymMaster, TestReader, TestWriter } = window.LibTest;
+                const { Opsec, Crc32, PadLen, AsymMaster, TestReader, TestWriter } = window.LibTest;
 
-                // CRC32, RW Test
+                // CRC32, Pad, RW Test
                 log(`CRC32 test: ${Crc32("test")}`); // 0c7e7fd8
+                for (const size of [0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824]) {
+                    log(`${size} ${PadLen(size) + size}`);
+                }
 
                 const w = new TestWriter();
                 await w.write(new Uint8Array(128 * 4)); // b"\x00" * 128 * 4

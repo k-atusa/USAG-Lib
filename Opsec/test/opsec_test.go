@@ -12,11 +12,14 @@ import (
 func TestMain(t *testing.T) {
 	fmt.Println("=== Opsec Module Test Start ===")
 
-	// 1. CRC32 Test
+	// 1. CRC32, Pad Test
 	crc := Crc32([]byte("test"))
 	fmt.Printf("[CRC32 Test] 'test' -> %s (Expected: 0c7e7fd8)\n", crc)
 	if crc != "0c7e7fd8" {
 		t.Errorf("CRC32 validation failed")
+	}
+	for _, size := range []int64{0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824} {
+		fmt.Printf("%d -> %d\n", size, PadLen(size)+size)
 	}
 
 	// 2. Read/Write Stream Test

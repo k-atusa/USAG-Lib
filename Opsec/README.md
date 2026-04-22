@@ -12,6 +12,9 @@ Secure file container and helper functions based on Bencrypt. Supports password-
 #### python
 ```py
 def Crc32(data: bytes) -> str
+def PadLen(size: int) -> int
+def PadFile(f: io.IOBase, size: int)
+
 def EncodeInt(data: int, size: int, signed: bool) -> bytes
 def DecodeInt(data: bytes, signed: bool) -> int
 def EncodeCfg(data: Dict[str, bytes]) -> bytes
@@ -41,6 +44,9 @@ class Opsec:
 #### javascript
 ```js
 function Crc32(data: Uint8Array | string): string
+function PadLen(size: number): number
+async function PadFile(f: Object, size: number)
+
 function EncodeInt(data: number, size: number): Uint8Array
 function DecodeInt(data: Uint8Array): number
 function EncodeCfg(data: Object): Uint8Array
@@ -71,6 +77,9 @@ class Opsec {
 #### golang
 ```go
 func Crc32(data []byte) string
+func PadLen(size int64) int64
+func PadFile(f io.Writer, size int64) error
+
 func EncodeInt(data uint64, size int) []byte
 func DecodeInt(data []byte) uint64
 func EncodeCfg(data map[string][]byte) ([]byte, error)
@@ -102,6 +111,9 @@ type Opsec struct {
 ```java
 public class Opsec {
     public String Crc32(byte[] data)
+    public long PadLen(long size)
+    public PadFile(OutputStream f, long size)
+    
     public byte[] EncodeInt(long data, int size)
     public long DecodeInt(byte[] data)
     public byte[] EncodeCfg(Map<String, byte[]> data) throws IOException
@@ -172,3 +184,20 @@ Following this, the first 2 bytes determine the header size. If this value is 65
 
 비밀번호 모드는 발신자 검증을 지원하지 않으며, 공개키 모드는 서명을 포함하지 않는 익명 발송도 가능합니다.
 pw-mode does not support sender verification. You can transmit anonymously by omitting the signature with pub-mode.
+
+#### Padding Algorithm
+
+트래픽 크기 분석을 방지하기 위해 패딩 함수를 제공합니다.
+입력 크기에 따른 패딩 규칙은 다음과 같습니다.
+(정확히 2의 배수 크기라면 패딩하지 않습니다.)
+
+To prevent traffic size analysis attacks, we provide a standardized padding function.
+The padding rules based on the input size are as follows (files that are exactly a power of 2 are not padded)
+
+| Original Size | Padding Method | Buckets | Max Overhead |
+| :--- | :--- | :--- | :--- | :--- |
+| 0-16KiB | Fixed 4KiB Multiples | - | 4KiB |
+| 16KiB-16MiB | Binary Floating-Point (K=2) | 2 per interval | 50.0% |
+| 16MiB-512MiB | Binary Floating-Point (K=3) | 4 per interval | 25.0% |
+| 512MiB-8GiB | Binary Floating-Point (K=4) | 8 per interval | 12.5% |
+| 8GiB+ | Binary Floating-Point (K=5) | 16 per interval | 6.25% |

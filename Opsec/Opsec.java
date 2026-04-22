@@ -66,6 +66,51 @@ public class Opsec {
                 (value >> 24) & 0xFF); // 8 chars hex string
     }
 
+    public static long PadLen(long size) {
+        if (size <= 0) {
+            return 0;
+        }
+
+        // 1. 0-16k: 4k*N
+        if (size <= 16384) {
+            long remainder = size % 4096;
+            if (remainder == 0) {
+                return 0;
+            }
+            return 4096 - remainder;
+        }
+
+        // get sup bit position
+        int bitLen = 64 - Long.numberOfLeadingZeros(size);
+        int k;
+        if (bitLen <= 24) {        // 16k-16m: K=2
+            k = 2;
+        } else if (bitLen <= 29) { // 16m-512m: K=3
+            k = 3;
+        } else if (bitLen <= 33) { // 512m-8g: K=4
+            k = 4;
+        } else {                   // 8g+: K=5
+            k = 5;
+        }
+
+        // mask and ceiling
+        int shift = bitLen - k;
+        long mask = (1L << shift) - 1L;
+        if ((size & mask) == 0) { // on border size is not padded
+            return 0;
+        }
+
+        // return actual padding length
+        long aftersize = ((size >> shift) + 1L) << shift;
+        return aftersize - size;
+    }
+
+    public static void PadFile(OutputStream f, long size) throws IOException {
+        Bencrypt rg = new Bencrypt();
+        for (long i = 0; i < size / 1048576; i++) f.write(rg.Random(1048576));
+        if (size % 1048576 != 0) f.write(rg.Random((int) (size % 1048576)));
+    }
+
     public byte[] EncodeInt(long data, int size) {
         ByteBuffer buf = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
         if (size == 1)

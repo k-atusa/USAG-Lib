@@ -2,8 +2,10 @@ import io
 import Bencrypt
 import Opsec
 
-# CRC32, RW
+# CRC32, Pad, RW
 print(Opsec.Crc32(b"test")) # 0c7e7fd8
+for size in [0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824]:
+    print(size, Opsec.PadLen(size) + size)
 w = io.BytesIO()
 w.write(b"\x00" * 128 * 4)
 m = Opsec.Opsec()

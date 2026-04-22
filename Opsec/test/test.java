@@ -19,8 +19,12 @@ import java.util.Arrays;
 public class test {
     public static void main(String[] args) {
         try {
-            // 1. CRC32 Test
+            // 1. CRC32, Pad Test
             System.out.println(Opsec.Crc32("test".getBytes(StandardCharsets.UTF_8))); // Expected: 0c7e7fd8
+            long[] sizes = {0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824};
+            for (long size : sizes) {
+                System.out.printf("%d -> %d\n", size, Opsec.PadLen(size) + size);
+            }
 
             // 2. Read/Write Stream Test
             ByteArrayOutputStream w = new ByteArrayOutputStream();

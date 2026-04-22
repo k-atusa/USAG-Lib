@@ -8,6 +8,44 @@ import Bencrypt
 def Crc32(data: bytes) -> str:
     return zlib.crc32(data).to_bytes(4, 'little').hex()
 
+def PadLen(size: int) -> int:
+    if size <= 0:
+        return 0
+
+    # 1. 0-16k: 4k*N
+    if size <= 16384:
+        remainder = size % 4096
+        if remainder == 0:
+            return 0
+        return 4096 - remainder
+
+    # get sup bit position
+    bitLen = size.bit_length()
+    if bitLen <= 24: # 16k-16m: K=2
+        k = 2
+    elif bitLen <= 29: # 16m-512m: K=3
+        k = 3
+    elif bitLen <= 33: # 512m-8g: K=4
+        k = 4
+    else: # 8g+: K=5
+        k = 5
+
+    # mask and ceiling
+    shift = bitLen - k
+    mask = (1 << shift) - 1
+    if size & mask == 0: # on border size is not padded
+        return 0
+
+    # return actual padding length
+    aftersize = ((size >> shift) + 1) << shift
+    return aftersize - size
+
+def PadFile(f: io.IOBase, size: int):
+    for i in range(0, size // 1048576):
+        f.write( Bencrypt.Random(1048576) )
+    if size % 1048576 != 0:
+        f.write( Bencrypt.Random(size % 1048576) )
+
 def EncodeInt(data: int, size: int, signed: bool) -> bytes:
     return data.to_bytes(size, 'little', signed=signed)
 
