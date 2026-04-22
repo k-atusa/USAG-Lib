@@ -1,8 +1,8 @@
 ## Opsec
 
-Bencrypt에 기반하는 보안 파일 컨테이너와 지원 함수들입니다. 비밀번호 기반 모드와 공개키 기반 모드가 있습니다. 이 모듈은 헤더 데이터만 담당하며, 본문 데이터 아카이빙과 암호화는 `body key`로 따로 수행해야 합니다.
+Bencrypt에 기반하는 보안 파일 컨테이너와 지원 함수들입니다. 비밀번호 기반 모드와 공개키 기반 모드가 있습니다. 이 모듈은 헤더 데이터만 담당하며, 본문 데이터 아카이빙, 암호화, 패딩은 `body key`로 따로 수행해야 합니다.
 
-Secure file container and helper functions based on Bencrypt. Supports password-based mode and public-key-based mode. This module handles header data only; archiving and encryption of body data must be performed separately using the body key.
+Secure file container and helper functions based on Bencrypt. Supports password-based mode and public-key-based mode. This module handles header data only; archiving, encryption, and padding of body data must be performed separately using the body key.
 
 #### Supported Methods
 
