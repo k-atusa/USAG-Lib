@@ -16,6 +16,7 @@ Summary of CLI tool usage
 개발자용 코드 관련 도구
 Code-related tools for devs
 
+- release: 실행파일 배포 자동화 툴 Executable release tool
 - codecount: 로컬 저장소나 원격 저장소 코드 규모 표시기 Code size indicator for local or remote repositories
 - githubview: 깃허브 유저나 조직 레포 통계 보기 Shows statistics of repos from github user/organization
 - embed_bin: 작은 데이터를 소스코드에 임베딩 Embed small data into source code
@@ -29,7 +30,6 @@ File management/conversion tools
 - filediv: 파일을 여러 개로 쪼개거나 합치기 Split or merge files
 - pdfobject: PDF 문서를 변환하거나 페이지 편집 Convert PDF documents or edit pages
 - piczip: 이미지이면서 동시에 압축 파일인 배포 파일 생성 Create distribution file that are both image and zip file
-- yas_assist: YAS-lite 운용 Operate YAS-lite
 
 ## imgtool
 
