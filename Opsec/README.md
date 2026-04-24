@@ -112,7 +112,7 @@ type Opsec struct {
 public class Opsec {
     public String Crc32(byte[] data)
     public long PadLen(long size)
-    public PadFile(OutputStream f, long size)
+    public PadFile(OutputStream f, long size) throws Exception
     
     public byte[] EncodeInt(long data, int size)
     public long DecodeInt(byte[] data)

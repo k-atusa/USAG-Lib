@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.zip.CRC32;
 
 // Opsec header handler
@@ -105,10 +107,40 @@ public class Opsec {
         return aftersize - size;
     }
 
-    public static void PadFile(OutputStream f, long size) throws IOException {
-        Bencrypt rg = new Bencrypt();
-        for (long i = 0; i < size / 1048576; i++) f.write(rg.Random(1048576));
-        if (size % 1048576 != 0) f.write(rg.Random((int) (size % 1048576)));
+    public static void PadFile(OutputStream f, long size) throws Exception {
+        if (size <= 0) return;
+        int chunkSize = 1048576; // 1MB
+        BlockingQueue<byte[]> queue = new ArrayBlockingQueue<>(4);
+
+        // Random Number Generator
+        Thread generatorThread = new Thread(() -> {
+            Bencrypt rg = new Bencrypt();
+            long remaining = size;
+            try {
+                while (remaining > 0) {
+                    int currentSize = (int) Math.min(chunkSize, remaining);
+                    queue.put(rg.Random(currentSize));
+                    remaining -= currentSize;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt(); // quit when interrupted
+            }
+        });
+        generatorThread.start();
+
+        // writer
+        long remaining = size;
+        try {
+            while (remaining > 0) {
+                int currentSize = (int) Math.min(chunkSize, remaining);
+                byte[] data = queue.take(); 
+                f.write(data);
+                remaining -= currentSize;
+            }
+        } catch (Exception e) {
+            generatorThread.interrupt(); // stop generator thread
+            throw e;
+        }
     }
 
     public byte[] EncodeInt(long data, int size) {

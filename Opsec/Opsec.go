@@ -4,6 +4,8 @@ package Opsec
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/subtle"
 	"encoding/binary"
 	"encoding/hex"
@@ -12,6 +14,9 @@ import (
 	"hash/crc32"
 	"io"
 	"math/bits"
+	"runtime"
+	"sync"
+	"sync/atomic"
 
 	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
 )
@@ -64,19 +69,81 @@ func PadLen(size int64) int64 {
 }
 
 func PadFile(f io.Writer, size int64) error {
-	for i := int64(0); i < size/4194304; i++ {
-		_, err := f.Write(Bencrypt.Random(4194304))
-		if err != nil {
-			return err
-		}
+	if size <= 0 {
+		return nil
 	}
-	if size%4194304 != 0 {
-		_, err := f.Write(Bencrypt.Random(int(size % 4194304)))
-		if err != nil {
-			return err
-		}
+	chunkSize := 128 * 1024         // 128 KiB
+	rotationSize := 8 * 1024 * 1024 // 8 MiB
+
+	// shared pools
+	zeroBuf := make([]byte, chunkSize)
+	bufPool := sync.Pool{
+		New: func() any {
+			return make([]byte, chunkSize)
+		},
 	}
-	return nil
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 2 {
+		numWorkers = 2
+	}
+	var stopFlag atomic.Bool
+	stopFlag.Store(false)
+	results := make(chan []byte, numWorkers*4)
+
+	// writer
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
+	go func() {
+		var writeErr error
+		for buf := range results {
+			if writeErr == nil {
+				if _, err := f.Write(buf); err != nil {
+					stopFlag.Store(true)
+					writeErr = err
+				}
+			}
+			bufPool.Put(buf) // return used buffer
+		}
+		errCh <- writeErr
+	}()
+
+	// Random generator
+	blockerChan := make(chan bool, numWorkers)
+	remainingSize := size
+	for remainingSize > 0 {
+		currentSegSize := min(remainingSize, int64(rotationSize))
+		if stopFlag.Load() {
+			break
+		}
+
+		wg.Add(1)
+		blockerChan <- true
+		go func(segSize int64) {
+			defer wg.Done()
+			defer func() { <-blockerChan }()
+			key := Bencrypt.Random(48)
+			block, _ := aes.NewCipher(key[16:48])
+			stream := cipher.NewCTR(block, key[0:16])
+
+			for i := int64(0); i < segSize; i += int64(chunkSize) {
+				if stopFlag.Load() {
+					return
+				}
+				currChunkSize := min(segSize-i, int64(chunkSize))
+
+				fullBuf := bufPool.Get().([]byte)
+				buf := fullBuf[:cap(fullBuf)][:currChunkSize]
+				stream.XORKeyStream(buf, zeroBuf[:currChunkSize])
+				results <- buf
+			}
+		}(currentSegSize)
+		remainingSize -= currentSegSize
+	}
+
+	wg.Wait()
+	close(blockerChan)
+	close(results)
+	return <-errCh
 }
 
 func EncodeInt(data uint64, size int) []byte {
