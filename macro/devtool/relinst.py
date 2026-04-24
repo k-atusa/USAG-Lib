@@ -1,3 +1,4 @@
+# test810 : relinst
 import os
 import stat
 import shutil
@@ -62,9 +63,21 @@ def signExe(tgtPath):
         print(e.stderr)
         print("sign failed")
 
-# make desktop link in Linux
 # place *.desktop at ~/Desktop/ ~/.local/share/applications/
-def newIcon(name, exe, icon, ver=1.0, comment="", cmd=False):
+TP_AV    = "AudioVideo"
+TP_DEV   = "Development"
+TP_EDU   = "Education"
+TP_GAME  = "Game"
+TP_GRAPH = "Graphics"
+TP_NET   = "Network"
+TP_OFF   = "Office"
+TP_SCI   = "Science"
+TP_SET   = "Settings"
+TP_SYS   = "System"
+TP_UTIL  = "Utility"
+
+# make desktop link in Linux
+def newIcon(name, exe, icon, ver=1.0, comment="", apptype=TP_UTIL, cmd=False):
     # make text value
     terminal_val = "true" if cmd else "false"
     exec_dir = os.path.dirname(os.path.abspath(exe))
@@ -77,7 +90,7 @@ Icon={os.path.abspath(icon)}
 Path={exec_dir}
 Terminal={terminal_val}
 Type=Application
-Categories=Development;
+Categories={apptype};
 """
 
     # make file, give +x

@@ -21,9 +21,14 @@ public class test {
         try {
             // 1. CRC32, Pad Test
             System.out.println(Opsec.Crc32("test".getBytes(StandardCharsets.UTF_8))); // Expected: 0c7e7fd8
-            long[] sizes = {0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824};
+            long[] sizes = {0, 1024, 12 * 1048576, 123456789, 2147483647, 8L * 1073741824L};
             for (long size : sizes) {
                 System.out.printf("%d -> %d\n", size, Opsec.PadLen(size) + size);
+                if (size < 512 * 1048576) {
+                    ByteArrayOutputStream f = new ByteArrayOutputStream();
+                    Opsec.PadFile(f, size);
+                    System.out.println(f.size() == size);
+                }
             }
 
             // 2. Read/Write Stream Test

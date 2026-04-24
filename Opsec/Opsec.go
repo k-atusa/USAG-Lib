@@ -82,10 +82,7 @@ func PadFile(f io.Writer, size int64) error {
 			return make([]byte, chunkSize)
 		},
 	}
-	numWorkers := runtime.NumCPU()
-	if numWorkers < 2 {
-		numWorkers = 2
-	}
+	numWorkers := max(runtime.NumCPU(), 2)
 	var stopFlag atomic.Bool
 	stopFlag.Store(false)
 	results := make(chan []byte, numWorkers*4)

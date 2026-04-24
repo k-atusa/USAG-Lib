@@ -2,16 +2,23 @@ import io
 import Bencrypt
 import Opsec
 
-# CRC32, Pad, RW
+# CRC32, RW
 print(Opsec.Crc32(b"test")) # 0c7e7fd8
-for size in [0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824]:
-    print(size, Opsec.PadLen(size) + size)
 w = io.BytesIO()
 w.write(b"\x00" * 128 * 4)
 m = Opsec.Opsec()
 m.Write(w, b"Hello, world!")
 r = io.BytesIO(w.getvalue())
 print(m.Read(r).decode("utf-8"))
+
+# Pad
+sizes = [0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824]
+for size in sizes:
+    print(size, Opsec.PadLen(size) + size)
+    if size < 512 * 1048576:
+        f = io.BytesIO()
+        Opsec.PadFile(f, size)
+        print(len(f.getvalue()) == size)
 
 # test parameters
 msg = "msg-test"

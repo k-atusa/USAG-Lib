@@ -20,6 +20,11 @@ func TestMain(t *testing.T) {
 	}
 	for _, size := range []int64{0, 1024, 12 * 1048576, 123456789, 2147483647, 8 * 1073741824} {
 		fmt.Printf("%d -> %d\n", size, PadLen(size)+size)
+		if size < 512*1048576 {
+			var f bytes.Buffer
+			PadFile(&f, size)
+			fmt.Println(f.Len() == int(size))
+		}
 	}
 
 	// 2. Read/Write Stream Test
