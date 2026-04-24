@@ -1,8 +1,8 @@
 ## Opsec
 
-Bencrypt에 기반하는 보안 파일 컨테이너와 지원 함수들입니다. 비밀번호 기반 모드와 공개키 기반 모드가 있습니다. 이 모듈은 헤더 데이터만 담당하며, 본문 데이터 아카이빙, 암호화, 패딩은 `body key`로 따로 수행해야 합니다.
+Bencrypt에 기반하는 보안 파일 컨테이너와 지원 함수들입니다. 비밀번호 기반 모드와 공개키 기반 모드가 있습니다. 이 모듈은 헤더 데이터만 담당하며, **본문 데이터 아카이빙, 암호화, 패딩은 `body key`로 따로 수행**해야 합니다.
 
-Secure file container and helper functions based on Bencrypt. Supports password-based mode and public-key-based mode. This module handles header data only; archiving, encryption, and padding of body data must be performed separately using the body key.
+Secure file container and helper functions based on Bencrypt. Supports password-based mode and public-key-based mode. This module handles header data only; **archiving, encryption, and padding of body data must be performed separately** using the body key.
 
 #### Supported Methods
 
@@ -187,11 +187,11 @@ pw-mode does not support sender verification. You can transmit anonymously by om
 
 #### Padding Algorithm
 
-트래픽 크기 분석을 방지하기 위해 패딩 함수를 제공합니다. 입력 크기에 따른 패딩 규칙은 다음과 같습니다. (정확히 2의 배수 크기라면 패딩하지 않습니다.)
+트래픽 크기 분석을 방지하기 위해 패딩 함수를 제공합니다. 입력 크기에 따른 패딩 규칙은 다음과 같습니다. (경계값 크기인 경우 패딩하지 않습니다.)
 Opsec은 원본 크기를 입력하면 패딩으로 추가할 크기를 계산해 반환하는 함수와 패딩 크기만큼 파일스트림에 랜덤값을 쓰는 함수를 제공합니다.
 
 To prevent traffic size analysis attacks, we provide a standardized padding function.
-The padding rules based on the input size are as follows (files that are exactly a power of 2 are not padded)
+The padding rules based on the input size are as follows (files which size is on border are not padded)
 Opsec provides a function that calculates and returns the size to be added as padding when the original size is input.
 It also offers a function that writes random values to a file stream corresponding to that padding size.
 

@@ -1,4 +1,4 @@
-# USAG-Lib v1.3.0
+# USAG-Lib v1.3.1
 
 Universal Security Assistant Gear - Library
 
