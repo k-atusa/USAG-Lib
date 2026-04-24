@@ -111,6 +111,7 @@ public class Bencrypt {
 
     // ========== Basic Functions ==========
     private final SecureRandom randSrc = new SecureRandom();
+
     public byte[] Random(int size) {
         byte[] bytes = new byte[size];
         this.randSrc.nextBytes(bytes);
@@ -212,7 +213,8 @@ public class Bencrypt {
     }
 
     public String argon2Hash(byte[] pw, byte[] salt) {
-        if (salt == null) { // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4, Len=48, Salt=16
+        if (salt == null) { // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4,
+                            // Len=48, Salt=16
             salt = this.Random(16);
         }
         Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
@@ -344,7 +346,7 @@ public class Bencrypt {
         // Encrypt Stream/File
         public void EnFile(InputStream src, long size, OutputStream dst) throws Exception {
             if (this.algo.equals("gcm1")) {
-                byte[] buf = src.readAllBytes();
+                byte[] buf = src.readNBytes((int) size);
                 byte[] enc = this.worker.enAESGCM(this.key, buf);
                 dst.write(enc);
             } else {
@@ -355,7 +357,7 @@ public class Bencrypt {
         // Decrypt Stream/File
         public void DeFile(InputStream src, long size, OutputStream dst) throws Exception {
             if (this.algo.equals("gcm1")) {
-                byte[] buf = src.readAllBytes();
+                byte[] buf = src.readNBytes((int) size);
                 byte[] dec = this.worker.deAESGCM(this.key, buf);
                 dst.write(dec);
             } else {
@@ -534,7 +536,8 @@ public class Bencrypt {
          */
         public AsymMaster(String algo) {
             switch (algo) {
-                case "rsa1": case "rsa2":
+                case "rsa1":
+                case "rsa2":
                     this.algo = algo;
                     this.worker0 = new Bencrypt.RSA1();
                     break;
@@ -579,7 +582,7 @@ public class Bencrypt {
             if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
                 return this.worker0.encrypt(data);
             } else if (this.algo.equals("ecc1")) {
-                 return this.worker1.encrypt(data);
+                return this.worker1.encrypt(data);
             } else if (this.algo.equals("pqc1")) {
                 return this.worker2.encrypt(data);
             }
@@ -836,7 +839,7 @@ public class Bencrypt {
         public X448PrivateKeyParameters priX = null;
         public Ed448PublicKeyParameters pubEd = null;
         public Ed448PrivateKeyParameters priEd = null;
-        
+
         // Lightweight PQC Key Objects
         private MLKEMPublicKeyParameters kemPub = null;
         private MLKEMPrivateKeyParameters kemPri = null;
@@ -865,10 +868,10 @@ public class Bencrypt {
             this.pubEd = (Ed448PublicKeyParameters) edKp.getPublic();
             this.priEd = (Ed448PrivateKeyParameters) edKp.getPrivate();
 
-            byte[] pub0 = this.pubX.getEncoded(); 
-            byte[] pri0 = this.priX.getEncoded(); 
-            byte[] pub1 = this.pubEd.getEncoded(); 
-            byte[] pri1 = this.priEd.getEncoded(); 
+            byte[] pub0 = this.pubX.getEncoded();
+            byte[] pri0 = this.priX.getEncoded();
+            byte[] pub1 = this.pubEd.getEncoded();
+            byte[] pri1 = this.priEd.getEncoded();
 
             // 2. ML-KEM-1024 key generation
             MLKEMKeyPairGenerator kemKpg = new MLKEMKeyPairGenerator();
@@ -906,7 +909,8 @@ public class Bencrypt {
 
         public void loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
             if (publicBuf != null) {
-                if (publicBuf.length != 4273) throw new IllegalArgumentException("Invalid PQC1 public key length");
+                if (publicBuf.length != 4273)
+                    throw new IllegalArgumentException("Invalid PQC1 public key length");
                 this.pubX = new X448PublicKeyParameters(Arrays.copyOfRange(publicBuf, 0, 56), 0);
                 this.pubEd = new Ed448PublicKeyParameters(Arrays.copyOfRange(publicBuf, 56, 113), 0);
                 this.pubKEM = Arrays.copyOfRange(publicBuf, 113, 1681);
@@ -917,7 +921,8 @@ public class Bencrypt {
                 this.dsaPub = new MLDSAPublicKeyParameters(MLDSAParameters.ml_dsa_87, this.pubDSA);
             }
             if (privateBuf != null) {
-                if (privateBuf.length != 8177) throw new IllegalArgumentException("Invalid PQC1 private key length");
+                if (privateBuf.length != 8177)
+                    throw new IllegalArgumentException("Invalid PQC1 private key length");
                 this.priX = new X448PrivateKeyParameters(Arrays.copyOfRange(privateBuf, 0, 56), 0);
                 this.priEd = new Ed448PrivateKeyParameters(Arrays.copyOfRange(privateBuf, 56, 113), 0);
                 this.priKEM = Arrays.copyOfRange(privateBuf, 113, 3281);
@@ -980,7 +985,7 @@ public class Bencrypt {
             byte[] ssvECC = new byte[agreement.getAgreementSize()];
             agreement.calculateAgreement(tempXKey, ssvECC, 0);
 
-            // ML-KEM-1024 Decapsulation 
+            // ML-KEM-1024 Decapsulation
             MLKEMExtractor kemExt = new MLKEMExtractor(this.kemPri);
             byte[] ssvKEM = kemExt.extractSecret(kemEnc);
 
@@ -997,7 +1002,7 @@ public class Bencrypt {
         public byte[] sign(byte[] data) throws Exception {
             SecureRandom rnd = new SecureRandom();
 
-            // ECC-Ed448 
+            // ECC-Ed448
             Ed448Signer edSigner = new Ed448Signer(new byte[0]);
             edSigner.init(true, this.priEd);
             edSigner.update(data, 0, data.length);
@@ -1016,7 +1021,8 @@ public class Bencrypt {
         }
 
         public boolean verify(byte[] data, byte[] signature) {
-            if (signature.length != 4741) return false;
+            if (signature.length != 4741)
+                return false;
             byte[] edSgn = Arrays.copyOfRange(signature, 0, 114);
             byte[] mlSgn = Arrays.copyOfRange(signature, 114, 4741);
 
@@ -1025,7 +1031,8 @@ public class Bencrypt {
                 Ed448Signer edSigner = new Ed448Signer(new byte[0]);
                 edSigner.init(false, this.pubEd);
                 edSigner.update(data, 0, data.length);
-                if (!edSigner.verifySignature(edSgn)) return false;
+                if (!edSigner.verifySignature(edSgn))
+                    return false;
 
                 // ML-DSA-87 verify
                 MLDSASigner mlSigner = new MLDSASigner();

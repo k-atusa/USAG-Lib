@@ -297,7 +297,7 @@ func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
 func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
 	switch sm.Algo {
 	case "gcm1":
-		data, err := io.ReadAll(src)
+		data, err := io.ReadAll(io.LimitReader(src, size))
 		if err != nil {
 			return err
 		}
@@ -316,7 +316,7 @@ func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
 func (sm *SymMaster) DeFile(src io.Reader, size int64, dst io.Writer) error {
 	switch sm.Algo {
 	case "gcm1":
-		data, err := io.ReadAll(src)
+		data, err := io.ReadAll(io.LimitReader(src, size))
 		if err != nil {
 			return err
 		}
