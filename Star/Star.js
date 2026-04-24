@@ -21,7 +21,7 @@ export class TarWriter {
      */
     async Write(name, src, isDir) {
         let data;
-        
+
         // load data from src if not directory
         if (isDir) {
             name = name.replace(/\/?$/, '/');
@@ -31,7 +31,7 @@ export class TarWriter {
             if (typeof src === 'string') {
                 data = await fs.promises.readFile(src);
             } else {
-                data = src; 
+                data = src;
             }
         } else {
             if (src instanceof Blob) {
@@ -43,7 +43,7 @@ export class TarWriter {
                 throw new Error("write in browser needs Blob or Uint8Array");
             }
         }
-        
+
         if (isNode && Buffer.isBuffer(data)) {
             data = new Uint8Array(data);
         }
@@ -119,11 +119,11 @@ export class TarWriter {
         for (const pair of data) {
             const key = pair[0];
             const value = pair[1];
-            let lenStr = "0"; 
+            let lenStr = "0";
             let totalLen = 0;
-            
+
             while (true) { // retry until length is valid
-                totalLen = lenStr.length + 1 + key.length + 1 + value.length + 1;
+                totalLen = this.encoder.encode(lenStr).length + 1 + this.encoder.encode(key).length + 1 + this.encoder.encode(value).length + 1;
                 const newLenStr = totalLen.toString();
                 if (newLenStr.length === lenStr.length) {
                     lenStr = newLenStr;
@@ -143,7 +143,7 @@ export class TarWriter {
         if (size > 0o77777777777) {
             size = 0 // Will be set by PAX
         }
-        
+
         // Name (0-100)
         this._writeString(header, 0, name, 100);
 
@@ -157,14 +157,14 @@ export class TarWriter {
         this._writeOctal(header, 136, mtime, 12);
 
         // Checksum (148-156) - calculated later
-        for(let i=148; i<156; i++) header[i] = 32; // Spaces
+        for (let i = 148; i < 156; i++) header[i] = 32; // Spaces
 
         // Typeflag (156)
         header[156] = typeflag.charCodeAt(0);
 
         // Magic (257-263) - "ustar"
         this._writeString(header, 257, "ustar", 6);
-        
+
         // Version (263-265) - "00"
         this._writeString(header, 263, "00", 2);
 
@@ -172,7 +172,7 @@ export class TarWriter {
         let sum = 0;
         for (let i = 0; i < 512; i++) sum += header[i];
         const chksumStr = sum.toString(8).padStart(6, '0');
-        for(let i=0; i<6; i++) header[148+i] = chksumStr.charCodeAt(i);
+        for (let i = 0; i < 6; i++) header[148 + i] = chksumStr.charCodeAt(i);
         header[154] = 0;
         header[155] = 32;
         return header;
@@ -202,7 +202,7 @@ export class TarWriter {
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        
+
         setTimeout(() => {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
@@ -238,13 +238,14 @@ export class TarReader {
 
         // metadata
         let wasPax = false;
+        let paxObj = { name: null, size: null };
         let name = "";
         let size = 0;
         let isDir = false;
 
         while (current + 512 <= this.data.length) {
             let isZero = true;
-            for(let i=0; i<512; i++) {
+            for (let i = 0; i < 512; i++) {
                 if (this.data[current + i] !== 0) {
                     isZero = false;
                     break;
@@ -253,9 +254,13 @@ export class TarReader {
             if (isZero) break; // End of archive
 
             // name, size info
+            let tname = this._readString(this.data.subarray(current, current + 100));
             let tsize = this._readOctal(this.data.subarray(current + 124, current + 136));
-            if (!wasPax) {
-                name = this._readString(this.data.subarray(current, current + 100));
+            if (wasPax) {
+                name = paxObj.name !== null ? paxObj.name : tname;
+                size = paxObj.size !== null ? paxObj.size : tsize;
+            } else {
+                name = tname;
                 size = tsize;
             }
 
@@ -263,9 +268,7 @@ export class TarReader {
             const typeflag = String.fromCharCode(this.data[current + 156]);
             if (typeflag === 'x') { // PAX header
                 const paxData = this.data.subarray(current + 512, current + 512 + tsize);
-                const pax = this._parsePax(paxData);
-                name = pax.name;
-                size = pax.size;
+                paxObj = this._parsePax(paxData);
                 current += 512 + Math.ceil(tsize / 512) * 512;
                 wasPax = true;
                 continue; // Skip to next header
@@ -308,14 +311,14 @@ export class TarReader {
 
     _readOctal(bytes) {
         let str = this.decoder.decode(bytes);
-        str = str.replace(/\0/g, '').trim(); 
+        str = str.replace(/\0/g, '').trim();
         return parseInt(str, 8) || 0;
     }
 
     _parsePax(data) {
         const str = this.decoder.decode(data); // Format: length keyword=value\n
-        let path = "";
-        let size = 0;
+        let path = null;
+        let size = null;
         let pos = 0;
         while (pos < str.length) {
             const spaceIdx = str.indexOf(' ', pos);

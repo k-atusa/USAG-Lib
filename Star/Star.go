@@ -305,12 +305,10 @@ func (tr *TarReader) Next() bool {
 		tr.unpad(tr.Size)
 
 		// Parse PAX
-		tr.parse(paxData)
-		paxName := tr.Name
-		paxSize := tr.Size
 		hasNext := tr.Next()
-		tr.Name = paxName
-		tr.Size = paxSize
+		if hasNext {
+			tr.parse(paxData)
+		}
 		return hasNext
 	}
 	return true

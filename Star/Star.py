@@ -148,10 +148,9 @@ class TarReader:
         if tp == b'x':
             pax_data = self.stream.read(self.Size)
             self._unpad(self.Size)
-            self._parse(pax_data)
-            tn, ts = self.Name, self.Size
             e = self.Next() # read next header after pax
-            self.Name, self.Size = tn, ts
+            if e:
+                self._parse(pax_data)
             return e
         return True
 

@@ -511,12 +511,11 @@ func (a *AES1) EnAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 	// wait for writer, return
 	close(writeQue)
 	wg.Wait()
-	select {
-	case err := <-wErr:
+	err, ok := <-wErr
+	if ok && err != nil {
 		return err
-	default:
-		return rErr
 	}
+	return rErr
 }
 
 // AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
@@ -525,6 +524,9 @@ func (a *AES1) DeAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 	a.processed = 0
 	if chunkSize <= 0 {
 		chunkSize = 1048576 // 1MiB
+	}
+	if size < 16 {
+		return errors.New("cipher too short to decrypt")
 	}
 	globalIV := key[:12]
 	globalKey := key[12:]
@@ -633,12 +635,11 @@ func (a *AES1) DeAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 	// wait for writer, return
 	close(writeQue)
 	wg.Wait()
-	select {
-	case err := <-wErr:
+	err, ok := <-wErr
+	if ok && err != nil {
 		return err
-	default:
-		return rErr
 	}
+	return rErr
 }
 
 // ========== Asymetric Encryption Master ==========

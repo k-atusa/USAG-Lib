@@ -1,3 +1,4 @@
+
 // test790d : USAG-Lib szip
 import java.io.*;
 import java.util.ArrayList;
@@ -135,6 +136,7 @@ public class Szip {
 
         public void Open(byte[] data) throws IOException {
             this.reader = File.createTempFile("szip_read", ".tmp", this.tempDir);
+            this.reader.deleteOnExit();
             try (FileOutputStream fos = new FileOutputStream(this.reader)) {
                 fos.write(data);
             }

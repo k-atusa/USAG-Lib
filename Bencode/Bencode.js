@@ -71,7 +71,7 @@ export function Encode64(data, spliter = "", linenum = 40, colnum = 10) {
 }
 
 export function Decode64(data, spliter = "") {
-    data = data.replace(/[\r\n ]/g, "");
+    data = data.replace(/[\r\n \t]/g, "");
     if (spliter !== "" && !splitable.has(spliter)) {
         throw new Error("invalid spliter option");
     }

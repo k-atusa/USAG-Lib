@@ -10,8 +10,7 @@ import java.util.regex.Pattern;
 
 public class Bencode {
     private static final Set<String> SPLITABLE = new HashSet<>(Arrays.asList(
-        "!", "@", "#", "$", "%", "^", "&", "*", "~", "|"
-    ));
+            "!", "@", "#", "$", "%", "^", "&", "*", "~", "|"));
 
     public static String Encode64(byte[] data, String spliter, int linenum, int colnum) {
         if (linenum <= 0) {
@@ -57,7 +56,7 @@ public class Bencode {
                     sb.append("\n");
                 }
             }
-            sb.append("\n"); 
+            sb.append("\n");
         }
         sb.append(spliter).append("END").append(spliter);
 
@@ -65,7 +64,7 @@ public class Bencode {
     }
 
     public static byte[] Decode64(String data, String spliter) {
-        data = data.replace("\r", "").replace("\n", "").replace(" ", "");
+        data = data.replace("\r", "").replace("\n", "").replace(" ", "").replace("\t", "");
         if (spliter != null && !spliter.isEmpty() && !SPLITABLE.contains(spliter)) {
             throw new IllegalArgumentException("invalid spliter option");
         }

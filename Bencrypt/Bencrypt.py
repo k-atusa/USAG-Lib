@@ -196,6 +196,8 @@ class AES1:
         with self._lock: self._processed = 0
         if len(key) != 44:
             raise ValueError("key size must be 44 bytes")
+        if size < 16:
+            raise ValueError("cipher too short to decrypt")
         globalIV, globalKey, count = key[:12], key[12:], 0
         for i in range(0, size // (chunkSize + 16)):
             iv = mkiv(globalIV, count)

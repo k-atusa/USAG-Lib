@@ -79,7 +79,7 @@ export class ZipWriter { // Zip64 Writer
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        
+
         // Cleanup
         setTimeout(() => {
             document.body.removeChild(a);
@@ -109,13 +109,13 @@ export class ZipReader { // Zip64 Reader
             dataToLoad = this.input;
         }
         this.zip = await JSZip.loadAsync(dataToLoad);
-        
+
         this.Names = [];
         this.Sizes = [];
         this._files = [];
         this.zip.forEach((relativePath, file) => {
             this.Names.push(file.name);
-            this.Sizes.push(file._data.uncompressedSize);
+            this.Sizes.push(file._data.uncompressedSize); // JSZip do not have API to get size, use internal field
             this._files.push(file);
         });
     }

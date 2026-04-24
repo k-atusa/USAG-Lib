@@ -1,3 +1,4 @@
+
 // test794d : USAG-Lib opsec
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -18,7 +19,7 @@ public class Opsec {
     // Outer Layer
     public String Msg; // non-secured message
     public byte[] MsgInfo; // additional info (for RSA-mode)
-    
+
     private String headAlgo; // header algorithm
     private byte[] salt; // salt
     private byte[] pwHash; // pw hash
@@ -28,7 +29,7 @@ public class Opsec {
     public String Smsg; // secured message
     public byte[] SmsgInfo; // private additional info (timestamp, ID, etc.)
     private byte[] sign; // signature
-    
+
     public String BodyAlgo; // body algorithm
     public byte[] BodyKey; // body key
     public long BodySize; // full body size, flag for bodyKey generation (-1 if not used)
@@ -52,7 +53,7 @@ public class Opsec {
         Smsg = "";
         SmsgInfo = new byte[0];
         sign = new byte[0];
-        
+
         BodyAlgo = "";
         BodyKey = new byte[0];
         BodySize = -1;
@@ -85,13 +86,13 @@ public class Opsec {
         // get sup bit position
         int bitLen = 64 - Long.numberOfLeadingZeros(size);
         int k;
-        if (bitLen <= 24) {        // 16k-16m: K=2
+        if (bitLen <= 24) { // 16k-16m: K=2
             k = 2;
         } else if (bitLen <= 29) { // 16m-512m: K=3
             k = 3;
         } else if (bitLen <= 33) { // 512m-8g: K=4
             k = 4;
-        } else {                   // 8g+: K=5
+        } else { // 8g+: K=5
             k = 5;
         }
 
@@ -108,9 +109,11 @@ public class Opsec {
     }
 
     public static void PadFile(OutputStream f, long size) throws Exception {
-        if (size <= 0) return;
+        if (size <= 0)
+            return;
         int chunkSize = 1048576; // 1MB
         BlockingQueue<byte[]> queue = new ArrayBlockingQueue<>(4);
+        final Thread mainThread = Thread.currentThread();
 
         // Random Number Generator
         Thread generatorThread = new Thread(() -> {
@@ -124,6 +127,8 @@ public class Opsec {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // quit when interrupted
+            } catch (Throwable t) {
+                mainThread.interrupt();
             }
         });
         generatorThread.start();
@@ -133,7 +138,7 @@ public class Opsec {
         try {
             while (remaining > 0) {
                 int currentSize = (int) Math.min(chunkSize, remaining);
-                byte[] data = queue.take(); 
+                byte[] data = queue.take();
                 f.write(data);
                 remaining -= currentSize;
             }
@@ -250,6 +255,8 @@ public class Opsec {
         int c = 0;
         while (true) {
             byte[] buf4 = ins.readNBytes(4);
+            if (buf4.length == 0)
+                return new byte[0];
             c += 4;
 
             if (Arrays.equals(buf4, strToBytes("YAS2"))) {
@@ -295,31 +302,47 @@ public class Opsec {
 
     private byte[] wrapEncHead() throws IOException {
         Map<String, byte[]> cfg = new HashMap<>();
-        if (!Smsg.isEmpty()) cfg.put("smsg", strToBytes(Smsg));
-        if (SmsgInfo.length > 0) cfg.put("sinf", SmsgInfo);
-        if (sign.length > 0) cfg.put("sgn", sign);
-        if (!BodyAlgo.isEmpty()) cfg.put("bal", strToBytes(BodyAlgo));
-        if (BodyKey.length > 0) cfg.put("bkey", BodyKey);
-        
+        if (!Smsg.isEmpty())
+            cfg.put("smsg", strToBytes(Smsg));
+        if (SmsgInfo.length > 0)
+            cfg.put("sinf", SmsgInfo);
+        if (sign.length > 0)
+            cfg.put("sgn", sign);
+        if (!BodyAlgo.isEmpty())
+            cfg.put("bal", strToBytes(BodyAlgo));
+        if (BodyKey.length > 0)
+            cfg.put("bkey", BodyKey);
+
         if (BodySize >= 0) {
-            if (BodySize < 65536) cfg.put("bsz", EncodeInt(BodySize, 2));
-            else if (BodySize < 4294967296L) cfg.put("bsz", EncodeInt(BodySize, 4));
-            else cfg.put("bsz", EncodeInt(BodySize, 8));
+            if (BodySize < 65536)
+                cfg.put("bsz", EncodeInt(BodySize, 2));
+            else if (BodySize < 4294967296L)
+                cfg.put("bsz", EncodeInt(BodySize, 4));
+            else
+                cfg.put("bsz", EncodeInt(BodySize, 8));
         }
-        if (BodyInfo.length > 0) cfg.put("binf", BodyInfo);
-        
+        if (BodyInfo.length > 0)
+            cfg.put("binf", BodyInfo);
+
         return EncodeCfg(cfg);
     }
 
     private void unwrapEncHead(byte[] data) {
         Map<String, byte[]> cfg = DecodeCfg(data);
-        if (cfg.containsKey("smsg")) Smsg = bytesToStr(cfg.get("smsg"));
-        if (cfg.containsKey("sinf")) SmsgInfo = cfg.get("sinf");
-        if (cfg.containsKey("sgn")) sign = cfg.get("sgn");
-        if (cfg.containsKey("bal")) BodyAlgo = bytesToStr(cfg.get("bal"));
-        if (cfg.containsKey("bkey")) BodyKey = cfg.get("bkey");
-        if (cfg.containsKey("bsz")) BodySize = DecodeInt(cfg.get("bsz"));
-        if (cfg.containsKey("binf")) BodyInfo = cfg.get("binf");
+        if (cfg.containsKey("smsg"))
+            Smsg = bytesToStr(cfg.get("smsg"));
+        if (cfg.containsKey("sinf"))
+            SmsgInfo = cfg.get("sinf");
+        if (cfg.containsKey("sgn"))
+            sign = cfg.get("sgn");
+        if (cfg.containsKey("bal"))
+            BodyAlgo = bytesToStr(cfg.get("bal"));
+        if (cfg.containsKey("bkey"))
+            BodyKey = cfg.get("bkey");
+        if (cfg.containsKey("bsz"))
+            BodySize = DecodeInt(cfg.get("bsz"));
+        if (cfg.containsKey("binf"))
+            BodyInfo = cfg.get("binf");
     }
 
     // encrypt with password
@@ -346,13 +369,15 @@ public class Opsec {
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
-        if (!Msg.isEmpty()) cfg.put("msg", strToBytes(Msg));
-        if (MsgInfo.length > 0) cfg.put("minf", MsgInfo);
+        if (!Msg.isEmpty())
+            cfg.put("msg", strToBytes(Msg));
+        if (MsgInfo.length > 0)
+            cfg.put("minf", MsgInfo);
         cfg.put("hal", strToBytes(headAlgo));
         cfg.put("salt", salt);
         cfg.put("pwh", pwHash);
         cfg.put("ehd", encHeadData);
-        
+
         return EncodeCfg(cfg);
     }
 
@@ -377,7 +402,7 @@ public class Opsec {
         Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(method);
         am.Loadkey(peerPub, null);
         byte[] headData = wrapEncHead();
-        
+
         if (method.equals("rsa1") || method.equals("rsa2")) {
             // RSA Hybrid: Encrypt Key with RSA, Data with AES
             byte[] hkey = worker.Random(44);
@@ -392,11 +417,13 @@ public class Opsec {
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
-        if (!Msg.isEmpty()) cfg.put("msg", strToBytes(Msg));
-        if (MsgInfo.length > 0) cfg.put("minf", MsgInfo);
+        if (!Msg.isEmpty())
+            cfg.put("msg", strToBytes(Msg));
+        if (MsgInfo.length > 0)
+            cfg.put("minf", MsgInfo);
         cfg.put("hal", strToBytes(headAlgo));
         cfg.put("ehd", encHeadData);
-        
+
         return EncodeCfg(cfg);
     }
 
@@ -404,17 +431,24 @@ public class Opsec {
     public void View(byte[] data) {
         Reset();
         Map<String, byte[]> cfg = DecodeCfg(data);
-        if (cfg.containsKey("msg")) Msg = bytesToStr(cfg.get("msg"));
-        if (cfg.containsKey("minf")) MsgInfo = cfg.get("minf");
-        if (cfg.containsKey("hal")) headAlgo = bytesToStr(cfg.get("hal"));
-        if (cfg.containsKey("salt")) salt = cfg.get("salt");
-        if (cfg.containsKey("pwh")) pwHash = cfg.get("pwh");
-        if (cfg.containsKey("ehd")) encHeadData = cfg.get("ehd");
+        if (cfg.containsKey("msg"))
+            Msg = bytesToStr(cfg.get("msg"));
+        if (cfg.containsKey("minf"))
+            MsgInfo = cfg.get("minf");
+        if (cfg.containsKey("hal"))
+            headAlgo = bytesToStr(cfg.get("hal"));
+        if (cfg.containsKey("salt"))
+            salt = cfg.get("salt");
+        if (cfg.containsKey("pwh"))
+            pwHash = cfg.get("pwh");
+        if (cfg.containsKey("ehd"))
+            encHeadData = cfg.get("ehd");
     }
 
     // decrypt with password
     public void Decpw(byte[] pw, byte[] kf) throws Exception {
-        if (headAlgo.isEmpty()) throw new IllegalStateException("Call view() first");
+        if (headAlgo.isEmpty())
+            throw new IllegalStateException("Call view() first");
         byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
 
         // check parameters, get header key
@@ -424,24 +458,28 @@ public class Opsec {
         byte[] hkey = keys[1];
 
         // check password (Constant time comparison)
-        if (calcHash.length != pwHash.length) throw new SecurityException("Incorrect password");
+        if (calcHash.length != pwHash.length)
+            throw new SecurityException("Incorrect password");
         int diff = 0;
         for (int i = 0; i < calcHash.length; i++) {
             diff |= calcHash[i] ^ pwHash[i];
         }
-        if (diff != 0) throw new SecurityException("Incorrect password");
+        if (diff != 0)
+            throw new SecurityException("Incorrect password");
 
         // decrypt header
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
         byte[] decryptedHead = sm.DeBin(encHeadData);
-        if (decryptedHead == null) throw new SecurityException("AES decryption failed");
+        if (decryptedHead == null)
+            throw new SecurityException("AES decryption failed");
         unwrapEncHead(decryptedHead);
     }
 
     // decrypt with private key, verify if public key is not null
     public void Decpub(byte[] myPri, byte[] myPub, byte[] peerPub) throws Exception {
-        if (headAlgo.isEmpty()) throw new IllegalStateException("Call view() first");
-        
+        if (headAlgo.isEmpty())
+            throw new IllegalStateException("Call view() first");
+
         // check parameters, decrypt header
         Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(headAlgo);
         am.Loadkey(null, myPri);
@@ -455,21 +493,24 @@ public class Opsec {
         } else {
             decryptedHead = am.Decrypt(encHeadData);
         }
-        
-        if (decryptedHead == null) throw new SecurityException("Decryption failed");
+
+        if (decryptedHead == null)
+            throw new SecurityException("Decryption failed");
         unwrapEncHead(decryptedHead);
 
         // verify sign
-        if (myPub == null && peerPub == null) return;
+        if (myPub == null && peerPub == null)
+            return;
         if (myPub == null || peerPub == null) {
-            if (sign.length > 0) throw new IllegalArgumentException("Both myPub and peerPub should be provided to verify sign");
+            if (sign.length > 0)
+                throw new IllegalArgumentException("Both myPub and peerPub should be provided to verify sign");
             return;
         }
 
         Bencrypt.AsymMaster amVerify = new Bencrypt.AsymMaster(headAlgo);
         amVerify.Loadkey(peerPub, null);
         byte[] signTgt = concat(strToBytes(headAlgo), myPub, strToBytes(Smsg), SmsgInfo);
-        
+
         if (!amVerify.Verify(signTgt, sign)) {
             throw new SecurityException("Signature verification failed");
         }

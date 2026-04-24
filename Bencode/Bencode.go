@@ -62,6 +62,7 @@ func Decode64(data string, spliter string) ([]byte, error) {
 	data = strings.ReplaceAll(data, "\r", "")
 	data = strings.ReplaceAll(data, "\n", "")
 	data = strings.ReplaceAll(data, " ", "")
+	data = strings.ReplaceAll(data, "\t", "")
 	if spliter != "" && !splitable[spliter] {
 		return nil, errors.New("invalid spliter option")
 	}

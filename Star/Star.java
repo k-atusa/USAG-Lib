@@ -1,3 +1,4 @@
+
 // test792d : USAG-Lib star
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -240,16 +241,13 @@ public class Star {
 
             // Parse PAX
             if (type == 'x') {
-                byte[] paxData = new byte[(int) this.Size];
-                this.in.read(paxData, 0, (int) this.Size);
+                byte[] paxData = this.in.readNBytes((int) this.Size);
                 unpad(this.Size);
-                parse(paxData);
-                String paxName = this.Name;
-                long paxSize = this.Size;
 
                 boolean hasNext = Next();
-                this.Name = paxName; // restore name
-                this.Size = paxSize;
+                if (hasNext) {
+                    parse(paxData);
+                }
                 return hasNext;
             }
             return true;

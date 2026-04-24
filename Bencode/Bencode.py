@@ -27,7 +27,7 @@ def Encode64(data: bytes, spliter: str = "", linenum: int = 40, colnum: int = 10
     return "".join(res)
 
 def Decode64(data: str, spliter: str = "") -> bytes:
-    data = data.replace("\r", "").replace("\n", "").replace(" ", "")
+    data = data.replace("\t", "").replace("\r", "").replace("\n", "").replace(" ", "")
     if spliter != "" and (spliter not in splitable):
         raise Exception("invalid spliter option")
 

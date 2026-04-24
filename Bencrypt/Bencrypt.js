@@ -11,20 +11,20 @@ const deps = {
     ml_dsa87: null
 };
 if (isNode) {
-    try { 
+    try {
         const nodeCrypto = await import('crypto');
-        deps.crypto = nodeCrypto.default || nodeCrypto; 
+        deps.crypto = nodeCrypto.default || nodeCrypto;
     } catch (e) { console.error('crypto module not found'); }
-    
+
     try {
         const nodeSha3 = await import('js-sha3');
         deps.sha3256 = nodeSha3.sha3_256;
         deps.sha3512 = nodeSha3.sha3_512;
     } catch (e) { console.error('js-sha3 module not installed'); }
-    
-    try { 
+
+    try {
         const nodeArgon2 = await import('argon2');
-        deps.argon2 = nodeArgon2.default || nodeArgon2; 
+        deps.argon2 = nodeArgon2.default || nodeArgon2;
     } catch (e) { console.error('argon2 module not installed'); }
 
     try {
@@ -35,8 +35,8 @@ if (isNode) {
     } catch (e) { console.error('@noble/post-quantum module not installed'); }
 
 } else {
-    if (typeof self !== 'undefined' && self.crypto) { deps.crypto = self.crypto; } 
-    else if (typeof window !== 'undefined' && window.crypto) { deps.crypto = window.crypto; } 
+    if (typeof self !== 'undefined' && self.crypto) { deps.crypto = self.crypto; }
+    else if (typeof window !== 'undefined' && window.crypto) { deps.crypto = window.crypto; }
     else { console.error('web crypto api not found'); }
 
     try {
@@ -52,9 +52,9 @@ if (isNode) {
 
     try {
         const webNoble = await import('https://esm.sh/@noble/curves@1.4.0/ed448');
-        deps.noble = { 
-            x448: webNoble.x448, 
-            ed448: webNoble.ed448 
+        deps.noble = {
+            x448: webNoble.x448,
+            ed448: webNoble.ed448
         };
     } catch (e) { console.error('@noble/curves module not installed'); }
 
@@ -296,10 +296,10 @@ export async function pbkdf2(pw, salt, iter = 1000000, outsize = 64) {
 
     } else { // Browser API returns promise
         const keyMaterial = await deps.crypto.subtle.importKey(
-            "raw", 
-            passBytes, 
-            "PBKDF2", 
-            false, 
+            "raw",
+            passBytes,
+            "PBKDF2",
+            false,
             ["deriveBits"]
         );
         const derivedBits = await deps.crypto.subtle.deriveBits(
@@ -377,7 +377,7 @@ export async function argon2Hash(pw, salt = null) {
         };
         if (saltBuf) options.salt = saltBuf;
         return await deps.argon2.hash(pwBuf, options);
-        
+
     } else {
         const options = {
             pass: pwBuf,
@@ -636,6 +636,7 @@ class AES1 {
         do {
             // A. Wait for Read (Current)
             const chunk = await nextChunkPromise;
+            if (!chunk || (chunk.length === 0 && remaining > 0)) break;
             remaining -= chunk.length; // Update remaining
 
             // B. Trigger Next Read
@@ -687,6 +688,7 @@ class AES1 {
         this._processed = 0;
         const k = toU8(key);
         if (k.length !== 44) throw new Error("key size must be 44 bytes");
+        if (size < 16) throw new Error("cipher too short to decrypt");
         const globalIV = k.slice(0, 12);
         const aesKeyBytes = k.slice(12);
         let count = 0;
@@ -1022,7 +1024,7 @@ class ECC1 {
             const xKp = deps.crypto.generateKeyPairSync('x448');
             const pubX = xKp.publicKey.export({ format: 'raw', type: 'spki' });
             const priX = xKp.privateKey.export({ format: 'raw', type: 'pkcs8' });
-            
+
             // Ed448
             const edKp = deps.crypto.generateKeyPairSync('ed448');
             const pubEd = edKp.publicKey.export({ format: 'raw', type: 'spki' });
@@ -1096,7 +1098,7 @@ class ECC1 {
             // make temp key
             const ephKp = deps.crypto.generateKeyPairSync('x448');
             ephPubRaw = ephKp.publicKey.export({ format: 'raw', type: 'spki' });
-            
+
             // get shared secret
             const peerKeyObj = deps.crypto.createPublicKey({ key: this.pubX, format: 'raw', type: 'spki' });
             sharedSecret = deps.crypto.diffieHellman({
@@ -1163,7 +1165,7 @@ class ECC1 {
     async sign(data) {
         const d = toU8(data);
         if (isNode) {
-             const myPriKeyObj = deps.crypto.createPrivateKey({ key: this.priEd, format: 'raw', type: 'ed448' });
+            const myPriKeyObj = deps.crypto.createPrivateKey({ key: this.priEd, format: 'raw', type: 'ed448' });
             return new Uint8Array(deps.crypto.sign(null, d, myPriKeyObj));
         } else {
             return deps.noble.ed448.sign(d, this.priEd);
@@ -1180,7 +1182,7 @@ class ECC1 {
         const d = toU8(data);
         const s = toU8(signature);
         if (isNode) {
-             const myPubKeyObj = deps.crypto.createPublicKey({ key: this.pubEd, format: 'raw', type: 'spki' });
+            const myPubKeyObj = deps.crypto.createPublicKey({ key: this.pubEd, format: 'raw', type: 'spki' });
             return deps.crypto.verify(null, d, myPubKeyObj, s);
         } else {
             return deps.noble.ed448.verify(s, d, this.pubEd);
@@ -1196,7 +1198,7 @@ class PQC1 {
         this.priX = null; // 56 bytes
         this.pubEd = null; // 57 bytes
         this.priEd = null; // 57 bytes
-        
+
         // PQC Key Bytes
         this.pubKEM = null; // 1568 bytes
         this.priKEM = null; // 3168 bytes
@@ -1215,7 +1217,7 @@ class PQC1 {
             const xKp = deps.crypto.generateKeyPairSync('x448');
             pub0 = new Uint8Array(xKp.publicKey.export({ format: 'raw', type: 'spki' }));
             pri0 = new Uint8Array(xKp.privateKey.export({ format: 'raw', type: 'pkcs8' }));
-            
+
             const edKp = deps.crypto.generateKeyPairSync('ed448');
             pub1 = new Uint8Array(edKp.publicKey.export({ format: 'raw', type: 'spki' }));
             pri1 = new Uint8Array(edKp.privateKey.export({ format: 'raw', type: 'pkcs8' }));
@@ -1286,7 +1288,7 @@ class PQC1 {
      */
     async encrypt(data) {
         const d = toU8(data);
-        
+
         // 1. Ephemeral X448 tempkey generation
         let ssvECC, tempPub;
         if (isNode) {
@@ -1331,7 +1333,7 @@ class PQC1 {
      */
     async decrypt(data) {
         const d = toU8(data);
-        
+
         // 1. separate data
         const tempPub = d.slice(0, 56);
         const kemEnc = d.slice(56, 1624);
@@ -1369,7 +1371,7 @@ class PQC1 {
      */
     async sign(data) {
         const d = toU8(data);
-        
+
         // ECC-Ed448 (114B)
         let edSgn;
         if (isNode) {
@@ -1383,7 +1385,7 @@ class PQC1 {
         const mlSgn = deps.ml_dsa87.sign(d, this.priDSA);
 
         // Join: 114 + 4627 = 4741
-        const res = new Uint8Array(edSgn.length + mlSgn.length); 
+        const res = new Uint8Array(edSgn.length + mlSgn.length);
         res.set(edSgn, 0);
         res.set(mlSgn, edSgn.length);
         return res;
@@ -1397,7 +1399,7 @@ class PQC1 {
     async verify(data, signature) {
         const d = toU8(data);
         const s = toU8(signature);
-        
+
         if (s.length !== 4741) return false;
         const edSgn = s.slice(0, 114);
         const mlSgn = s.slice(114);

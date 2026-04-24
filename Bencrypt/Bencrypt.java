@@ -477,6 +477,8 @@ public class Bencrypt {
             this.processed.set(0);
             if (key.length != 44)
                 throw new IllegalArgumentException("key size must be 44 bytes");
+            if (size < 16)
+                throw new IllegalArgumentException("cipher too short to decrypt");
             if (chunkSize <= 0)
                 chunkSize = 1048576;
             byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
