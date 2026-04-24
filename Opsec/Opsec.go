@@ -119,7 +119,7 @@ func PadFile(f io.Writer, size int64) error {
 			defer wg.Done()
 			defer func() { <-blockerChan }()
 			key := Bencrypt.Random(48)
-			block, _ := aes.NewCipher(key[16:48])
+			block, _ := aes.NewCipher(key[16:48]) // AES-CTR CSPRNG
 			stream := cipher.NewCTR(block, key[0:16])
 
 			for i := int64(0); i < segSize; i += int64(chunkSize) {
