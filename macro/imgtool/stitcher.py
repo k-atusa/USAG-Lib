@@ -185,7 +185,5 @@ class Stitcher:
         cv2.imwrite(self.result, canvas)
         print(f"{len(global_coords)} images stitched into {self.result}")
 
-s = Stitcher()
-for n in ["a", "b", "c"]:
-    s.result = n + ".png"
-    s.stitch_folder(n)
+#s = Stitcher()
+#s.stitch_folder("./t")
