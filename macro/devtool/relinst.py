@@ -151,8 +151,9 @@ cd "C:/Program Files/Android/Android Studio/jbr/bin"
 keytool -genkey -v -keystore "$HOME/Desktop/katusa.jks" -keyalg RSA -keysize 4096 -validity 10000 -alias k-atusa-soft
 """
 def signApk(tgtApkPath, jksPath, alias):
+    SDK_PATH = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Android", "Sdk", "build-tools", "37.0.0", "apksigner.bat") # tool version may vary
     cmd = [
-        r"C:\Users\taewo\AppData\Local\Android\Sdk\build-tools\37.0.0\apksigner.bat", "sign",
+        SDK_PATH, "sign",
         "--ks", jksPath,
         "--ks-pass", f"pass:{CERT_PW}",
         "--ks-key-alias", alias,
