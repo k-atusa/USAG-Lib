@@ -147,8 +147,8 @@ def newIconMac(name, exe, icon):
 """
 Android Signing Key (Using same PW with CERT_PW)
 
-cd "C:\Program Files\Android\Android Studio\jbr\bin"
-keytool -genkey -v -keystore "$HOME\Desktop\katusa.jks" -keyalg RSA -keysize 4096 -validity 10000 -alias k-atusa-soft
+cd "C:/Program Files/Android/Android Studio/jbr/bin"
+keytool -genkey -v -keystore "$HOME/Desktop/katusa.jks" -keyalg RSA -keysize 4096 -validity 10000 -alias k-atusa-soft
 """
 
 # get signtool from C:\Users\taewo\AppData\Local\Android\Sdk\build-tools\37.0.0\apksigner.bat
