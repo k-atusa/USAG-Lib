@@ -143,3 +143,10 @@ def newIconMac(name, exe, icon):
     with open(os.path.join(app_path, "Contents", "Info.plist"), "w") as f:
         f.write(plist_content)
     print(f"Mac app bundle created: {app_path}")
+
+"""
+Android Signing Key (Using same PW with CERT_PW)
+
+cd "C:\Program Files\Android\Android Studio\jbr\bin"
+keytool -genkey -v -keystore "$HOME\Desktop\katusa.jks" -keyalg RSA -keysize 4096 -validity 10000 -alias k-atusa-soft
+"""
