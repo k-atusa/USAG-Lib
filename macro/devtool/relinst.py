@@ -150,11 +150,9 @@ Android Signing Key (Using same PW with CERT_PW)
 cd "C:/Program Files/Android/Android Studio/jbr/bin"
 keytool -genkey -v -keystore "$HOME/Desktop/katusa.jks" -keyalg RSA -keysize 4096 -validity 10000 -alias k-atusa-soft
 """
-
-# get signtool from C:\Users\taewo\AppData\Local\Android\Sdk\build-tools\37.0.0\apksigner.bat
 def signApk(tgtApkPath, jksPath, alias):
     cmd = [
-        "apksigner", "sign",
+        r"C:\Users\taewo\AppData\Local\Android\Sdk\build-tools\37.0.0\apksigner.bat", "sign",
         "--ks", jksPath,
         "--ks-pass", f"pass:{CERT_PW}",
         "--ks-key-alias", alias,
@@ -163,7 +161,10 @@ def signApk(tgtApkPath, jksPath, alias):
     ]
     
     try:
-        subprocess.run(cmd, check=True, shell=True)
+        result = subprocess.run(cmd, capture_output=True, check=True, shell=True)
+        print(result.stdout)
         print(f"APK signed: {tgtApkPath}")
-    except Exception as e:
-        print(f"APK sign failed: {e}")
+    except subprocess.CalledProcessError as e:
+        print(e.stdout)
+        print(e.stderr)
+        print(f"APK sign failed")
