@@ -151,16 +151,32 @@ cd "C:/Program Files/Android/Android Studio/jbr/bin"
 keytool -genkey -v -keystore "$HOME/Desktop/katusa.jks" -keyalg RSA -keysize 4096 -validity 10000 -alias k-atusa-soft
 """
 def signApk(tgtApkPath, jksPath, alias):
-    SDK_PATH = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Android", "Sdk", "build-tools", "37.0.0", "apksigner.bat") # tool version may vary
+    SDK_TOOLS = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Android", "Sdk", "build-tools", "36.0.0") # tool version may vary
+    SDK_PATH = os.path.join(SDK_TOOLS, "apksigner.bat")
+    ZIPALIGN_PATH = os.path.join(SDK_TOOLS, "zipalign.exe")
+
+    cmd = [
+        ZIPALIGN_PATH, "-v", "-p", "4",
+        tgtApkPath,
+        tgtApkPath.replace(".apk", "-aln.apk")
+    ]
+    tgtApkPath = tgtApkPath.replace(".apk", "-aln.apk")
+    try:
+        subprocess.run(cmd, capture_output=True, check=True, text=True)
+        print(f"APK aligned: {tgtApkPath}")
+    except subprocess.CalledProcessError as e:
+        print(f"Zipalign failed: {e.stderr}")
+        return
+    
     cmd = [
         SDK_PATH, "sign",
         "--ks", jksPath,
         "--ks-pass", f"pass:{CERT_PW}",
         "--ks-key-alias", alias,
-        "--out", tgtApkPath.replace(".apk", "-signed.apk"),
+        "--out", tgtApkPath.replace(".apk", "-sgn.apk"),
         tgtApkPath
     ]
-    
+    tgtApkPath = tgtApkPath.replace(".apk", "-sgn.apk")
     try:
         result = subprocess.run(cmd, capture_output=True, check=True, shell=True)
         print(result.stdout)
