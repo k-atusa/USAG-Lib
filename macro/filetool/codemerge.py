@@ -25,7 +25,7 @@ def merge(tgtDir, output="merged.txt"):
                         print(f"Error {e} at {relative}")
                         
                 else: # skip data
-                    f.write("(non-code, skiped)\n\n")
+                    f.write("(non-code, skipped)\n\n")
                     print(f"added header {relative}")
 
 #merge("./")
