@@ -28,6 +28,7 @@ Code-related tools for devs
 File management/conversion tools
 
 - filediv: 파일을 여러 개로 쪼개거나 합치기 Split or merge files
+- codemerge: 코드 파일들을 하나의 텍스트로 병합 Merge codes to single text file
 - pdfobject: PDF 문서를 변환하거나 페이지 편집 Convert PDF documents or edit pages
 - piczip: 이미지이면서 동시에 압축 파일인 배포 파일 생성 Create distribution file that are both image and zip file
 
