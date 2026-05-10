@@ -5,27 +5,34 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 # basic setup values
-CODE_EXT = {"c", "cpp", "cs", "css", "dart", "go", "h", "hpp", "htm", "html", "java", "js", "kt", "lua", "php", "py", "r", "rb", "rs", "sh", "ts"}
+CODE_EXT = {
+    "c", "cpp", "cs", "css", "dart", "go", "h", "hpp", "htm", "html", 
+    "ipynb", "java", "js", "jsx", "kt", "lua", "php", "py", "r", "rb", 
+    "rs", "sh", "ts", "tsx", "swift", "scala", "sql", "m"
+}
 
-DATA_EXT = {"csv", "json", "md", "txt"}
+DATA_EXT = {"csv", "json", "md", "txt", "yaml", "yml", "xml"}
 
 GITHUB_COLORS = {
     "py": "#3572A5", "c": "#555555", "cpp": "#f34b7d", "cs": "#178600",
     "css": "#563d7c", "dart": "#00B4AB", "go": "#00ADD8", "h": "#555555",
-    "hpp": "#f34b7d", "java": "#b07219", "js": "#f1e05a", "kt": "#A97BFF",
-    "lua": "#000080", "php": "#4F5D95", "r": "#198CE7", "rb": "#701516",
-    "rs": "#dea584", "sh": "#89e051", "ts": "#3178c6", "csv": "#237346",
-    "htm": "#e34c26", "html": "#e34c26", "json": "#292929", "txt": "#e3e3e3",
-    "md": "#083fa1"
+    "hpp": "#f34b7d", "ipynb": "#FF7F00", "java": "#b07219", "js": "#f1e05a", 
+    "jsx": "#f1e05a", "kt": "#A97BFF", "lua": "#000080", "php": "#4F5D95", 
+    "r": "#198CE7", "rb": "#701516", "rs": "#dea584", "sh": "#89e051", 
+    "ts": "#3178c6", "tsx": "#3178c6", "csv": "#237346", "htm": "#e34c26", 
+    "html": "#e34c26", "json": "#292929", "txt": "#e3e3e3", "md": "#083fa1",
+    "swift": "#ffac45", "scala": "#c22d40", "sql": "#e38c00", "m": "#438eff",
+    "yaml": "#cb171e", "yml": "#cb171e", "xml": "#0060ac"
 }
 
 GITHUB_LANG_MAP = {
     "Python": "py", "C": "c", "C++": "cpp", "C#": "cs",
     "CSS": "css", "Dart": "dart", "Go": "go", "HTML": "html",
-    "Java": "java", "JavaScript": "js", "Kotlin": "kt",
+    "Java": "java", "JavaScript": "js", "JSX": "jsx", "Kotlin": "kt",
     "Lua": "lua", "PHP": "php", "R": "r", "Ruby": "rb",
-    "Rust": "rs", "Shell": "sh", "TypeScript": "ts",
-    "Jupyter Notebook": "py"
+    "Rust": "rs", "Shell": "sh", "TypeScript": "ts", "TSX": "tsx",
+    "Jupyter Notebook": "ipynb", "Swift": "swift", "Scala": "scala",
+    "SQL": "sql", "Objective-C": "m"
 }
 
 DEFAULT_COLOR = "#cccccc"
@@ -182,7 +189,7 @@ def remote(target_name):
 
 # setup values
 path = "./" # count target folder path
-exclude_dirs = {".git", "node_modules", "build", "bin", "pkg", "target", ".idea", "venv"} # folder name that ignored
+exclude_dirs = {".git", "node_modules", "build", "bin", "pkg", "target", ".idea", ".venv"} # folder name that ignored
 include_forks = False # count forked repos too
 
 # local()

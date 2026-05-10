@@ -1,7 +1,12 @@
 # test811 : codemerge
 import os
 
-TEXT_EXTS = ("c", "cpp", "cs", "css", "dart", "go", "h", "hpp", "htm", "html", "java", "js", "kt", "lua", "php", "py", "r", "rb", "rs", "sh", "ts", "csv", "json", "md", "txt", "xml")
+TEXT_EXTS = (
+        "c", "cpp", "cs", "css", "dart", "go", "h", "hpp", "htm", "html", 
+        "ipynb", "java", "js", "jsx", "kt", "lua", "php", "py", "r", "rb", 
+        "rs", "sh", "ts", "tsx", "swift", "scala", "sql", "m",
+        "csv", "json", "md", "txt", "yaml", "yml", "xml"
+    )
 EXCLUDE_DIRS = (".git", "node_modules", "build", "bin", "pkg", "target", ".idea", ".venv", "__pycache__")
 
 def merge(tgtDir, output="merged.txt"):
