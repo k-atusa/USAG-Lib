@@ -10,3 +10,6 @@ for i in data:
     en = Bencode.Encode64(i, spliter="#", linenum=8, colnum=3)
     print(en)
     print(i == Bencode.Decode64(en, spliter="#"))
+
+for i in Bencode.NormPW("한글 테스트"):
+    print(i, end=" ") # 237 149 156 234 184 128 32 237 133 140 236 138 164 237 138 184

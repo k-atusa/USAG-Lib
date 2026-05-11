@@ -4,6 +4,8 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -84,5 +86,12 @@ public class Bencode {
             return new byte[0];
         }
         return Base64.getDecoder().decode(data);
+    }
+
+    public static byte[] NormPW(String pw) {
+        if (pw == null || pw.isEmpty()) {
+            return new byte[0];
+        }
+        return Normalizer.normalize(pw, Normalizer.Form.NFC).getBytes(StandardCharsets.UTF_8);
     }
 }

@@ -356,9 +356,10 @@ public class Opsec {
         }
 
         // get pwhash & header key, encrypt header
-        byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
+        byte[] combinedPw = (kf == null || kf.length == 0) ? pw.clone() : concat(pw, kf);
         Bencrypt.HashMaster hm = new Bencrypt.HashMaster(method);
         byte[][] keys = hm.KDF(combinedPw, salt);
+        java.util.Arrays.fill(combinedPw, (byte) 0);
         pwHash = keys[0];
         byte[] hkey = keys[1];
 
@@ -366,6 +367,8 @@ public class Opsec {
         byte[] headData = wrapEncHead();
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
         encHeadData = sm.EnBin(headData);
+        java.util.Arrays.fill(hkey, (byte) 0);
+        java.util.Arrays.fill(headData, (byte) 0);
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
@@ -396,6 +399,7 @@ public class Opsec {
             // sign to [hal][peerPub][smsg][sinf]
             byte[] signTgt = concat(strToBytes(method), peerPub, strToBytes(Smsg), SmsgInfo);
             sign = am.Sign(signTgt);
+            java.util.Arrays.fill(signTgt, (byte) 0);
         }
 
         // encrypt header
@@ -410,10 +414,12 @@ public class Opsec {
 
             Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
             encHeadData = sm.EnBin(headData);
+            java.util.Arrays.fill(hkey, (byte) 0);
         } else {
             // ECC/PQC Hybrid: Handled internally
             encHeadData = am.Encrypt(headData);
         }
+        java.util.Arrays.fill(headData, (byte) 0);
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
@@ -449,11 +455,12 @@ public class Opsec {
     public void Decpw(byte[] pw, byte[] kf) throws Exception {
         if (headAlgo.isEmpty())
             throw new IllegalStateException("Call view() first");
-        byte[] combinedPw = (kf == null || kf.length == 0) ? pw : concat(pw, kf);
+        byte[] combinedPw = (kf == null || kf.length == 0) ? pw.clone() : concat(pw, kf);
 
         // check parameters, get header key
         Bencrypt.HashMaster hm = new Bencrypt.HashMaster(headAlgo);
         byte[][] keys = hm.KDF(combinedPw, salt);
+        java.util.Arrays.fill(combinedPw, (byte) 0);
         byte[] calcHash = keys[0];
         byte[] hkey = keys[1];
 
@@ -470,9 +477,11 @@ public class Opsec {
         // decrypt header
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
         byte[] decryptedHead = sm.DeBin(encHeadData);
+        java.util.Arrays.fill(hkey, (byte) 0);
         if (decryptedHead == null)
             throw new SecurityException("AES decryption failed");
         unwrapEncHead(decryptedHead);
+        java.util.Arrays.fill(decryptedHead, (byte) 0);
     }
 
     // decrypt with private key, verify if public key is not null
@@ -490,6 +499,7 @@ public class Opsec {
             byte[] hkey = am.Decrypt(MsgInfo);
             Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
             decryptedHead = sm.DeBin(encHeadData);
+            java.util.Arrays.fill(hkey, (byte) 0);
         } else {
             decryptedHead = am.Decrypt(encHeadData);
         }
@@ -497,6 +507,7 @@ public class Opsec {
         if (decryptedHead == null)
             throw new SecurityException("Decryption failed");
         unwrapEncHead(decryptedHead);
+        java.util.Arrays.fill(decryptedHead, (byte) 0);
 
         // verify sign
         if (myPub == null && peerPub == null)
@@ -513,6 +524,66 @@ public class Opsec {
 
         if (!amVerify.Verify(signTgt, sign)) {
             throw new SecurityException("Signature verification failed");
+        }
+    }
+
+    // Data Masker
+    public static class Masker {
+        private static volatile Masker instance = null; // singleton
+        private static final int[] PRIME_CANDIDATES = {
+                15485863, 32452843, 86028121, 104395301,
+                179424673, 228017633, 236887691, 345098717,
+                413158511, 481230491, 563117203, 693240851,
+                715225741, 812349821, 882046271, 999999937
+        };
+        private int poolSize;
+        private byte[] pool;
+        private int prime;
+
+        private Masker(int poolSizeMb) {
+            this.poolSize = poolSizeMb * 1024 * 1024;
+            Bencrypt rg = new Bencrypt();
+            this.pool = rg.Random(this.poolSize);
+            byte[] randByte = rg.Random(1);
+            int randomIndex = Byte.toUnsignedInt(randByte[0]) % 16;
+            this.prime = PRIME_CANDIDATES[randomIndex];
+        }
+
+        public static Masker GetMasker(int poolSizeMb) {
+            if (instance == null) {
+                synchronized (Masker.class) {
+                    if (instance == null) {
+                        instance = new Masker(poolSizeMb);
+                    }
+                }
+            }
+            return instance;
+        }
+
+        public static Masker GetMasker() {
+            return GetMasker(8);
+        }
+
+        public byte[] XOR(byte[] data) {
+            if (data == null) {
+                return null;
+            }
+            int L = data.length;
+            if (L == 0) {
+                return data;
+            }
+            if (L > this.poolSize) {
+                throw new IllegalArgumentException("Data " + L + " exceeds Pool " + this.poolSize);
+            }
+            int stride = this.poolSize / L;
+            byte[] result = new byte[L];
+
+            for (int i = 0; i < L; i++) {
+                long jitter = ((long) i * this.prime) % stride;
+                int idx = (int) ((i * stride) + jitter);
+                result[i] = (byte) (data[i] ^ this.pool[idx]);
+            }
+            return result;
         }
     }
 }

@@ -67,6 +67,12 @@ if (isNode) {
 }
 
 // ========== Helpers ==========
+function zeroize(arr) {
+    if (arr && arr.byteLength > 0 && typeof arr.fill === 'function') {
+        arr.fill(0);
+    }
+}
+
 function toU8(data) {
     if (typeof data === 'string') return new TextEncoder().encode(data);
     if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -124,7 +130,13 @@ function hmac_sha3_512(key, msg) {
     const outerData = new Uint8Array(B + innerHash.length);
     outerData.set(o_key_pad);
     outerData.set(innerHash, B);
-    return SHA3512(outerData);
+    const result = SHA3512(outerData);
+
+    zeroize(i_key_pad);
+    zeroize(o_key_pad);
+    zeroize(innerData);
+    zeroize(outerData);
+    return result
 }
 
 /**
@@ -251,6 +263,7 @@ export class HashMaster {
             combined.set(saltBuf, 0);
             combined.set(pwBuf, saltBuf.length);
             master = SHA3512(combined);
+            zeroize(combined);
 
         } else if (this.algo === "pbk2") {
             lblStore = "PWHASH_PBK2";
@@ -266,10 +279,10 @@ export class HashMaster {
             return [null, null];
         }
 
-        return [
-            genkey(master, lblStore, this.hashSize),
-            genkey(master, lblKeygen, this.keySize)
-        ];
+        const storeKey = genkey(master, lblStore, this.hashSize);
+        const userKey = genkey(master, lblKeygen, this.keySize);
+        zeroize(master);
+        return [storeKey, userKey];
     }
 }
 
@@ -548,22 +561,27 @@ class AES1 {
         const iv = k.slice(0, 12);
         const aesKey = k.slice(12);
 
-        if (isNode) {
-            const cipher = deps.crypto.createCipheriv('aes-256-gcm', aesKey, iv);
-            const encrypted = Buffer.concat([cipher.update(d), cipher.final()]);
-            const tag = cipher.getAuthTag();
-            this._processed = d.length;
-            return new Uint8Array(Buffer.concat([encrypted, tag]));
+        try {
+            if (isNode) {
+                const cipher = deps.crypto.createCipheriv('aes-256-gcm', aesKey, iv);
+                const encrypted = Buffer.concat([cipher.update(d), cipher.final()]);
+                const tag = cipher.getAuthTag();
+                this._processed = d.length;
+                return new Uint8Array(Buffer.concat([encrypted, tag]));
 
-        } else {
-            const importedKey = await deps.crypto.subtle.importKey(
-                "raw", aesKey, "AES-GCM", false, ["encrypt"]
-            );
-            const res = await deps.crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv }, importedKey, d
-            ); // res = ciphertext + tag
-            this._processed = d.length;
-            return new Uint8Array(res);
+            } else {
+                const importedKey = await deps.crypto.subtle.importKey(
+                    "raw", aesKey, "AES-GCM", false, ["encrypt"]
+                );
+                const res = await deps.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv }, importedKey, d
+                ); // res = ciphertext + tag
+                this._processed = d.length;
+                return new Uint8Array(res);
+            }
+
+        } finally {
+            zeroize(aesKey);
         }
     }
 
@@ -581,28 +599,33 @@ class AES1 {
         const iv = k.slice(0, 12);
         const aesKey = k.slice(12);
 
-        if (isNode) {
-            const tag = d.slice(d.length - 16);
-            const ciphertext = d.slice(0, d.length - 16);
-            const decipher = deps.crypto.createDecipheriv('aes-256-gcm', aesKey, iv);
-            decipher.setAuthTag(tag);
-            const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-            this._processed = d.length;
-            return new Uint8Array(plaintext);
-
-        } else {
-            const importedKey = await deps.crypto.subtle.importKey(
-                "raw", aesKey, "AES-GCM", false, ["decrypt"]
-            );
-            try {
-                const res = await deps.crypto.subtle.decrypt(
-                    { name: "AES-GCM", iv: iv }, importedKey, d
-                ); // input is ciphertext + tag
+        try {
+            if (isNode) {
+                const tag = d.slice(d.length - 16);
+                const ciphertext = d.slice(0, d.length - 16);
+                const decipher = deps.crypto.createDecipheriv('aes-256-gcm', aesKey, iv);
+                decipher.setAuthTag(tag);
+                const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
                 this._processed = d.length;
-                return new Uint8Array(res);
-            } catch (e) {
-                throw new Error("Decryption failed (MAC check failed)");
+                return new Uint8Array(plaintext);
+
+            } else {
+                const importedKey = await deps.crypto.subtle.importKey(
+                    "raw", aesKey, "AES-GCM", false, ["decrypt"]
+                );
+                try {
+                    const res = await deps.crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: iv }, importedKey, d
+                    ); // input is ciphertext + tag
+                    this._processed = d.length;
+                    return new Uint8Array(res);
+                } catch (e) {
+                    throw new Error("Decryption failed (MAC check failed)");
+                }
             }
+
+        } finally {
+            zeroize(aesKey);
         }
     }
 
@@ -674,6 +697,7 @@ class AES1 {
 
         // G. Finalize: Wait for all pending writes to finish
         await writeChain;
+        zeroize(aesKeyBytes);
     }
 
     /**
@@ -756,6 +780,7 @@ class AES1 {
 
         // F. Finalize
         await writeChain;
+        zeroize(aesKeyBytes);
     }
 }
 
@@ -1115,8 +1140,10 @@ class ECC1 {
 
         // encrypt
         const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 44);
+        zeroize(sharedSecret);
         let em = new SymMaster("gcm1", gcmKey);
         const enc = await em.EnBin(d);
+        zeroize(gcmKey);
 
         // Pack: [1B Len][EphPub][Enc]
         const res = new Uint8Array(1 + ephPubRaw.length + enc.length);
@@ -1153,8 +1180,13 @@ class ECC1 {
 
         // decrypt
         const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 44);
+        zeroize(sharedSecret);
         let em = new SymMaster("gcm1", gcmKey);
-        return await em.DeBin(enc);
+        try {
+            return await em.DeBin(enc);
+        } finally {
+            zeroize(gcmKey);
+        }
     }
 
     /** 
@@ -1313,10 +1345,14 @@ class PQC1 {
         const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
         combinedSecret.set(ssvECC, 0);
         combinedSecret.set(ssvKEM, ssvECC.length);
+        zeroize(ssvECC);
+        zeroize(ssvKEM);
 
         const gcmKey = genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+        zeroize(combinedSecret);
         let em = new SymMaster("gcm1", gcmKey);
         const enc = await em.EnBin(d);
+        zeroize(gcmKey);
 
         // [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
         const res = new Uint8Array(56 + 1568 + enc.length);
@@ -1359,10 +1395,17 @@ class PQC1 {
         const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
         combinedSecret.set(ssvECC, 0);
         combinedSecret.set(ssvKEM, ssvECC.length);
+        zeroize(ssvECC);
+        zeroize(ssvKEM);
 
         const gcmKey = genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+        zeroize(combinedSecret);
         let em = new SymMaster("gcm1", gcmKey);
-        return await em.DeBin(enc);
+        try {
+            return await em.DeBin(enc);
+        } finally {
+            zeroize(gcmKey);
+        }
     }
 
     /** * sign with private key

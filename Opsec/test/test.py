@@ -1,3 +1,5 @@
+import Bencrypt
+from Opsec import Opsec
 import io
 import Bencrypt
 import Opsec
@@ -56,3 +58,10 @@ for method in methods:
     m.Decpub(myPri, myPub, peerPub)
     print(method)
     print(msg == m.Msg, smsg == m.Smsg, sinf == m.SmsgInfo, bodyalgo == m.BodyAlgo, bodysize == m.BodySize, bodyinfo == m.BodyInfo, bodykey == m.BodyKey)
+
+# Masker
+mA = Opsec.Masker()
+mB = Opsec.Masker()
+key = Bencrypt.Random(8753)
+print(mA.XOR(b"\x00\x00\x00\x00"))
+print(mB.XOR(mA.XOR(key)) == key)

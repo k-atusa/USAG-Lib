@@ -32,10 +32,11 @@
     <div id="console">Ready...</div>
 
     <script type="module">
-        import {Encode64, Decode64} from '../Bencode.js';
+        import {Encode64, Decode64, NormPW} from '../Bencode.js';
         window.Bencode = {
             "Encode64": Encode64,
-            "Decode64": Decode64
+            "Decode64": Decode64,
+            "NormPW": NormPW
         }
     </script>
 
@@ -74,6 +75,7 @@
                     log(en);
                     log(i === decoder.decode(de));
                 }
+                log(formatBytes(Bencode.NormPW("한글 테스트")))
 
             } catch (e) {
                 console.error(e);

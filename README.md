@@ -1,4 +1,4 @@
-# USAG-Lib v1.4.0
+# USAG-Lib v1.4.1
 
 Universal Security Assistant Gear - Library
 
@@ -112,7 +112,7 @@ apt remove golang
 sudo apt remove golang
 sudo rm -rf /usr/local/go
 
-sudo tar -C /usr/local/ -xzf go1.25.7.linux-amd64.tar.gz # download from go.dev
+sudo tar -C /usr/local/ -xzf go1.26.3.linux-amd64.tar.gz # download from go.dev
 
 echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.profile
 source ~/.profile

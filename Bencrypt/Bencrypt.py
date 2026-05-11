@@ -66,7 +66,9 @@ class HashMaster:
             master = argon2(pw, salt)
         else:
             return (None, None)
-        return genkey(master, lblStore, self.hashSize), genkey(master, lblKeygen, self.keySize)
+        pwStore, keyGen = genkey(master, lblStore, self.hashSize), genkey(master, lblKeygen, self.keySize)
+        del master
+        return pwStore, keyGen
     
 # ========== Hash Functions ==========
 def pbkdf2(pw: bytes, salt: bytes, iter: int = 1000000, outsize: int = 64) -> bytes:
@@ -97,6 +99,10 @@ class SymMaster:
             if len(key) != 44:
                 raise ValueError("Key length must be 44 bytes (12B IV + 32B Key)")
             self.key, self.worker = key, AES1()
+
+    def __del__(self):
+        if hasattr(self, 'key'):
+            del self.key
 
     def AfterSize(self, size: int) -> int:
         if self.algo == "gcm1":
@@ -230,6 +236,10 @@ class AsymMaster:
         elif self.algo == 'pqc1':
             self.worker = PQC1()
 
+    def __del__(self):
+        if hasattr(self, 'worker'):
+            del self.worker
+
     def Genkey(self) -> Tuple[bytes, bytes]:
         if self.algo == 'rsa1':
             return self.worker.genkey(2048)
@@ -265,6 +275,10 @@ class RSA1:
     def __init__(self):
         self.public: Optional[RSA.RsaKey] = None
         self.private: Optional[RSA.RsaKey] = None
+
+    def __del__(self):
+        self.public = None
+        self.private = None
 
     def genkey(self, bits: int = 2048) -> Tuple[bytes, bytes]: # DER(PKIX, PKCS8) format, (public, private)
         key = RSA.generate(bits) # 2048, 3072, 4096
@@ -307,6 +321,12 @@ class ECC1: # Curve448
         self.priEd: Optional[ed448.Ed448PrivateKey] = None
         # encryption format: [1B PubLen][PubKey][encdata][tag]
 
+    def __del__(self):
+        self.pubX = None
+        self.priX = None
+        self.pubEd = None
+        self.priEd = None
+
     def genkey(self) -> Tuple[bytes, bytes]: # [X448 56B][Ed448 57B] format, (public, private)
         # 1. Generate both keys
         self.priX = x448.X448PrivateKey.generate()
@@ -339,6 +359,10 @@ class ECC1: # Curve448
         shared = tempKey.exchange(self.pubX) # 2. Get shared secret (ECDH)
         gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
         enc = SymMaster("gcm1", gcmKey).EnBin(data) # 3. Encrypt with AES-GCM
+
+        del tempKey
+        del shared
+        del gcmKey
         return len(tempPub).to_bytes(1, 'big') + tempPub + enc
 
     def decrypt(self, data: bytes) -> bytes:
@@ -353,6 +377,8 @@ class ECC1: # Curve448
 
         # 3. Decrypt with AES-GCM
         gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
+        del tempKey
+        del shared
         return SymMaster("gcm1", gcmKey).DeBin(enc)
 
     def sign(self, data: bytes) -> bytes: # Ed448
@@ -379,6 +405,17 @@ class PQC1:
         self.priKEM: Optional[bytes] = None
         self.pubDSA: Optional[bytes] = None
         self.priDSA: Optional[bytes] = None
+
+    def __del__(self):
+        self.pubX = None
+        self.priX = None
+        self.pubEd = None
+        self.priEd = None
+
+        self.pubKEM = None
+        self.priKEM = None
+        self.pubDSA = None
+        self.priDSA = None
 
     def genkey(self) -> Tuple[bytes, bytes]: # (public, private)
         # 1. Curve448 key generation
@@ -431,6 +468,10 @@ class PQC1:
         enc = SymMaster("gcm1", gcmKey).EnBin(data)
 
         # [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
+        del tempKey
+        del ssvECC
+        del ssvKEM
+        del gcmKey
         return tempPub + kemEnc + enc
 
     def decrypt(self, data: bytes) -> bytes:
@@ -446,6 +487,9 @@ class PQC1:
 
         # 3. Hybrid KDF & Decryption
         gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 44)
+        del tempXKey
+        del ssvECC
+        del ssvKEM
         return SymMaster("gcm1", gcmKey).DeBin(enc)
 
     def sign(self, data: bytes) -> bytes:

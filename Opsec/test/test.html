@@ -4,6 +4,7 @@
 -->
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -57,19 +58,21 @@
     <div id="console">Ready...</div>
 
     <script type="module">
-        import { Opsec, Crc32, PadLen, PadFile } from '../Opsec.js';
+        import { Opsec, Crc32, PadLen, PadFile, Masker } from '../Opsec.js';
         const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
         // load TestReader, TestWriter from Bencrypt.js
-        const { AsymMaster, TestReader, TestWriter } = await import(BencryptURL);
+        const { AsymMaster, TestReader, TestWriter, Random } = await import(BencryptURL);
 
         window.LibTest = {
             Opsec,
             Crc32,
             PadLen,
             PadFile,
+            Masker,
             AsymMaster,
             TestReader,
-            TestWriter
+            TestWriter,
+            Random,
         };
     </script>
 
@@ -100,7 +103,7 @@
             log("--- Start Test ---", "info");
 
             try {
-                const { Opsec, Crc32, PadLen, PadFile, AsymMaster, TestReader, TestWriter } = window.LibTest;
+                const { Opsec, Crc32, PadLen, PadFile, Masker, AsymMaster, TestReader, TestWriter, Random } = window.LibTest;
 
                 // CRC32, RW Test
                 log(`CRC32 test: ${Crc32("test")}`); // 0c7e7fd8
@@ -109,7 +112,7 @@
                 await w.write(new Uint8Array(128 * 4)); // b"\x00" * 128 * 4
                 const m = new Opsec();
                 await m.Write(w, new TextEncoder().encode("Hello, world!"));
-                
+
                 const r = new TestReader(w.getValue());
                 const readResult = await m.Read(r);
                 log(`Read test: ${new TextDecoder().decode(readResult)}\n`);
@@ -157,7 +160,7 @@
                         bytesEqual(bodyinfo, m.BodyInfo),
                         bytesEqual(bodykey, m.BodyKey)
                     ];
-                    
+
                     const resultRow = checks.map(c => c ? "OK" : "FAIL").join(" ");
                     const allPass = checks.every(c => c);
                     log(resultRow, allPass ? "success" : "error");
@@ -195,11 +198,21 @@
                         bytesEqual(bodyinfo, m.BodyInfo),
                         bytesEqual(bodykey, m.BodyKey)
                     ];
-                    
+
                     const resultRow = checks.map(c => c ? "OK" : "FAIL").join(" ");
                     const allPass = checks.every(c => c);
                     log(resultRow, allPass ? "success" : "error");
                 }
+
+                // Masker Test
+                log("\n--- Masker Test ---", "warn");
+                const mA = new Masker();
+                const mB = new Masker();
+                const key = Random(8753);
+                const maskedZero = mA.XOR(new Uint8Array([0, 0, 0, 0]));
+                log(Array.from(maskedZero).map(b => b.toString(16).padStart(2, '0')).join(''));
+                const isReversible = bytesEqual(mB.XOR(mA.XOR(key)), key);
+                log(isReversible ? "True" : "False");
 
             } catch (e) {
                 console.error(e);

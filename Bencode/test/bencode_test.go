@@ -26,4 +26,8 @@ func TestMain(t *testing.T) {
 		fmt.Println(s)
 		fmt.Println(bytes.Equal(r, d))
 	}
+
+	for _, r := range NormPW("한글 테스트") {
+		fmt.Printf("%d ", r)
+	}
 }

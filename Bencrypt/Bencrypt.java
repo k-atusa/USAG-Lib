@@ -164,6 +164,7 @@ public class Bencrypt {
                 System.arraycopy(salt, 0, combined, 0, salt.length);
                 System.arraycopy(pw, 0, combined, salt.length, pw.length);
                 master = Bencrypt.SHA3512(combined);
+                java.util.Arrays.fill(combined, (byte) 0);
 
             } else if (this.algo.equals("pbk2")) {
                 lblStore = "PWHASH_PBK2";
@@ -179,10 +180,10 @@ public class Bencrypt {
                 return new byte[0][0];
             }
 
-            return new byte[][] {
-                    Bencrypt.genkey(master, lblStore, this.hashSize),
-                    Bencrypt.genkey(master, lblKeygen, this.keySize)
-            };
+            byte[] pwStored = Bencrypt.genkey(master, lblStore, this.hashSize);
+            byte[] keyGen = Bencrypt.genkey(master, lblKeygen, this.keySize);
+            java.util.Arrays.fill(master, (byte) 0);
+            return new byte[][] { pwStored, keyGen };
         }
     }
 
@@ -399,6 +400,7 @@ public class Bencrypt {
             byte[] iv = Arrays.copyOfRange(key, 0, 12);
             byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
             byte[] result = inlineEnc(keyBytes, iv, data);
+            java.util.Arrays.fill(keyBytes, (byte) 0);
             this.processed.set(data.length);
             return result;
         }
@@ -413,6 +415,7 @@ public class Bencrypt {
             byte[] iv = Arrays.copyOfRange(key, 0, 12);
             byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
             byte[] result = inlineDec(keyBytes, iv, data);
+            java.util.Arrays.fill(keyBytes, (byte) 0);
             this.processed.set(data.length);
             return result;
         }
@@ -468,6 +471,7 @@ public class Bencrypt {
 
             } finally { // 6. Close Thread x8 Pool
                 executor.shutdown();
+                java.util.Arrays.fill(globalKey, (byte) 0);
             }
         }
 
@@ -522,6 +526,7 @@ public class Bencrypt {
 
             } finally { // 6. Close Thread x8 Pool
                 executor.shutdown();
+                java.util.Arrays.fill(globalKey, (byte) 0);
             }
         }
     }
@@ -778,8 +783,10 @@ public class Bencrypt {
 
             // 3. KDF & Encrypt
             byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
+            java.util.Arrays.fill(sharedSecret, (byte) 0);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] enc = worker.EnBin(data);
+            java.util.Arrays.fill(gcmKey, (byte) 0);
 
             // 4. Pack
             byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
@@ -808,8 +815,11 @@ public class Bencrypt {
 
             // 4. KDF & Decrypt
             byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
+            java.util.Arrays.fill(sharedSecret, (byte) 0);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
-            return worker.DeBin(enc);
+            byte[] res = worker.DeBin(enc);
+            java.util.Arrays.fill(gcmKey, (byte) 0);
+            return res;
         }
 
         // ECC sign: Ed448
@@ -963,8 +973,12 @@ public class Bencrypt {
             System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
 
             byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+            java.util.Arrays.fill(ssvECC, (byte) 0);
+            java.util.Arrays.fill(ssvKEM, (byte) 0);
+            java.util.Arrays.fill(combinedSecret, (byte) 0);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] enc = worker.EnBin(data);
+            java.util.Arrays.fill(gcmKey, (byte) 0);
 
             byte[] tempPubB = tempPub.getEncoded();
             byte[] res = new byte[tempPubB.length + kemEnc.length + enc.length];
@@ -997,8 +1011,13 @@ public class Bencrypt {
             System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
 
             byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+            java.util.Arrays.fill(ssvECC, (byte) 0);
+            java.util.Arrays.fill(ssvKEM, (byte) 0);
+            java.util.Arrays.fill(combinedSecret, (byte) 0);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
-            return worker.DeBin(enc);
+            byte[] res = worker.DeBin(enc);
+            java.util.Arrays.fill(gcmKey, (byte) 0);
+            return res;
         }
 
         public byte[] sign(byte[] data) throws Exception {

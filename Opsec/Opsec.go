@@ -425,6 +425,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 
 	// Combine pw + kf
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
+	defer clear(combinedPw)
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
 
@@ -434,6 +435,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 		return nil, err
 	}
 	pwHash, hkey, err := hm.KDF(combinedPw, o.salt)
+	defer clear(hkey)
 	if err != nil {
 		return nil, err
 	}
@@ -441,6 +443,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 
 	// Encrypt header
 	headData, err := o.wrapEncHead()
+	defer clear(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -486,6 +489,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 		}
 
 		signTgt := make([]byte, 0)
+		defer clear(signTgt)
 		signTgt = append(signTgt, []byte(method)...)
 		signTgt = append(signTgt, peerPub...)
 		signTgt = append(signTgt, []byte(o.Smsg)...)
@@ -508,6 +512,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 	}
 
 	headData, err := o.wrapEncHead()
+	defer clear(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -515,6 +520,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 	if method == "rsa1" || method == "rsa2" {
 		// RSA Hybrid: Encrypt Key with RSA, Data with AES
 		hkey := Bencrypt.Random(44)
+		defer clear(hkey)
 		o.MsgInfo, err = amEncrypt.Encrypt(hkey)
 		if err != nil {
 			return nil, err
@@ -579,6 +585,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	}
 
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
+	defer clear(combinedPw)
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
 
@@ -588,6 +595,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 		return err
 	}
 	calcHash, hkey, err := hm.KDF(combinedPw, o.salt)
+	defer clear(hkey)
 	if err != nil {
 		return err
 	}
@@ -632,6 +640,7 @@ func (o *Opsec) Decpub(myPri []byte, myPub []byte, peerPub []byte) error {
 	if o.headAlgo == "rsa1" || o.headAlgo == "rsa2" {
 		// RSA Hybrid
 		hkey, err := am.Decrypt(o.MsgInfo)
+		defer clear(hkey)
 		if err != nil {
 			return fmt.Errorf("RSA decryption failed: %w", err)
 		}
@@ -681,4 +690,62 @@ func (o *Opsec) Decpub(myPri []byte, myPub []byte, peerPub []byte) error {
 		return errors.New("signature verification failed")
 	}
 	return nil
+}
+
+// Data Masker
+var (
+	primeCandidates = [16]int64{
+		15485863, 32452843, 86028121, 104395301,
+		179424673, 228017633, 236887691, 345098717,
+		413158511, 481230491, 563117203, 693240851,
+		715225741, 812349821, 882046271, 999999937,
+	}
+	instance *Masker
+	once     sync.Once
+	initErr  error
+)
+
+type Masker struct {
+	poolSize int64
+	pool     []byte
+	prime    int64
+}
+
+func GetMasker(poolSizeMb int) *Masker {
+	if poolSizeMb <= 0 {
+		poolSizeMb = 8
+	}
+	once.Do(func() {
+		instance = new(Masker)
+		instance.init(poolSizeMb)
+	})
+	return instance
+}
+
+// 내부 초기화 로직
+func (m *Masker) init(poolSizeMb int) {
+	m.poolSize = int64(poolSizeMb * 1048576)
+	m.pool = Bencrypt.Random(poolSizeMb * 1048576)
+	m.prime = primeCandidates[Bencrypt.Random(1)[0]%16]
+}
+
+// XOR Masking
+func (m *Masker) XOR(data []byte) ([]byte, error) {
+	L := int64(len(data))
+	if L == 0 {
+		return data, nil
+	}
+	if L > m.poolSize {
+		return nil, fmt.Errorf("data length %d exceeds pool size %d", L, m.poolSize)
+	}
+	stride := m.poolSize / L
+	result := make([]byte, L)
+
+	var i int64
+	for i = 0; i < L; i++ {
+		jitter := (i * m.prime) % stride
+		idx := int((i * stride) + jitter)
+		result[i] = data[i] ^ m.pool[idx]
+	}
+	return result, nil
 }

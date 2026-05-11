@@ -39,6 +39,9 @@ class Opsec:
     def View(data: bytes)
     def Decpw(pw: bytes, kf: bytes = b"")
     def Decpub(myPri: bytes, myPub: bytes | None = None, peerPub: bytes | None = None)
+
+class Masker:
+    def XOR(data: bytes) -> bytes
 ```
 
 #### javascript
@@ -71,6 +74,10 @@ class Opsec {
     function View(data)
     async function Decpw(pw, kf)
     async function Decpub(myPri, myPub = null, peerPub = null)
+}
+
+class Masker {
+    function XOR(data: Uint8Array): Uint8Array
 }
 ```
 
@@ -105,6 +112,11 @@ type Opsec struct {
     func Decpw(pw []byte, kf []byte) error
     func Decpub(myPri []byte, myPub []byte, peerPub []byte) error
 }
+
+GetMasker(poolSizeMb int) *Masker
+type Masker struct {
+    func XOR(data []byte) ([]byte, error)
+}
 ```
 
 #### java
@@ -137,6 +149,11 @@ public class Opsec {
     public void View(byte[] data)
     public void Decpw(byte[] pw, byte[] kf) throws Exception
     public void Decpub(byte[] myPri, byte[] myPub, byte[] peerPub) throws Exception
+
+    class Masker {
+        public Masker GetMasker()
+        public byte[] XOR(byte[] data)
+    }
 }
 ```
 

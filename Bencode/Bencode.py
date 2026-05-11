@@ -1,6 +1,7 @@
 # test789a : USAG-Lib bencode
 
 import base64
+import unicodedata
 
 splitable = ["!", "@", "#", "$", "%", "^", "&", "*", "~", "|"]
 
@@ -45,3 +46,8 @@ def Decode64(data: str, spliter: str = "") -> bytes:
     if data == "":
         return b""
     return base64.b64decode(data)
+
+def NormPW(pw: str) -> bytes:
+    if pw == "":
+        return b""
+    return unicodedata.normalize('NFC', pw).encode('utf-8')

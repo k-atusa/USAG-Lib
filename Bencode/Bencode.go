@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 var splitable = map[string]bool{
@@ -81,4 +83,11 @@ func Decode64(data string, spliter string) ([]byte, error) {
 		return []byte{}, nil
 	}
 	return base64.StdEncoding.DecodeString(data)
+}
+
+func NormPW(pw string) []byte {
+	if pw == "" {
+		return []byte{}
+	}
+	return []byte(norm.NFC.String(pw))
 }

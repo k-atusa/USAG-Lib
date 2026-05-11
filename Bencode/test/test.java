@@ -16,5 +16,9 @@ public class test {
             System.out.println(en);
             System.out.println(i.equals(de));
         }
+        for (byte i: Bencode.NormPW("한글 테스트")) {
+            System.out.print((int)i & 0xFF);
+            System.out.print(" ");
+        }
     }
 }

@@ -92,3 +92,13 @@ export function Decode64(data, spliter = "") {
     }
     return _fromBase64(data);
 }
+
+/**
+ * @param {string} pw string
+ * @returns {Uint8Array} NFC UTF-8 bytes
+ */
+export function NormPW(pw) {
+    if (!pw) return new Uint8Array(0);
+    const encoder = new TextEncoder();
+    return encoder.encode(pw.normalize('NFC')); 
+}

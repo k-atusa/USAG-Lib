@@ -104,6 +104,11 @@ class Opsec:
         self.Reset()
         self.SaltLen = 32
 
+    def __del__(self):
+        self.Reset()
+        if hasattr(self, 'BodyKey'):
+            del self.BodyKey
+
     # reset after reading BodyKey
     def Reset(self):
         self._headAlgo: str = ""
@@ -205,7 +210,9 @@ class Opsec:
         self._pwHash, hkey = hm.KDF(pw + kf, self._salt)
         headData = self._wrapEncHead()
         sm = Bencrypt.SymMaster("gcm1", hkey)
+        del hkey
         self._encHeadData = sm.EnBin(headData)
+        del headData
 
         # warp header
         cfg: Dict[str, bytes] = {}
@@ -242,9 +249,11 @@ class Opsec:
             hkey = Bencrypt.Random(44)
             self.MsgInfo = am.Encrypt(hkey)
             sm = Bencrypt.SymMaster("gcm1", hkey)
+            del hkey
             self._encHeadData = sm.EnBin(headData)
         else:
             self._encHeadData = am.Encrypt(headData)
+        del headData
 
         # warp header
         cfg: Dict[str, bytes] = {}
@@ -283,8 +292,10 @@ class Opsec:
         if pwhash != self._pwHash:
             raise ValueError("Incorrect password")
         sm = Bencrypt.SymMaster("gcm1", hkey)
+        del hkey
         headData = sm.DeBin(self._encHeadData)
         self._unwrapEncHead(headData)
+        del headData
 
     def Decpub(self, myPri: bytes, myPub: Union[bytes, None] = None, peerPub: Union[bytes, None] = None): # verify sign if public is not None
         # check parameters, decrypt header
@@ -296,10 +307,12 @@ class Opsec:
             # RSA Hybrid: Encrypt Key with RSA, Data with AES
             hkey = am.Decrypt(self.MsgInfo)
             sm = Bencrypt.SymMaster("gcm1", hkey)
+            del hkey
             headData = sm.DeBin(self._encHeadData)
         else:
             headData = am.Decrypt(self._encHeadData)
         self._unwrapEncHead(headData)
+        del headData
 
         # verify sign
         if myPub == None and peerPub == None:
@@ -311,3 +324,45 @@ class Opsec:
         signTgt = self._headAlgo.encode('utf-8') + myPub + self.Smsg.encode('utf-8') + self.SmsgInfo
         if not am.Verify(signTgt, self._sign):
             raise ValueError("Sign verification failed")
+
+# Data Masker
+class Masker:
+    _instance = None # singleton
+    _PRIME_CANDIDATES = [
+        15485863, 32452843, 86028121, 104395301,
+        179424673, 228017633, 236887691, 345098717,
+        413158511, 481230491, 563117203, 693240851,
+        715225741, 812349821, 882046271, 999999937
+    ]
+
+    def __new__(cls, pool_size_mb: int = 8):
+        if cls._instance is None:
+            cls._instance = super(Masker, cls).__new__(cls)
+            cls._instance._initialize(pool_size_mb)
+        return cls._instance
+    
+    def __del__(self):
+        if hasattr(self, 'pool') and isinstance(self.pool, bytearray):
+            for i in range(len(self.pool)):
+                self.pool[i] = 0
+            del self.pool
+
+    def _initialize(self, pool_size_mb: int):
+        self.POOL_SIZE = pool_size_mb * 1024 * 1024
+        self.pool = bytearray(Bencrypt.Random(self.POOL_SIZE))
+        self.prime = self._PRIME_CANDIDATES[Bencrypt.Random(1)[0] % 16]
+
+    def XOR(self, data: bytes) -> bytes:
+        L = len(data)
+        if L == 0:
+            return data
+        if L > self.POOL_SIZE:
+            raise ValueError(f"Data {L} exceeds Pool {self.POOL_SIZE}")
+        
+        stride = self.POOL_SIZE // L
+        result = bytearray(L)
+        for i in range(L):
+            jitter = (i * self.prime) % stride
+            idx = (i * stride) + jitter
+            result[i] = data[i] ^ self.pool[idx]
+        return bytes(result)

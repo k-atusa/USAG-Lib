@@ -2,6 +2,13 @@
 const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
 const { Random, HashMaster, SymMaster, AsymMaster } = await import(BencryptURL);
 
+// Helper: Fill zeros to buffer
+function zeroize(arr) {
+    if (arr && arr.byteLength > 0 && typeof arr.fill === 'function') {
+        arr.fill(0);
+    }
+}
+
 // Helper: Concatenate Uint8Arrays
 function concat(arrays) {
     let totalLength = 0;
@@ -332,11 +339,14 @@ export class Opsec {
         // get pwhash & header key, encrypt header
         const hm = new HashMaster(method);
         const [pwHash, hkey] = await hm.KDF(combinedPw, this._salt);
+        zeroize(combinedPw);
         this._pwHash = pwHash;
 
         const headData = this._wrapEncHead();
         const sm = new SymMaster("gcm1", hkey);
         this._encHeadData = await sm.EnBin(headData);
+        zeroize(headData);
+        zeroize(hkey);
 
         // wrap header
         const cfg = {};
@@ -371,28 +381,31 @@ export class Opsec {
             await am.Loadkey(null, myPri);
             // sign to [hal][peerPub][smsg][sinf]
             const signTgt = concat([
-                strToU8(method), 
-                peerPubBytes, 
-                strToU8(this.Smsg), 
+                strToU8(method),
+                peerPubBytes,
+                strToU8(this.Smsg),
                 this.SmsgInfo
             ]);
             this._sign = await am.Sign(signTgt);
+            zeroize(signTgt);
         }
 
         // encrypt header
         const am = new AsymMaster(method);
         await am.Loadkey(peerPubBytes, null);
         const headData = this._wrapEncHead();
-        
+
         if (method === "rsa1" || method === "rsa2") {
             // RSA Hybrid: Encrypt Key with RSA, Data with AES
             const hkey = Random(44);
             this.MsgInfo = await am.Encrypt(hkey);
             const sm = new SymMaster("gcm1", hkey);
             this._encHeadData = await sm.EnBin(headData);
+            zeroize(hkey);
         } else {
             this._encHeadData = await am.Encrypt(headData);
         }
+        zeroize(headData);
 
         // wrap header
         const cfg = {};
@@ -432,6 +445,7 @@ export class Opsec {
         // check parameters, get header key
         const hm = new HashMaster(this._headAlgo);
         const [pwHash, hkey] = await hm.KDF(combinedPw, this._salt);
+        zeroize(combinedPw);
 
         // check password (constant time comparison)
         if (pwHash.length !== this._pwHash.length) throw new Error("Incorrect password");
@@ -444,7 +458,9 @@ export class Opsec {
         // decrypt header
         const sm = new SymMaster("gcm1", hkey);
         const headData = await sm.DeBin(this._encHeadData);
+        zeroize(hkey);
         this._unwrapEncHead(headData);
+        zeroize(headData);
     }
 
     /**
@@ -458,17 +474,19 @@ export class Opsec {
         if (this._headAlgo === "") throw new Error("Call view() first");
         const am = new AsymMaster(this._headAlgo);
         await am.Loadkey(null, myPri);
-        
+
         let headData;
         if (this._headAlgo === "rsa1" || this._headAlgo === "rsa2") {
             // RSA Hybrid
             const hkey = await am.Decrypt(this.MsgInfo);
             const sm = new SymMaster("gcm1", hkey);
             headData = await sm.DeBin(this._encHeadData);
+            zeroize(hkey);
         } else {
             headData = await am.Decrypt(this._encHeadData);
         }
         this._unwrapEncHead(headData);
+        zeroize(headData);
 
         // verify sign
         if (myPub === null && peerPub === null) return;
@@ -480,13 +498,60 @@ export class Opsec {
         const amVerify = new AsymMaster(this._headAlgo);
         await amVerify.Loadkey(peerPub, null);
         const signTgt = concat([
-            strToU8(this._headAlgo), 
-            myPub, 
-            strToU8(this.Smsg), 
+            strToU8(this._headAlgo),
+            myPub,
+            strToU8(this.Smsg),
             this.SmsgInfo
         ]);
-        
+
         const verified = await amVerify.Verify(signTgt, this._sign);
         if (!verified) throw new Error("Sign verification failed");
+    }
+}
+
+// Data Masker
+export class Masker {
+    static #instance = null; // singleton
+    static PRIME_CANDIDATES = [
+        15485863, 32452843, 86028121, 104395301,
+        179424673, 228017633, 236887691, 345098717,
+        413158511, 481230491, 563117203, 693240851,
+        715225741, 812349821, 882046271, 999999937
+    ];
+
+    constructor(poolSizeMb = 8) {
+        if (Masker.#instance) {
+            return Masker.#instance;
+        }
+        this._initialize(poolSizeMb);
+        Masker.#instance = this;
+    }
+
+    _initialize(poolSizeMb) {
+        this.POOL_SIZE = poolSizeMb * 1024 * 1024;
+        const chunks = [];
+        for (let i = 0; i < this.POOL_SIZE; i += 32768) chunks.push(Random(32768));
+        this.pool = concat(chunks);
+        this.prime = Masker.PRIME_CANDIDATES[Random(1)[0] % 16];
+    }
+
+    /**
+    * XOR Masking
+    * @param {Uint8Array} data
+    * @returns {Uint8Array}
+    */
+    XOR(data) {
+        const L = data.length;
+        if (L === 0) return data;
+        if (L > this.POOL_SIZE) throw new Error(`Data ${L} exceeds Pool ${this.POOL_SIZE}`);
+        const stride = Math.floor(this.POOL_SIZE / L);
+        const result = new Uint8Array(L);
+
+        for (let i = 0; i < L; i++) {
+            const jitter = (i * this.prime) % stride;
+            const idx = (i * stride) + jitter;
+            result[i] = data[i] ^ this.pool[idx];
+        }
+        return result;
     }
 }
