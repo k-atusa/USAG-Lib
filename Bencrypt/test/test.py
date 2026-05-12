@@ -14,6 +14,14 @@ print( base64.b64encode(Bencrypt.Random(16)).decode('ascii') )
 print( base64.b64encode(Bencrypt.SHA3256(data)).decode('ascii') ) # pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
 print( base64.b64encode(Bencrypt.SHA3512(data)).decode('ascii') ) # tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 
+# Masker
+print("testing Masker...")
+mA = Bencrypt.Masker()
+mB = Bencrypt.Masker()
+key = Bencrypt.Random(8753)
+print(mA.XOR(b"\x00\x00\x00\x00"))
+print(mB.XOR(mA.XOR(key)) == key)
+
 # HashMaster (pw_store, keygen)
 print("testing HashMaster...")
 hashm = ["sha3", "pbk2", "arg2"]

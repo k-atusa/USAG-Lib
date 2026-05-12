@@ -39,9 +39,6 @@ class Opsec:
     def View(data: bytes)
     def Decpw(pw: bytes, kf: bytes = b"")
     def Decpub(myPri: bytes, myPub: bytes | None = None, peerPub: bytes | None = None)
-
-class Masker:
-    def XOR(data: bytes) -> bytes
 ```
 
 #### javascript
@@ -74,10 +71,6 @@ class Opsec {
     function View(data)
     async function Decpw(pw, kf)
     async function Decpub(myPri, myPub = null, peerPub = null)
-}
-
-class Masker {
-    function XOR(data: Uint8Array): Uint8Array
 }
 ```
 
@@ -112,48 +105,38 @@ type Opsec struct {
     func Decpw(pw []byte, kf []byte) error
     func Decpub(myPri []byte, myPub []byte, peerPub []byte) error
 }
-
-GetMasker(poolSizeMb int) *Masker
-type Masker struct {
-    func XOR(data []byte) ([]byte, error)
-}
 ```
 
 #### java
 ```java
-public class Opsec {
-    public String Crc32(byte[] data)
-    public long PadLen(long size)
-    public PadFile(OutputStream f, long size) throws Exception
+class Opsec {
+    String Crc32(byte[] data)
+    long PadLen(long size)
+    PadFile(OutputStream f, long size) throws Exception
     
-    public byte[] EncodeInt(long data, int size)
-    public long DecodeInt(byte[] data)
-    public byte[] EncodeCfg(Map<String, byte[]> data) throws IOException
-    public Map<String, byte[]> DecodeCfg(byte[] data)
+    byte[] EncodeInt(long data, int size)
+    long DecodeInt(byte[] data)
+    byte[] EncodeCfg(Map<String, byte[]> data) throws IOException
+    Map<String, byte[]> DecodeCfg(byte[] data)
     
-    public String Msg;
-    public byte[] MsgInfo;
-    public String Smsg;
-    public byte[] SmsgInfo;
-    public String BodyAlgo;
-    public byte[] BodyKey;
-    public long BodySize;
-    public byte[] BodyInfo;
+    String Msg;
+    byte[] MsgInfo;
+    String Smsg;
+    byte[] SmsgInfo;
+    String BodyAlgo;
+    byte[] BodyKey;
+    long BodySize;
+    byte[] BodyInfo;
 
-    public void Reset()
-    public byte[] Read(InputStream ins, int cut) throws IOException
-    public void Write(OutputStream outs, byte[] head) throws IOException
+    void Reset()
+    byte[] Read(InputStream ins, int cut) throws IOException
+    void Write(OutputStream outs, byte[] head) throws IOException
 
-    public byte[] Encpw(String method, byte[] pw, byte[] kf) throws Exception
-    public byte[] Encpub(String method, byte[] peerPub, byte[] myPri) throws Exception
-    public void View(byte[] data)
-    public void Decpw(byte[] pw, byte[] kf) throws Exception
-    public void Decpub(byte[] myPri, byte[] myPub, byte[] peerPub) throws Exception
-
-    class Masker {
-        public Masker GetMasker()
-        public byte[] XOR(byte[] data)
-    }
+    byte[] Encpw(String method, byte[] pw, byte[] kf) throws Exception
+    byte[] Encpub(String method, byte[] peerPub, byte[] myPri) throws Exception
+    void View(byte[] data)
+    void Decpw(byte[] pw, byte[] kf) throws Exception
+    void Decpub(byte[] myPri, byte[] myPub, byte[] peerPub) throws Exception
 }
 ```
 

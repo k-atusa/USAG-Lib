@@ -227,6 +227,54 @@ export function SHA3512(data) {
     return new Uint8Array(deps.sha3512.create().update(data).arrayBuffer());
 }
 
+// ========== Data Masker ==========
+export class Masker {
+    static #instance = null; // singleton
+    static PRIME_CANDIDATES = [
+        15485863, 32452843, 86028121, 104395301,
+        179424673, 228017633, 236887691, 345098717,
+        413158511, 481230491, 563117203, 693240851,
+        715225741, 812349821, 882046271, 999999937
+    ];
+
+    constructor(poolSizeMb = 8) {
+        if (Masker.#instance) {
+            return Masker.#instance;
+        }
+        this._initialize(poolSizeMb);
+        Masker.#instance = this;
+    }
+
+    _initialize(poolSizeMb) {
+        this.POOL_SIZE = poolSizeMb * 1048576;
+        this.pool = new Uint8Array(this.POOL_SIZE);
+        for (let i = 0; i < this.POOL_SIZE; i += 32768) {
+            this.pool.set(Random(32768), i);
+        }
+        this.prime = Masker.PRIME_CANDIDATES[Random(1)[0] % 16];
+    }
+
+    /**
+    * XOR Masking
+    * @param {Uint8Array} data
+    * @returns {Uint8Array}
+    */
+    XOR(data) {
+        const L = data.length;
+        if (L === 0) return data;
+        if (L > this.POOL_SIZE) throw new Error(`Data ${L} exceeds Pool ${this.POOL_SIZE}`);
+        const stride = Math.floor(this.POOL_SIZE / L);
+        const result = new Uint8Array(L);
+
+        for (let i = 0; i < L; i++) {
+            const jitter = (i * this.prime) % stride;
+            const idx = (i * stride) + jitter;
+            result[i] = data[i] ^ this.pool[idx];
+        }
+        return result;
+    }
+}
+
 // ========== Hash Function Master ==========
 export class HashMaster {
     /**
@@ -435,7 +483,8 @@ export class SymMaster {
      * @param {Uint8Array} key - 44 bytes (12B IV + 32B Key)
      */
     constructor(algo, key) {
-        this.key = toU8(key);
+        this.mask = new Masker();
+        this.key = this.mask.XOR(toU8(key)); // saved as XOR masked
         if (algo === "gcm1" || algo === "gcmx1") {
             this.algo = algo;
             this.worker = new AES1();
@@ -477,12 +526,16 @@ export class SymMaster {
      */
     async EnBin(data) {
         const d = toU8(data);
+        const key = this.mask.XOR(this.key);
         if (this.algo === "gcm1") {
-            return await this.worker.enAESGCM(this.key, d);
+            const res = await this.worker.enAESGCM(key, d);
+            zeroize(key);
+            return res;
         } else if (this.algo === "gcmx1") {
             const reader = new TestReader(d);
             const writer = new TestWriter();
-            await this.worker.enAESGCMx(this.key, reader, d.length, writer, 1048576);
+            await this.worker.enAESGCMx(key, reader, d.length, writer, 1048576);
+            zeroize(key);
             return writer.getValue();
         }
     }
@@ -494,12 +547,16 @@ export class SymMaster {
      */
     async DeBin(data) {
         const d = toU8(data);
+        const key = this.mask.XOR(this.key);
         if (this.algo === "gcm1") {
-            return await this.worker.deAESGCM(this.key, d);
+            const res = await this.worker.deAESGCM(key, d);
+            zeroize(key);
+            return res;
         } else if (this.algo === "gcmx1") {
             const reader = new TestReader(d);
             const writer = new TestWriter();
-            await this.worker.deAESGCMx(this.key, reader, d.length, writer, 1048576);
+            await this.worker.deAESGCMx(key, reader, d.length, writer, 1048576);
+            zeroize(key);
             return writer.getValue();
         }
     }
@@ -511,13 +568,15 @@ export class SymMaster {
      * @param {Object} dst - Must have async write(chunk)
      */
     async EnFile(src, size, dst) {
+        const key = this.mask.XOR(this.key);
         if (this.algo === "gcm1") {
             const data = await src.read(size);
-            const enc = await this.worker.enAESGCM(this.key, data);
+            const enc = await this.worker.enAESGCM(key, data);
             await dst.write(enc);
         } else if (this.algo === "gcmx1") {
-            await this.worker.enAESGCMx(this.key, src, size, dst, 1048576);
+            await this.worker.enAESGCMx(key, src, size, dst, 1048576);
         }
+        zeroize(key);
     }
 
     /**
@@ -527,13 +586,15 @@ export class SymMaster {
      * @param {Object} dst - Must have async write(chunk)
      */
     async DeFile(src, size, dst) {
+        const key = this.mask.XOR(this.key);
         if (this.algo === "gcm1") {
             const data = await src.read(size);
-            const dec = await this.worker.deAESGCM(this.key, data);
+            const dec = await this.worker.deAESGCM(key, data);
             await dst.write(dec);
         } else if (this.algo === "gcmx1") {
-            await this.worker.deAESGCMx(this.key, src, size, dst, 1048576);
+            await this.worker.deAESGCMx(key, src, size, dst, 1048576);
         }
+        zeroize(key);
     }
 }
 
@@ -1236,6 +1297,8 @@ class PQC1 {
         this.priKEM = null; // 3168 bytes
         this.pubDSA = null; // 2592 bytes
         this.priDSA = null; // 4896 bytes
+
+        this.mask = new Masker();
     }
 
     /**
@@ -1286,6 +1349,9 @@ class PQC1 {
         priB.set(this.priKEM, 113);
         priB.set(this.priDSA, 3281);
 
+        // mask PQC privtes
+        this.priKEM = this.mask.XOR(this.priKEM);
+        this.priDSA = this.mask.XOR(this.priDSA);
         return [pubB, priB];
     }
 
@@ -1308,8 +1374,8 @@ class PQC1 {
             if (p.length !== 8177) throw new Error("Invalid PQC1 private key length");
             this.priX = p.slice(0, 56);
             this.priEd = p.slice(56, 113);
-            this.priKEM = p.slice(113, 3281);
-            this.priDSA = p.slice(3281, 8177);
+            this.priKEM = this.mask.XOR(p.slice(113, 3281));
+            this.priDSA = this.mask.XOR(p.slice(3281, 8177));
         }
     }
 
@@ -1389,7 +1455,9 @@ class PQC1 {
             ssvECC = deps.noble.x448.getSharedSecret(this.priX, tempPub);
         }
 
-        const ssvKEM = deps.ml_kem1024.decapsulate(kemEnc, this.priKEM);
+        const priKEMt = this.mask.XOR(this.priKEM);
+        const ssvKEM = deps.ml_kem1024.decapsulate(kemEnc, priKEMt);
+        zeroize(priKEMt);
 
         // 3. Hybrid KDF & Decryption
         const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
@@ -1425,7 +1493,9 @@ class PQC1 {
         }
 
         // ML-DSA-87 (4627B)
-        const mlSgn = deps.ml_dsa87.sign(d, this.priDSA);
+        const priDSAt = this.mask.XOR(this.priDSA);
+        const mlSgn = deps.ml_dsa87.sign(d, priDSAt);
+        zeroize(priDSAt);
 
         // Join: 114 + 4627 = 4741
         const res = new Uint8Array(edSgn.length + mlSgn.length);

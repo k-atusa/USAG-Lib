@@ -44,6 +44,48 @@ def mkiv(g: bytes, c: int) -> bytearray:
         g[4 + i] ^= c[i]
     return g
 
+# ========== Data Masker ==========
+class Masker:
+    _instance = None # singleton
+    _PRIME_CANDIDATES = [
+        15485863, 32452843, 86028121, 104395301,
+        179424673, 228017633, 236887691, 345098717,
+        413158511, 481230491, 563117203, 693240851,
+        715225741, 812349821, 882046271, 999999937
+    ]
+
+    def __new__(cls, pool_size_mb: int = 8):
+        if cls._instance is None:
+            cls._instance = super(Masker, cls).__new__(cls)
+            cls._instance._initialize(pool_size_mb)
+        return cls._instance
+    
+    def __del__(self):
+        if hasattr(self, 'pool') and isinstance(self.pool, bytearray):
+            for i in range(len(self.pool)):
+                self.pool[i] = 0
+            del self.pool
+
+    def _initialize(self, pool_size_mb: int):
+        self.POOL_SIZE = pool_size_mb * 1024 * 1024
+        self.pool = bytearray(Random(self.POOL_SIZE))
+        self.prime = self._PRIME_CANDIDATES[secrets.randbelow(len(self._PRIME_CANDIDATES))]
+
+    def XOR(self, data: bytes) -> bytes:
+        L = len(data)
+        if L == 0:
+            return data
+        if L > self.POOL_SIZE:
+            raise ValueError(f"Data {L} exceeds Pool {self.POOL_SIZE}")
+        
+        stride = self.POOL_SIZE // L
+        result = bytearray(L)
+        for i in range(L):
+            jitter = (i * self.prime) % stride
+            idx = (i * stride) + jitter
+            result[i] = data[i] ^ self.pool[idx]
+        return bytes(result)
+
 # ========== Hash Function Master ==========
 class HashMaster:
     def __init__(self, algo: str, hashSize: int = 32, keySize: int = 44):
@@ -98,9 +140,12 @@ class SymMaster:
         if self.algo == 'gcm1' or self.algo == 'gcmx1':
             if len(key) != 44:
                 raise ValueError("Key length must be 44 bytes (12B IV + 32B Key)")
-            self.key, self.worker = key, AES1()
+            self.mask = Masker()
+            self.key, self.worker = self.mask.XOR(key), AES1() # saved as XOR masked
 
     def __del__(self):
+        if hasattr(self, 'mask'):
+            del self.mask
         if hasattr(self, 'key'):
             del self.key
 
@@ -119,33 +164,33 @@ class SymMaster:
 
     def EnBin(self, data: bytes) -> bytes:
         if self.algo == "gcm1":
-            return self.worker.enAESGCM(self.key, data)
+            return self.worker.enAESGCM(self.mask.XOR(self.key), data)
         elif self.algo == "gcmx1":
             wr = io.BytesIO()
-            self.worker.enAESGCMx(self.key, io.BytesIO(data), len(data), wr)
+            self.worker.enAESGCMx(self.mask.XOR(self.key), io.BytesIO(data), len(data), wr)
             return wr.getvalue()
 
     def DeBin(self, data: bytes) -> bytes:
         if self.algo == "gcm1":
-            return self.worker.deAESGCM(self.key, data)
+            return self.worker.deAESGCM(self.mask.XOR(self.key), data)
         elif self.algo == "gcmx1":
             wr = io.BytesIO()
-            self.worker.deAESGCMx(self.key, io.BytesIO(data), len(data), wr)
+            self.worker.deAESGCMx(self.mask.XOR(self.key), io.BytesIO(data), len(data), wr)
             return wr.getvalue()
 
     def EnFile(self, src: io.IOBase, size: int, dst: io.IOBase):
         if self.algo == "gcm1":
-            data = self.worker.enAESGCM(self.key, src.read(size))
+            data = self.worker.enAESGCM(self.mask.XOR(self.key), src.read(size))
             dst.write(data)
         elif self.algo == "gcmx1":
-            self.worker.enAESGCMx(self.key, src, size, dst)
+            self.worker.enAESGCMx(self.mask.XOR(self.key), src, size, dst)
 
     def DeFile(self, src: io.IOBase, size: int, dst: io.IOBase):
         if self.algo == "gcm1":
-            data = self.worker.deAESGCM(self.key, src.read(size))
+            data = self.worker.deAESGCM(self.mask.XOR(self.key), src.read(size))
             dst.write(data)
         elif self.algo == "gcmx1":
-            self.worker.deAESGCMx(self.key, src, size, dst)
+            self.worker.deAESGCMx(self.mask.XOR(self.key), src, size, dst)
 
 # ========== AES Encryption ==========
 class AES1:
@@ -406,6 +451,9 @@ class PQC1:
         self.pubDSA: Optional[bytes] = None
         self.priDSA: Optional[bytes] = None
 
+        # save PQC bytes as XOR masked
+        self.mask = Masker()
+
     def __del__(self):
         self.pubX = None
         self.priX = None
@@ -416,6 +464,8 @@ class PQC1:
         self.priKEM = None
         self.pubDSA = None
         self.priDSA = None
+
+        self.mask = None
 
     def genkey(self) -> Tuple[bytes, bytes]: # (public, private)
         # 1. Curve448 key generation
@@ -437,6 +487,7 @@ class PQC1:
         # 3. join keys (Public: 4273B, Private: 8177B)
         pubB = pub0 + pub1 + self.pubKEM + self.pubDSA
         priB = pri0 + pri1 + self.priKEM + self.priDSA
+        self.priKEM, self.priDSA = self.mask.XOR(self.priKEM), self.mask.XOR(self.priDSA) # save as XOR masked
         return (pubB, priB)
 
     def loadkey(self, public: bytes|None, private: bytes|None):
@@ -451,8 +502,8 @@ class PQC1:
             if len(private) != 8177: raise ValueError("Invalid PQC1 private key length")
             self.priX = x448.X448PrivateKey.from_private_bytes(private[:56])
             self.priEd = ed448.Ed448PrivateKey.from_private_bytes(private[56:113])
-            self.priKEM = private[113:3281]  # 113 + 3168
-            self.priDSA = private[3281:8177] # 3281 + 4896
+            self.priKEM = self.mask.XOR(private[113:3281])  # 113 + 3168
+            self.priDSA = self.mask.XOR(private[3281:8177]) # 3281 + 4896
 
     def encrypt(self, data: bytes) -> bytes:
         # 1. Ephemeral X448 tempkey generation
@@ -483,7 +534,7 @@ class PQC1:
         # 2. Shared Secret Value
         tempXKey = x448.X448PublicKey.from_public_bytes(tempPub)
         ssvECC = self.priX.exchange(tempXKey)
-        ssvKEM = mlkem_dec(self.priKEM, kemEnc)
+        ssvKEM = mlkem_dec(self.mask.XOR(self.priKEM), kemEnc)
 
         # 3. Hybrid KDF & Decryption
         gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 44)
@@ -495,7 +546,7 @@ class PQC1:
     def sign(self, data: bytes) -> bytes:
         # ECC-Ed448 (114B) + ML-DSA-87 (4627B)
         edSgn = self.priEd.sign(data)
-        mlSgn = mldsa_sign(self.priDSA, data)
+        mlSgn = mldsa_sign(self.mask.XOR(self.priDSA), data)
         return edSgn + mlSgn
 
     def verify(self, data: bytes, signature: bytes) -> bool:

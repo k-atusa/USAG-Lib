@@ -162,16 +162,5 @@ func TestMain(t *testing.T) {
 			formatResult(b4), formatResult(b5), formatResult(b6), formatResult(b7))
 	}
 
-	// 5. Masker Test
-	fmt.Println("\n--- Masker Test ---")
-	mA := GetMasker(8)
-	mB := GetMasker(8)
-	key := Bencrypt.Random(8753)
-	maskedZero, _ := mA.XOR([]byte{0, 0, 0, 0})
-	fmt.Printf("%x\n", maskedZero)
-	maskedKey, _ := mA.XOR(key)
-	restoredKey, _ := mB.XOR(maskedKey)
-	fmt.Println(bytes.Equal(restoredKey, key))
-
 	fmt.Println("\n=== All tests completed ===")
 }

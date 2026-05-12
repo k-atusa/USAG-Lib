@@ -47,6 +47,21 @@ public class test {
             System.out.println(Base64.getEncoder().encodeToString(Bencrypt.SHA3256(data0))); // pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
             System.out.println(Base64.getEncoder().encodeToString(Bencrypt.SHA3512(data0))); // tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 
+            // Masker Test
+            System.out.println("testing Masker...");
+            Bencrypt.Masker mA = Bencrypt.Masker.GetMasker();
+            Bencrypt.Masker mB = Bencrypt.Masker.GetMasker();
+            Bencrypt rg = new Bencrypt();
+            byte[] testkey = rg.Random(8753);
+            byte[] maskedZero = mA.XOR(new byte[] { 0, 0, 0, 0 });
+            StringBuilder hexZero = new StringBuilder();
+            for (byte b : maskedZero) {
+                hexZero.append(String.format("%02x", b));
+            }
+            System.out.println(hexZero.toString());
+            byte[] restoredKey = mB.XOR(mA.XOR(testkey));
+            System.out.println(Arrays.equals(restoredKey, testkey) ? "True" : "False");
+
             // HashMaster (pw_store, keygen)
             System.out.println("testing HashMaster...");
             String[] hashm = {"sha3", "pbk2", "arg2"};

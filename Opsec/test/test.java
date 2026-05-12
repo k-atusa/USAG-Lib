@@ -124,21 +124,6 @@ public class test {
                         b4 ? "OK" : "FAIL", b5 ? "OK" : "FAIL", b6 ? "OK" : "FAIL", b7 ? "OK" : "FAIL");
             }
 
-            // 5. Masker Test
-            System.out.println("\n--- Masker Test ---");
-            Opsec.Masker mA = Opsec.Masker.GetMasker();
-            Opsec.Masker mB = Opsec.Masker.GetMasker();
-            Bencrypt rg = new Bencrypt();
-            byte[] key = rg.Random(8753);
-            byte[] maskedZero = mA.XOR(new byte[] { 0, 0, 0, 0 });
-            StringBuilder hexZero = new StringBuilder();
-            for (byte b : maskedZero) {
-                hexZero.append(String.format("%02x", b));
-            }
-            System.out.println(hexZero.toString());
-            byte[] restoredKey = mB.XOR(mA.XOR(key));
-            System.out.println(Arrays.equals(restoredKey, key) ? "True" : "False");
-
         } catch (Exception e) {
             e.printStackTrace();
         }

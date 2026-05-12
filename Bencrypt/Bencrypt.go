@@ -86,6 +86,64 @@ func Genkey(data []byte, lbl string, size int) ([]byte, error) {
 	return key[:size], nil
 }
 
+// ========== Data Masker ==========
+var (
+	primeCandidates = [16]int64{
+		15485863, 32452843, 86028121, 104395301,
+		179424673, 228017633, 236887691, 345098717,
+		413158511, 481230491, 563117203, 693240851,
+		715225741, 812349821, 882046271, 999999937,
+	}
+	instance *Masker
+	once     sync.Once
+	initErr  error
+)
+
+type Masker struct {
+	poolSize int64
+	pool     []byte
+	prime    int64
+}
+
+func (m *Masker) init(poolSizeMb int) {
+	m.poolSize = int64(poolSizeMb * 1048576)
+	m.pool = Random(poolSizeMb * 1048576)
+	m.prime = primeCandidates[Random(1)[0]%16]
+}
+
+// Get singleton instance
+func GetMasker(poolSizeMb int) *Masker {
+	if poolSizeMb <= 0 {
+		poolSizeMb = 8
+	}
+	once.Do(func() {
+		instance = new(Masker)
+		instance.init(poolSizeMb)
+	})
+	return instance
+}
+
+// XOR Masking
+func (m *Masker) XOR(data []byte) ([]byte, error) {
+	L := int64(len(data))
+	if L == 0 {
+		return data, nil
+	}
+	if L > m.poolSize {
+		return nil, fmt.Errorf("data length %d exceeds pool size %d", L, m.poolSize)
+	}
+	stride := m.poolSize / L
+	result := make([]byte, L)
+
+	var i int64
+	for i = 0; i < L; i++ {
+		jitter := (i * m.prime) % stride
+		idx := int((i * stride) + jitter)
+		result[i] = data[i] ^ m.pool[idx]
+	}
+	return result, nil
+}
+
 // ========== Hash Function Master ==========
 type HashMaster struct {
 	algo     string
@@ -223,18 +281,23 @@ func Argon2Verify(hashed string, pw []byte) bool {
 type SymMaster struct {
 	Algo string
 	Key  []byte
+	mask *Masker
 	aes  *AES1
 }
 
 func (sm *SymMaster) Init(algo string, key []byte) error {
+	sm.mask = GetMasker(-1)
 	switch algo {
 	case "gcm1", "gcmx1":
 		if len(key) != 44 {
 			return errors.New("key length must be 44 bytes")
 		}
 		sm.Algo = algo
-		sm.Key = make([]byte, len(key))
-		copy(sm.Key, key)
+		var err error
+		sm.Key, err = sm.mask.XOR(key) // save key as XOR masked
+		if err != nil {
+			return err
+		}
 		sm.aes = new(AES1)
 	default:
 		return errors.New("unsupported algorithm: " + algo)
@@ -263,13 +326,20 @@ func (sm *SymMaster) Processed() int64 {
 }
 
 func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
+	// unmask key
+	key, err := sm.mask.XOR(sm.Key)
+	defer clear(key)
+	if err != nil {
+		return nil, err
+	}
+
 	switch sm.Algo {
 	case "gcm1":
-		return sm.aes.EnAESGCM(sm.Key, data)
+		return sm.aes.EnAESGCM(key, data)
 	case "gcmx1":
 		in := bytes.NewReader(data)
 		out := new(bytes.Buffer)
-		err := sm.aes.EnAESGCMx(sm.Key, in, int64(len(data)), out, 1048576)
+		err := sm.aes.EnAESGCMx(key, in, int64(len(data)), out, 1048576)
 		if err != nil {
 			return nil, err
 		}
@@ -280,13 +350,20 @@ func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
 }
 
 func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
+	// unmask key
+	key, err := sm.mask.XOR(sm.Key)
+	defer clear(key)
+	if err != nil {
+		return nil, err
+	}
+
 	switch sm.Algo {
 	case "gcm1":
-		return sm.aes.DeAESGCM(sm.Key, data)
+		return sm.aes.DeAESGCM(key, data)
 	case "gcmx1":
 		in := bytes.NewReader(data)
 		out := new(bytes.Buffer)
-		err := sm.aes.DeAESGCMx(sm.Key, in, int64(len(data)), out, 1048576)
+		err := sm.aes.DeAESGCMx(key, in, int64(len(data)), out, 1048576)
 		if err != nil {
 			return nil, err
 		}
@@ -297,39 +374,53 @@ func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
 }
 
 func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
+	// unmask key
+	key, err := sm.mask.XOR(sm.Key)
+	defer clear(key)
+	if err != nil {
+		return err
+	}
+
 	switch sm.Algo {
 	case "gcm1":
 		data, err := io.ReadAll(io.LimitReader(src, size))
 		if err != nil {
 			return err
 		}
-		enc, err := sm.aes.EnAESGCM(sm.Key, data)
+		enc, err := sm.aes.EnAESGCM(key, data)
 		if err != nil {
 			return err
 		}
 		_, err = dst.Write(enc)
 		return err
 	case "gcmx1":
-		return sm.aes.EnAESGCMx(sm.Key, src, size, dst, 1048576)
+		return sm.aes.EnAESGCMx(key, src, size, dst, 1048576)
 	}
 	return errors.New("algorithm not set")
 }
 
 func (sm *SymMaster) DeFile(src io.Reader, size int64, dst io.Writer) error {
+	// unmask key
+	key, err := sm.mask.XOR(sm.Key)
+	defer clear(key)
+	if err != nil {
+		return err
+	}
+
 	switch sm.Algo {
 	case "gcm1":
 		data, err := io.ReadAll(io.LimitReader(src, size))
 		if err != nil {
 			return err
 		}
-		dec, err := sm.aes.DeAESGCM(sm.Key, data)
+		dec, err := sm.aes.DeAESGCM(key, data)
 		if err != nil {
 			return err
 		}
 		_, err = dst.Write(dec)
 		return err
 	case "gcmx1":
-		return sm.aes.DeAESGCMx(sm.Key, src, size, dst, 1048576)
+		return sm.aes.DeAESGCMx(key, src, size, dst, 1048576)
 	}
 	return errors.New("algorithm not set")
 }
@@ -1006,9 +1097,14 @@ type PQC1 struct {
 	PrivKEM []byte
 	PubDSA  []byte
 	PrivDSA []byte
+
+	mask *Masker
 }
 
 func (p *PQC1) Genkey() ([]byte, []byte, error) {
+	if p.mask == nil {
+		p.mask = GetMasker(-1)
+	}
 	var wg sync.WaitGroup
 	wg.Add(4)
 
@@ -1117,10 +1213,23 @@ func (p *PQC1) Genkey() ([]byte, []byte, error) {
 	priB = append(priB, p.PrivKEM...)
 	priB = append(priB, p.PrivDSA...)
 
+	// 4. Masking
+	p.PrivKEM, err1 = p.mask.XOR(p.PrivKEM)
+	p.PrivDSA, err2 = p.mask.XOR(p.PrivDSA)
+	if err1 != nil {
+		return nil, nil, err1
+	}
+	if err2 != nil {
+		return nil, nil, err2
+	}
 	return pubB, priB, nil
 }
 
 func (p *PQC1) Loadkey(public []byte, private []byte) error {
+	if p.mask == nil {
+		p.mask = GetMasker(-1)
+	}
+
 	if public != nil {
 		if len(public) != 4273 {
 			return errors.New("invalid PQC1 public key length")
@@ -1144,19 +1253,25 @@ func (p *PQC1) Loadkey(public []byte, private []byte) error {
 		}
 		p.PrivX = new(x448.Key)
 		copy(p.PrivX[:], private[:56])
-
 		p.PrivEd = ed448.NewKeyFromSeed(private[56:113])
 
-		p.PrivKEM = make([]byte, 3168)
-		copy(p.PrivKEM, private[113:3281])
-
-		p.PrivDSA = make([]byte, 4896)
-		copy(p.PrivDSA, private[3281:8177])
+		var err error
+		p.PrivKEM, err = p.mask.XOR(private[113:3281])
+		if err != nil {
+			return err
+		}
+		p.PrivDSA, err = p.mask.XOR(private[3281:8177])
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
+	if p.mask == nil {
+		p.mask = GetMasker(-1)
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -1239,6 +1354,9 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 }
 
 func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
+	if p.mask == nil {
+		p.mask = GetMasker(-1)
+	}
 	if len(data) < 56+1568+16 {
 		return nil, errors.New("data too short")
 	}
@@ -1281,7 +1399,15 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 				err2 = e.(error) // panic to error
 			}
 		}()
-		kemPriv, err := mlkem1024.Scheme().UnmarshalBinaryPrivateKey(p.PrivKEM)
+
+		privKEM, err := p.mask.XOR(p.PrivKEM)
+		defer clear(privKEM)
+		if err != nil {
+			err2 = err
+			return
+		}
+
+		kemPriv, err := mlkem1024.Scheme().UnmarshalBinaryPrivateKey(privKEM)
 		if err != nil {
 			err2 = err
 			return
@@ -1315,6 +1441,9 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 }
 
 func (p *PQC1) Sign(data []byte) ([]byte, error) {
+	if p.mask == nil {
+		p.mask = GetMasker(-1)
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -1341,7 +1470,15 @@ func (p *PQC1) Sign(data []byte) ([]byte, error) {
 				err2 = e.(error) // panic to error
 			}
 		}()
-		dsaPriv, err := mldsa87.Scheme().UnmarshalBinaryPrivateKey(p.PrivDSA)
+
+		privDSA, err := p.mask.XOR(p.PrivDSA)
+		defer clear(privDSA)
+		if err != nil {
+			err2 = err
+			return
+		}
+
+		dsaPriv, err := mldsa87.Scheme().UnmarshalBinaryPrivateKey(privDSA)
 		if err != nil {
 			err2 = err
 			return
@@ -1366,6 +1503,9 @@ func (p *PQC1) Sign(data []byte) ([]byte, error) {
 }
 
 func (p *PQC1) Verify(data []byte, signature []byte) bool {
+	if p.mask == nil {
+		p.mask = GetMasker(-1)
+	}
 	if len(signature) != 4741 {
 		return false
 	}

@@ -1,8 +1,10 @@
 ## Bencrypt
 
 현재 표준 권장 알고리즘보다 더 높은 보안 여유를 지원하는 암호화 모듈입니다.
+메모리 마스킹으로 유휴시간 동안의 평문 키 노출을 줄일 수 있습니다.
 
 Encryption module that supports higher security margin than currently recommended standard algorithms.
+You can reduce plaintext key exposure during idle time through memory masking.
 
 options
 - Hash: `sha3, pbk2, arg2`
@@ -32,6 +34,9 @@ class AsymMaster:
     def Decrypt(data: bytes) -> bytes
     def Sign(data: bytes) -> bytes
     def Verify(data: bytes, signature: bytes) -> bool
+
+class Masker:
+    def XOR(data: bytes) -> bytes
 
 def Random(size: int) -> bytes
 def SHA3256(data: bytes) -> bytes
@@ -63,6 +68,10 @@ class AsymMaster {
     async function Decrypt(data): Promise<Uint8Array>
     async function Sign(data): Promise<Uint8Array>
     async function Verify(data, signature): Promise<boolean>
+}
+
+class Masker {
+    function XOR(data: Uint8Array): Uint8Array
 }
 
 function Random(size: number): Uint8Array
@@ -97,6 +106,11 @@ struct AsymMaster {
     func Verify(data []byte, signature []byte) bool
 }
 
+GetMasker(poolSizeMb int) *Masker
+type Masker struct {
+    func XOR(data []byte) ([]byte, error)
+}
+
 func Random(size int) []byte
 func SHA3256(data []byte) []byte
 func SHA3512(data []byte) []byte
@@ -129,6 +143,11 @@ class Bencrypt {
         byte[] Decrypt(byte[] data)
         byte[] Sign(byte[] data)
         boolean Verify(byte[] data, byte[] signature)
+    }
+
+    static class Masker {
+        Masker GetMasker()
+        byte[] XOR(byte[] data)
     }
 
     // Basic Functions

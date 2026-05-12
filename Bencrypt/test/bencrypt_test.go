@@ -36,6 +36,17 @@ func TestMain(m *testing.M) {
 	fmt.Println(base64.StdEncoding.EncodeToString(SHA3256(data))) // pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
 	fmt.Println(base64.StdEncoding.EncodeToString(SHA3512(data))) // tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 
+	// ========== Masker test ==========
+	fmt.Println("testing Masker...")
+	mA := GetMasker(8)
+	mB := GetMasker(8)
+	testkey := Random(8753)
+	maskedZero, _ := mA.XOR([]byte{0, 0, 0, 0})
+	fmt.Printf("%x\n", maskedZero)
+	maskedKey, _ := mA.XOR(testkey)
+	restoredKey, _ := mB.XOR(maskedKey)
+	fmt.Println(bytes.Equal(restoredKey, testkey))
+
 	// ========== HashMaster test ==========
 	fmt.Println("testing HashMaster...")
 	hashm := []string{"sha3", "pbk2", "arg2"}

@@ -37,7 +37,7 @@
     <script type="module">
         import {
             TestReader, TestWriter, Random, SHA3256, SHA3512, pbkdf2, argon2Hash, argon2Verify, genkey, 
-            HashMaster, SymMaster, AsymMaster
+            Masker, HashMaster, SymMaster, AsymMaster
         } from '../Bencrypt.js';
         
         window.Bencrypt = {
@@ -50,6 +50,7 @@
             "argon2Hash": argon2Hash,
             "argon2Verify": argon2Verify,
             "genkey": genkey,
+            "Masker": Masker,
             "HashMaster": HashMaster,
             "SymMaster": SymMaster,
             "AsymMaster": AsymMaster
@@ -128,7 +129,17 @@
                 log(toBase64(window.Bencrypt.SHA3256(data))); // pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
                 log(toBase64(window.Bencrypt.SHA3512(data))); // tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 
-                // --- 2. HashMaster (pw_store, keygen) ---
+                // --- 2. Masker Test ---
+                log("\ntesting Masker...");
+                const mA = new window.Bencrypt.Masker();
+                const mB = new window.Bencrypt.Masker();
+                const keyToMask = window.Bencrypt.Random(8753);
+                const maskedZero = mA.XOR(new Uint8Array([0, 0, 0, 0]));
+                log(Array.from(maskedZero).map(b => b.toString(16).padStart(2, '0')).join(''));
+                const isReversible = areEqual(mB.XOR(mA.XOR(keyToMask)), keyToMask);
+                log(printPyBool(isReversible));
+
+                // --- 3. HashMaster (pw_store, keygen) ---
                 log("\ntesting HashMaster...");
                 const hashm = ["sha3", "pbk2", "arg2"];
                 const pw = new TextEncoder().encode("ABCDABCDABCDABCD");
@@ -143,7 +154,7 @@
                     pos += 1;
                 }
 
-                // --- 3. SymMaster (enbin, enfile) ---
+                // --- 4. SymMaster (enbin, enfile) ---
                 log("\ntesting SymMaster...");
                 const symm = ["gcm1", "gcmx1"];
                 const key = new TextEncoder().encode("0".repeat(44));
@@ -181,7 +192,7 @@
                     log(printPyBool(areEqual(bigdata, twBig2.getValue())));
                 }
 
-                // --- 4. AsymMaster (pubkey, prikey, enc, sign) ---
+                // --- 5. AsymMaster (pubkey, prikey, enc, sign) ---
                 log("\ntesting AsymMaster...");
                 const asymm = ["rsa1", "rsa2", "ecc1", "pqc1"];
                 const plainAsym = new TextEncoder().encode("Hello, world!");
