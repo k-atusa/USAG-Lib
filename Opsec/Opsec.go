@@ -425,9 +425,9 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 
 	// Combine pw + kf
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
-	defer clear(combinedPw)
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
+	defer clear(combinedPw)
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
@@ -489,11 +489,11 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 		}
 
 		signTgt := make([]byte, 0)
-		defer clear(signTgt)
 		signTgt = append(signTgt, []byte(method)...)
 		signTgt = append(signTgt, peerPub...)
 		signTgt = append(signTgt, []byte(o.Smsg)...)
 		signTgt = append(signTgt, o.SmsgInfo...)
+		defer clear(signTgt)
 
 		var err error
 		o.sign, err = amSign.Sign(signTgt)
@@ -585,9 +585,9 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	}
 
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
-	defer clear(combinedPw)
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
+	defer clear(combinedPw)
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)

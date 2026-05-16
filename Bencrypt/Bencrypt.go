@@ -175,16 +175,16 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 	}
 	var lblStore, lblKeygen string
 	var master []byte
-	defer clear(master)
+	defer func() { clear(master) }()
 
 	// get master secret
 	switch hm.algo {
 	case "sha3":
 		lblStore, lblKeygen = "PWHASH_SHA3", "KEYGEN_SHA3"
 		data := make([]byte, 0, len(salt)+len(pw))
-		defer clear(data)
 		data = append(data, salt...)
 		data = append(data, pw...)
+		defer clear(data)
 		master = SHA3512(data)
 	case "pbk2":
 		lblStore, lblKeygen = "PWHASH_PBK2", "KEYGEN_PBK2"
@@ -999,7 +999,7 @@ func (e *ECC1) Loadkey(public []byte, private []byte) error {
 func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 	// 1. Generate temp ephemeral key
 	var tempPub, tempPriv x448.Key
-	defer clear(tempPriv[:])
+	defer func() { clear(tempPriv[:]) }()
 	if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
 		return nil, err
 	}
@@ -1007,7 +1007,7 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	defer clear(shared[:])
+	defer func() { clear(shared[:]) }()
 	ok := x448.Shared(&shared, &tempPriv, e.PubX)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed (bad public key)")
@@ -1050,7 +1050,7 @@ func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	defer clear(shared[:])
+	defer func() { clear(shared[:]) }()
 	ok := x448.Shared(&shared, e.PrivX, &tempPub)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed")
@@ -1279,8 +1279,8 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	var err1, err2 error
 	var tempPub, ssvECC x448.Key
 	var kemEnc, ssvKEM []byte
-	defer clear(ssvECC[:])
-	defer clear(ssvKEM)
+	defer func() { clear(ssvECC[:]) }()
+	defer func() { clear(ssvKEM) }()
 
 	// 1. Ephemeral X448 tempkey generation & ECDH
 	go func() {
@@ -1329,9 +1329,9 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 
 	// 3. Hybrid KDF & Encryption
 	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
-	defer clear(sharedSecret)
 	sharedSecret = append(sharedSecret, ssvECC[:]...)
 	sharedSecret = append(sharedSecret, ssvKEM...)
+	defer clear(sharedSecret)
 
 	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
 	defer clear(gcmKey)
@@ -1373,8 +1373,8 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	var err1, err2 error
 	var ssvECC x448.Key
 	var ssvKEM []byte
-	defer clear(ssvECC[:])
-	defer clear(ssvKEM)
+	defer func() { clear(ssvECC[:]) }()
+	defer func() { clear(ssvKEM) }()
 
 	// 2-1. Shared Secret Value (ECC)
 	go func() {
@@ -1426,9 +1426,9 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 
 	// 3. Hybrid KDF & Decryption
 	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
-	defer clear(sharedSecret)
 	sharedSecret = append(sharedSecret, ssvECC[:]...)
 	sharedSecret = append(sharedSecret, ssvKEM...)
+	defer clear(sharedSecret)
 
 	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
 	defer clear(gcmKey)
