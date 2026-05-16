@@ -159,6 +159,12 @@ class Bencrypt {
 
 ## Usage
 
+#### Memory Masker
+
+- The purpose of masking is to reduce the attack surface where critical memory is exposed to swap
+- Mask long-lived byte arrays in memory
+- Using plaintext for short-lived variables like local variables with wiping is allowed
+
 #### Hash Functions
 
 - Used for data validation and key derivation

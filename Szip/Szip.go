@@ -290,3 +290,30 @@ func Unpack(src string, dst string) error {
 	}
 	return nil
 }
+
+// UnpackMem is helper for in-memory unpacking
+func UnpackMem(src []byte, sizeLimit int64) (map[string][]byte, error) {
+	zr := new(ZipReader)
+	if err := zr.Init(src); err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+
+	res := make(map[string][]byte)
+	for i, name := range zr.Names {
+		if strings.HasSuffix(name, "/") {
+			continue // skip directories in memory unpacking
+		}
+
+		if zr.Sizes[i] > sizeLimit {
+			res[name] = nil // indicate file is too large
+		} else {
+			data, err := zr.Read(i)
+			if err != nil {
+				return nil, err
+			}
+			res[name] = data
+		}
+	}
+	return res, nil
+}

@@ -431,3 +431,27 @@ func Unpack(src string, dst string) error {
 	}
 	return nil
 }
+
+// UnpackMem is helper for in-memory unpacking
+func UnpackMem(src []byte, sizeLimit int64) (map[string][]byte, error) {
+	tr := new(TarReader)
+	if err := tr.Init(src); err != nil {
+		return nil, err
+	}
+	defer tr.Close()
+
+	res := make(map[string][]byte)
+	for tr.Next() {
+		if tr.IsDir {
+			continue // skip directories in memory unpacking
+		}
+
+		if tr.Size > sizeLimit {
+			res[tr.Name] = nil
+			tr.Skip() // indicate file is too large
+		} else {
+			res[tr.Name] = tr.Read()
+		}
+	}
+	return res, nil
+}

@@ -60,6 +60,12 @@ func Encode64(data []byte, spliter string, linenum int, colnum int) (string, err
 	return builder.String(), nil
 }
 
+// Encode64h is a helper function for Encode64 with default options
+func Encode64h(data []byte) string {
+	result, _ := Encode64(data, "", 0, 0)
+	return result
+}
+
 func Decode64(data string, spliter string) ([]byte, error) {
 	data = strings.ReplaceAll(data, "\r", "")
 	data = strings.ReplaceAll(data, "\n", "")
