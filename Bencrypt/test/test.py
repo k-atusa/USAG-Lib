@@ -18,8 +18,10 @@ print( base64.b64encode(Bencrypt.SHA3512(data)).decode('ascii') ) # tnjOmGIvYntb
 print("testing Masker...")
 mA = Bencrypt.Masker()
 mB = Bencrypt.Masker()
-key = Bencrypt.Random(8753)
 print(mA.XOR(b"\x00\x00\x00\x00"))
+key = Bencrypt.Random(8753)
+print(mB.XOR(mA.XOR(key)) == key)
+key = Bencrypt.Random(16384)
 print(mB.XOR(mA.XOR(key)) == key)
 
 # HashMaster (pw_store, keygen)

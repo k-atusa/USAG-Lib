@@ -133,10 +133,13 @@
                 log("\ntesting Masker...");
                 const mA = new window.Bencrypt.Masker();
                 const mB = new window.Bencrypt.Masker();
-                const keyToMask = window.Bencrypt.Random(8753);
                 const maskedZero = mA.XOR(new Uint8Array([0, 0, 0, 0]));
                 log(Array.from(maskedZero).map(b => b.toString(16).padStart(2, '0')).join(''));
-                const isReversible = areEqual(mB.XOR(mA.XOR(keyToMask)), keyToMask);
+                let keyToMask = window.Bencrypt.Random(8753);
+                let isReversible = areEqual(mB.XOR(mA.XOR(keyToMask)), keyToMask);
+                log(printPyBool(isReversible));
+                keyToMask = window.Bencrypt.Random(16384);
+                isReversible = areEqual(mB.XOR(mA.XOR(keyToMask)), keyToMask);
                 log(printPyBool(isReversible));
 
                 // --- 3. HashMaster (pw_store, keygen) ---

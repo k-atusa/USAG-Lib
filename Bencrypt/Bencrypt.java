@@ -179,18 +179,40 @@ public class Bencrypt {
             if (L == 0) {
                 return data;
             }
+            if (L == 1) {
+                byte[] result = new byte[1];
+                result[0] = (byte) (data[0] ^ this.pool[this.prime % this.poolSize]);
+                return result;
+            }
             if (L > this.poolSize) {
                 throw new IllegalArgumentException("Data " + L + " exceeds Pool " + this.poolSize);
             }
-            int stride = this.poolSize / L;
-            byte[] result = new byte[L];
+            int mid = L / 2;
+            byte[] left = java.util.Arrays.copyOfRange(data, 0, mid);
+            byte[] right = java.util.Arrays.copyOfRange(data, mid, L);
 
-            for (int i = 0; i < L; i++) {
-                long jitter = ((long) i * this.prime) % stride;
-                int idx = (int) ((i * stride) + jitter);
-                result[i] = (byte) (data[i] ^ this.pool[idx]);
+            // 5-Round Feistel Network
+            for (int round = 0; round < 5; round++) {
+                long seed = 0;
+                for (int i = 0; i < right.length; i++) {
+                    int b = Byte.toUnsignedInt(right[i]);
+                    seed = (seed + (long) b * (i + 1)) % this.poolSize;
+                }
+
+                byte[] newLeft = new byte[left.length];
+                for (int i = 0; i < left.length; i++) {
+                    int poolIdx = (int) ((seed + (long) i * this.prime) % this.poolSize);
+                    newLeft[i] = (byte) (left[i] ^ this.pool[poolIdx]);
+                }
+
+                left = right;
+                right = newLeft;
             }
-            return result;
+
+            byte[] finalResult = new byte[L];
+            System.arraycopy(right, 0, finalResult, 0, right.length);
+            System.arraycopy(left, 0, finalResult, right.length, left.length);
+            return finalResult; // re-order for odd length
         }
     }
 

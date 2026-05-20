@@ -74,17 +74,22 @@ class Masker:
     def XOR(self, data: bytes) -> bytes:
         L = len(data)
         if L == 0:
-            return data
-        if L > self.POOL_SIZE:
+            return b''
+        elif L == 1:
+            return bytes([data[0] ^ self.pool[self.prime % self.POOL_SIZE]])
+        elif L > self.POOL_SIZE:
             raise ValueError(f"Data {L} exceeds Pool {self.POOL_SIZE}")
-        
-        stride = self.POOL_SIZE // L
-        result = bytearray(L)
-        for i in range(L):
-            jitter = (i * self.prime) % stride
-            idx = (i * stride) + jitter
-            result[i] = data[i] ^ self.pool[idx]
-        return bytes(result)
+        mid = L // 2
+        left, right = data[:mid], data[mid:]
+
+        # 5-Round Feistel Network
+        for _ in range(5):
+            seed = 0
+            for i, b in enumerate(right):
+                seed = (seed + b * (i + 1)) % self.POOL_SIZE
+            new_left = bytes(a ^ self.pool[(seed + i * self.prime) % self.POOL_SIZE] for i, a in enumerate(left))
+            left, right = right, new_left
+        return right + left # re-order for odd length
 
 # ========== Hash Function Master ==========
 class HashMaster:

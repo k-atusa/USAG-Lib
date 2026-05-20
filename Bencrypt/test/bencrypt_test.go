@@ -40,11 +40,15 @@ func TestMain(m *testing.M) {
 	fmt.Println("testing Masker...")
 	mA := GetMasker(8)
 	mB := GetMasker(8)
-	testkey := Random(8753)
 	maskedZero, _ := mA.XOR([]byte{0, 0, 0, 0})
 	fmt.Printf("%x\n", maskedZero)
+	testkey := Random(8753)
 	maskedKey, _ := mA.XOR(testkey)
 	restoredKey, _ := mB.XOR(maskedKey)
+	fmt.Println(bytes.Equal(restoredKey, testkey))
+	testkey = Random(16384)
+	maskedKey, _ = mA.XOR(testkey)
+	restoredKey, _ = mB.XOR(maskedKey)
 	fmt.Println(bytes.Equal(restoredKey, testkey))
 
 	// ========== HashMaster test ==========

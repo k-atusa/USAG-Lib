@@ -125,23 +125,56 @@ func GetMasker(poolSizeMb int) *Masker {
 
 // XOR Masking
 func (m *Masker) XOR(data []byte) ([]byte, error) {
+	// Trivial case handling
 	L := int64(len(data))
-	if L == 0 {
+	switch {
+	case L == 0:
 		return data, nil
-	}
-	if L > m.poolSize {
+	case L == 1:
+		result := make([]byte, 1)
+		result[0] = data[0] ^ m.pool[m.prime%m.poolSize]
+		return result, nil
+	case L > m.poolSize:
 		return nil, fmt.Errorf("data length %d exceeds pool size %d", L, m.poolSize)
 	}
-	stride := m.poolSize / L
-	result := make([]byte, L)
 
-	var i int64
-	for i = 0; i < L; i++ {
-		jitter := (i * m.prime) % stride
-		idx := int((i * stride) + jitter)
-		result[i] = data[i] ^ m.pool[idx]
+	// pre-allocate work block
+	mid := L / 2
+	maxLen := L - mid
+	workBlock := make([]byte, maxLen*3)
+	defer func() { clear(workBlock) }()
+	buf1 := workBlock[0:maxLen:maxLen]
+	buf2 := workBlock[maxLen : 2*maxLen : 2*maxLen]
+	buf3 := workBlock[2*maxLen : 3*maxLen : 3*maxLen]
+
+	left := buf1[:mid]
+	right := buf2[:maxLen]
+	free := buf3
+	copy(left, data[:mid])
+	copy(right, data[mid:])
+
+	// 5-Round Feistel Network
+	for round := 0; round < 5; round++ {
+		var seed int64 = 0
+		for i, b := range right {
+			seed = (seed + int64(b)*int64(i+1)) % m.poolSize
+		}
+
+		nextLeft := free[:len(left)]
+		for i, a := range left {
+			poolIdx := (seed + int64(i)*m.prime) % m.poolSize
+			nextLeft[i] = a ^ m.pool[poolIdx]
+		}
+
+		free = left[:maxLen]
+		left = right
+		right = nextLeft
 	}
-	return result, nil
+
+	finalResult := make([]byte, L)
+	copy(finalResult, right)
+	copy(finalResult[int64(len(right)):], left)
+	return finalResult, nil // re-order for odd length
 }
 
 // ========== Hash Function Master ==========

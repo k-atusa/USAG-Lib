@@ -52,14 +52,17 @@ public class test {
             Bencrypt.Masker mA = Bencrypt.Masker.GetMasker();
             Bencrypt.Masker mB = Bencrypt.Masker.GetMasker();
             Bencrypt rg = new Bencrypt();
-            byte[] testkey = rg.Random(8753);
             byte[] maskedZero = mA.XOR(new byte[] { 0, 0, 0, 0 });
             StringBuilder hexZero = new StringBuilder();
             for (byte b : maskedZero) {
                 hexZero.append(String.format("%02x", b));
             }
             System.out.println(hexZero.toString());
+            byte[] testkey = rg.Random(8753);
             byte[] restoredKey = mB.XOR(mA.XOR(testkey));
+            System.out.println(Arrays.equals(restoredKey, testkey) ? "True" : "False");
+            testkey = rg.Random(16384);
+           restoredKey = mB.XOR(mA.XOR(testkey));
             System.out.println(Arrays.equals(restoredKey, testkey) ? "True" : "False");
 
             // HashMaster (pw_store, keygen)

@@ -262,16 +262,37 @@ export class Masker {
     XOR(data) {
         const L = data.length;
         if (L === 0) return data;
-        if (L > this.POOL_SIZE) throw new Error(`Data ${L} exceeds Pool ${this.POOL_SIZE}`);
-        const stride = Math.floor(this.POOL_SIZE / L);
-        const result = new Uint8Array(L);
-
-        for (let i = 0; i < L; i++) {
-            const jitter = (i * this.prime) % stride;
-            const idx = (i * stride) + jitter;
-            result[i] = data[i] ^ this.pool[idx];
+        if (L === 1) {
+            const result = new Uint8Array(1);
+            result[0] = data[0] ^ this.pool[this.prime % this.POOL_SIZE];
+            return result;
         }
-        return result;
+        if (L > this.POOL_SIZE) {
+            throw new Error(`Data ${L} exceeds Pool ${this.POOL_SIZE}`);
+        }
+        const mid = Math.floor(L / 2);
+        let left = data.slice(0, mid);
+        let right = data.slice(mid);
+
+        // 5-Round Feistel Network
+        for (let round = 0; round < 5; round++) {
+            let seed = 0;
+            for (let i = 0; i < right.length; i++) {
+                seed = (seed + right[i] * (i + 1)) % this.POOL_SIZE;
+            }
+            let new_left = new Uint8Array(left.length);
+            for (let i = 0; i < left.length; i++) {
+                const poolIdx = (seed + i * this.prime) % this.POOL_SIZE;
+                new_left[i] = left[i] ^ this.pool[poolIdx];
+            }
+            left = right;
+            right = new_left;
+        }
+
+        const finalResult = new Uint8Array(L);
+        finalResult.set(right, 0);
+        finalResult.set(left, right.length);
+        return finalResult; // re-order for odd length
     }
 }
 
