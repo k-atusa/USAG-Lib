@@ -87,6 +87,10 @@ func Genkey(data []byte, lbl string, size int) ([]byte, error) {
 }
 
 // ========== Data Masker ==========
+
+//go:noinline
+func Sclear(data []byte) { clear(data) }
+
 var (
 	primeCandidates = [16]int64{
 		15485863, 32452843, 86028121, 104395301,
@@ -142,7 +146,7 @@ func (m *Masker) XOR(data []byte) ([]byte, error) {
 	mid := L / 2
 	maxLen := L - mid
 	workBlock := make([]byte, maxLen*3)
-	defer func() { clear(workBlock) }()
+	defer func() { Sclear(workBlock) }()
 	buf1 := workBlock[0:maxLen:maxLen]
 	buf2 := workBlock[maxLen : 2*maxLen : 2*maxLen]
 	buf3 := workBlock[2*maxLen : 3*maxLen : 3*maxLen]
@@ -208,7 +212,7 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 	}
 	var lblStore, lblKeygen string
 	var master []byte
-	defer func() { clear(master) }()
+	defer func() { Sclear(master) }()
 
 	// get master secret
 	switch hm.algo {
@@ -217,7 +221,7 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 		data := make([]byte, 0, len(salt)+len(pw))
 		data = append(data, salt...)
 		data = append(data, pw...)
-		defer clear(data)
+		defer Sclear(data)
 		master = SHA3512(data)
 	case "pbk2":
 		lblStore, lblKeygen = "PWHASH_PBK2", "KEYGEN_PBK2"
@@ -361,7 +365,7 @@ func (sm *SymMaster) Processed() int64 {
 func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer clear(key)
+	defer Sclear(key)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +389,7 @@ func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
 func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer clear(key)
+	defer Sclear(key)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +413,7 @@ func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
 func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer clear(key)
+	defer Sclear(key)
 	if err != nil {
 		return err
 	}
@@ -435,7 +439,7 @@ func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
 func (sm *SymMaster) DeFile(src io.Reader, size int64, dst io.Writer) error {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer clear(key)
+	defer Sclear(key)
 	if err != nil {
 		return err
 	}
@@ -1032,7 +1036,7 @@ func (e *ECC1) Loadkey(public []byte, private []byte) error {
 func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 	// 1. Generate temp ephemeral key
 	var tempPub, tempPriv x448.Key
-	defer func() { clear(tempPriv[:]) }()
+	defer func() { Sclear(tempPriv[:]) }()
 	if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
 		return nil, err
 	}
@@ -1040,7 +1044,7 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	defer func() { clear(shared[:]) }()
+	defer func() { Sclear(shared[:]) }()
 	ok := x448.Shared(&shared, &tempPriv, e.PubX)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed (bad public key)")
@@ -1048,7 +1052,7 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 
 	// 3. Derive Key & Encrypt with AES-GCM
 	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
-	defer clear(gcmKey)
+	defer Sclear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1083,7 +1087,7 @@ func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	defer func() { clear(shared[:]) }()
+	defer func() { Sclear(shared[:]) }()
 	ok := x448.Shared(&shared, e.PrivX, &tempPub)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed")
@@ -1091,7 +1095,7 @@ func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 
 	// 3. Decrypt with AES-GCM
 	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
-	defer clear(gcmKey)
+	defer Sclear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1312,8 +1316,8 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	var err1, err2 error
 	var tempPub, ssvECC x448.Key
 	var kemEnc, ssvKEM []byte
-	defer func() { clear(ssvECC[:]) }()
-	defer func() { clear(ssvKEM) }()
+	defer func() { Sclear(ssvECC[:]) }()
+	defer func() { Sclear(ssvKEM) }()
 
 	// 1. Ephemeral X448 tempkey generation & ECDH
 	go func() {
@@ -1364,10 +1368,10 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
 	sharedSecret = append(sharedSecret, ssvECC[:]...)
 	sharedSecret = append(sharedSecret, ssvKEM...)
-	defer clear(sharedSecret)
+	defer Sclear(sharedSecret)
 
 	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
-	defer clear(gcmKey)
+	defer Sclear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1406,8 +1410,8 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	var err1, err2 error
 	var ssvECC x448.Key
 	var ssvKEM []byte
-	defer func() { clear(ssvECC[:]) }()
-	defer func() { clear(ssvKEM) }()
+	defer func() { Sclear(ssvECC[:]) }()
+	defer func() { Sclear(ssvKEM) }()
 
 	// 2-1. Shared Secret Value (ECC)
 	go func() {
@@ -1434,7 +1438,7 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 		}()
 
 		privKEM, err := p.mask.XOR(p.PrivKEM)
-		defer clear(privKEM)
+		defer Sclear(privKEM)
 		if err != nil {
 			err2 = err
 			return
@@ -1461,10 +1465,10 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
 	sharedSecret = append(sharedSecret, ssvECC[:]...)
 	sharedSecret = append(sharedSecret, ssvKEM...)
-	defer clear(sharedSecret)
+	defer Sclear(sharedSecret)
 
 	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
-	defer clear(gcmKey)
+	defer Sclear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1505,7 +1509,7 @@ func (p *PQC1) Sign(data []byte) ([]byte, error) {
 		}()
 
 		privDSA, err := p.mask.XOR(p.PrivDSA)
-		defer clear(privDSA)
+		defer Sclear(privDSA)
 		if err != nil {
 			err2 = err
 			return

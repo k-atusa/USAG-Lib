@@ -67,9 +67,11 @@ if (isNode) {
 }
 
 // ========== Helpers ==========
+export let DUMMY = null;
 function zeroize(arr) {
     if (arr && arr.byteLength > 0 && typeof arr.fill === 'function') {
         arr.fill(0);
+        globalThis.DUMMY_CRYPTO_VOLATILE = arr;
     }
 }
 

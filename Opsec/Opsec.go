@@ -427,7 +427,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
-	defer clear(combinedPw)
+	defer Bencrypt.Sclear(combinedPw)
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
@@ -435,7 +435,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 		return nil, err
 	}
 	pwHash, hkey, err := hm.KDF(combinedPw, o.salt)
-	defer clear(hkey)
+	defer Bencrypt.Sclear(hkey)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +443,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 
 	// Encrypt header
 	headData, err := o.wrapEncHead()
-	defer clear(headData)
+	defer Bencrypt.Sclear(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +493,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 		signTgt = append(signTgt, peerPub...)
 		signTgt = append(signTgt, []byte(o.Smsg)...)
 		signTgt = append(signTgt, o.SmsgInfo...)
-		defer clear(signTgt)
+		defer Bencrypt.Sclear(signTgt)
 
 		var err error
 		o.sign, err = amSign.Sign(signTgt)
@@ -512,7 +512,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 	}
 
 	headData, err := o.wrapEncHead()
-	defer clear(headData)
+	defer Bencrypt.Sclear(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +520,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 	if method == "rsa1" || method == "rsa2" {
 		// RSA Hybrid: Encrypt Key with RSA, Data with AES
 		hkey := Bencrypt.Random(44)
-		defer clear(hkey)
+		defer Bencrypt.Sclear(hkey)
 		o.MsgInfo, err = amEncrypt.Encrypt(hkey)
 		if err != nil {
 			return nil, err
@@ -587,7 +587,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
-	defer clear(combinedPw)
+	defer Bencrypt.Sclear(combinedPw)
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
@@ -595,7 +595,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 		return err
 	}
 	calcHash, hkey, err := hm.KDF(combinedPw, o.salt)
-	defer clear(hkey)
+	defer Bencrypt.Sclear(hkey)
 	if err != nil {
 		return err
 	}
@@ -640,7 +640,7 @@ func (o *Opsec) Decpub(myPri []byte, myPub []byte, peerPub []byte) error {
 	if o.headAlgo == "rsa1" || o.headAlgo == "rsa2" {
 		// RSA Hybrid
 		hkey, err := am.Decrypt(o.MsgInfo)
-		defer clear(hkey)
+		defer Bencrypt.Sclear(hkey)
 		if err != nil {
 			return fmt.Errorf("RSA decryption failed: %w", err)
 		}

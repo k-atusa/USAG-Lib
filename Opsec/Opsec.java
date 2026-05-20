@@ -16,6 +16,8 @@ import java.util.zip.CRC32;
 
 // Opsec header handler
 public class Opsec {
+    private static volatile Object DUMMY;
+
     // Outer Layer
     public String Msg; // non-secured message
     public byte[] MsgInfo; // additional info (for RSA-mode)
@@ -360,6 +362,7 @@ public class Opsec {
         Bencrypt.HashMaster hm = new Bencrypt.HashMaster(method);
         byte[][] keys = hm.KDF(combinedPw, salt);
         java.util.Arrays.fill(combinedPw, (byte) 0);
+        DUMMY = combinedPw;
         pwHash = keys[0];
         byte[] hkey = keys[1];
 
@@ -368,7 +371,9 @@ public class Opsec {
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
         encHeadData = sm.EnBin(headData);
         java.util.Arrays.fill(hkey, (byte) 0);
+        DUMMY = hkey;
         java.util.Arrays.fill(headData, (byte) 0);
+        DUMMY = headData;
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
@@ -400,6 +405,7 @@ public class Opsec {
             byte[] signTgt = concat(strToBytes(method), peerPub, strToBytes(Smsg), SmsgInfo);
             sign = am.Sign(signTgt);
             java.util.Arrays.fill(signTgt, (byte) 0);
+            DUMMY = signTgt;
         }
 
         // encrypt header
@@ -415,11 +421,13 @@ public class Opsec {
             Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
             encHeadData = sm.EnBin(headData);
             java.util.Arrays.fill(hkey, (byte) 0);
+            DUMMY = hkey;
         } else {
             // ECC/PQC Hybrid: Handled internally
             encHeadData = am.Encrypt(headData);
         }
         java.util.Arrays.fill(headData, (byte) 0);
+        DUMMY = headData;
 
         // wrap header
         Map<String, byte[]> cfg = new HashMap<>();
@@ -461,6 +469,7 @@ public class Opsec {
         Bencrypt.HashMaster hm = new Bencrypt.HashMaster(headAlgo);
         byte[][] keys = hm.KDF(combinedPw, salt);
         java.util.Arrays.fill(combinedPw, (byte) 0);
+        DUMMY = combinedPw;
         byte[] calcHash = keys[0];
         byte[] hkey = keys[1];
 
@@ -478,10 +487,12 @@ public class Opsec {
         Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
         byte[] decryptedHead = sm.DeBin(encHeadData);
         java.util.Arrays.fill(hkey, (byte) 0);
+        DUMMY = hkey;
         if (decryptedHead == null)
             throw new SecurityException("AES decryption failed");
         unwrapEncHead(decryptedHead);
         java.util.Arrays.fill(decryptedHead, (byte) 0);
+        DUMMY = decryptedHead;
     }
 
     // decrypt with private key, verify if public key is not null
@@ -500,6 +511,7 @@ public class Opsec {
             Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
             decryptedHead = sm.DeBin(encHeadData);
             java.util.Arrays.fill(hkey, (byte) 0);
+            DUMMY = hkey;
         } else {
             decryptedHead = am.Decrypt(encHeadData);
         }
@@ -508,6 +520,7 @@ public class Opsec {
             throw new SecurityException("Decryption failed");
         unwrapEncHead(decryptedHead);
         java.util.Arrays.fill(decryptedHead, (byte) 0);
+        DUMMY = decryptedHead;
 
         // verify sign
         if (myPub == null && peerPub == null)
