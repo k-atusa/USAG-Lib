@@ -74,6 +74,15 @@ import org.bouncycastle.pqc.crypto.mldsa.MLDSASigner;
 public class Bencrypt {
     private static volatile Object DUMMY;
 
+    private static void sclear(byte[] data) {
+        java.util.Arrays.fill(data, (byte) 0);
+        DUMMY = data;
+    }
+
+    public static void ClearDummy() {
+        DUMMY = null;
+    }
+
     // ========== Helpers ==========
     private static byte[] mkiv(byte[] g, long c) {
         byte[] iv = Arrays.copyOf(g, 12); // base IV 12B
@@ -248,8 +257,7 @@ public class Bencrypt {
                 System.arraycopy(salt, 0, combined, 0, salt.length);
                 System.arraycopy(pw, 0, combined, salt.length, pw.length);
                 master = Bencrypt.SHA3512(combined);
-                java.util.Arrays.fill(combined, (byte) 0);
-                DUMMY = combined;
+                sclear(combined);
 
             } else if (this.algo.equals("pbk2")) {
                 lblStore = "PWHASH_PBK2";
@@ -267,8 +275,7 @@ public class Bencrypt {
 
             byte[] pwStored = Bencrypt.genkey(master, lblStore, this.hashSize);
             byte[] keyGen = Bencrypt.genkey(master, lblKeygen, this.keySize);
-            java.util.Arrays.fill(master, (byte) 0);
-            DUMMY = master;
+            sclear(master);
             return new byte[][] { pwStored, keyGen };
         }
     }
@@ -413,15 +420,13 @@ public class Bencrypt {
             byte[] key = this.mask.XOR(this.key);
             if (this.algo.equals("gcm1")) {
                 byte[] res = this.worker.enAESGCM(key, data);
-                java.util.Arrays.fill(key, (byte) 0);
-                DUMMY = key;
+                sclear(key);
                 return res;
             } else {
                 java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
                 java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
                 this.worker.enAESGCMx(key, in, data.length, out, 1048576);
-                java.util.Arrays.fill(key, (byte) 0);
-                DUMMY = key;
+                sclear(key);
                 return out.toByteArray();
             }
         }
@@ -431,15 +436,13 @@ public class Bencrypt {
             byte[] key = this.mask.XOR(this.key);
             if (this.algo.equals("gcm1")) {
                 byte[] res = this.worker.deAESGCM(key, data);
-                java.util.Arrays.fill(key, (byte) 0);
-                DUMMY = key;
+                sclear(key);
                 return res;
             } else {
                 java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data);
                 java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
                 this.worker.deAESGCMx(key, in, data.length, out, 1048576);
-                java.util.Arrays.fill(key, (byte) 0);
-                DUMMY = key;
+                sclear(key);
                 return out.toByteArray();
             }
         }
@@ -454,8 +457,7 @@ public class Bencrypt {
             } else {
                 this.worker.enAESGCMx(key, src, size, dst, 1048576);
             }
-            java.util.Arrays.fill(key, (byte) 0);
-            DUMMY = key;
+            sclear(key);
         }
 
         // Decrypt Stream/File
@@ -468,8 +470,7 @@ public class Bencrypt {
             } else {
                 this.worker.deAESGCMx(key, src, size, dst, 1048576);
             }
-            java.util.Arrays.fill(key, (byte) 0);
-            DUMMY = key;
+            sclear(key);
         }
     }
 
@@ -506,8 +507,7 @@ public class Bencrypt {
             byte[] iv = Arrays.copyOfRange(key, 0, 12);
             byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
             byte[] result = inlineEnc(keyBytes, iv, data);
-            java.util.Arrays.fill(keyBytes, (byte) 0);
-            DUMMY = keyBytes;
+            sclear(keyBytes);
             this.processed.set(data.length);
             return result;
         }
@@ -522,8 +522,7 @@ public class Bencrypt {
             byte[] iv = Arrays.copyOfRange(key, 0, 12);
             byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
             byte[] result = inlineDec(keyBytes, iv, data);
-            java.util.Arrays.fill(keyBytes, (byte) 0);
-            DUMMY = keyBytes;
+            sclear(keyBytes);
             this.processed.set(data.length);
             return result;
         }
@@ -579,8 +578,7 @@ public class Bencrypt {
 
             } finally { // 6. Close Thread x8 Pool
                 executor.shutdown();
-                java.util.Arrays.fill(globalKey, (byte) 0);
-                DUMMY = globalKey;
+                sclear(globalKey);
             }
         }
 
@@ -635,8 +633,7 @@ public class Bencrypt {
 
             } finally { // 6. Close Thread x8 Pool
                 executor.shutdown();
-                java.util.Arrays.fill(globalKey, (byte) 0);
-                DUMMY = globalKey;
+                sclear(globalKey);
             }
         }
     }
@@ -893,12 +890,10 @@ public class Bencrypt {
 
             // 3. KDF & Encrypt
             byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
-            java.util.Arrays.fill(sharedSecret, (byte) 0);
-            DUMMY = sharedSecret;
+            sclear(sharedSecret);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] enc = worker.EnBin(data);
-            java.util.Arrays.fill(gcmKey, (byte) 0);
-            DUMMY = gcmKey;
+            sclear(gcmKey);
 
             // 4. Pack
             byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
@@ -927,12 +922,10 @@ public class Bencrypt {
 
             // 4. KDF & Decrypt
             byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
-            java.util.Arrays.fill(sharedSecret, (byte) 0);
-            DUMMY = sharedSecret;
+            sclear(sharedSecret);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] res = worker.DeBin(enc);
-            java.util.Arrays.fill(gcmKey, (byte) 0);
-            DUMMY = gcmKey;
+            sclear(gcmKey);
             return res;
         }
 
@@ -1084,16 +1077,12 @@ public class Bencrypt {
             System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
 
             byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
-            java.util.Arrays.fill(ssvECC, (byte) 0);
-            DUMMY = ssvECC;
-            java.util.Arrays.fill(ssvKEM, (byte) 0);
-            DUMMY = ssvKEM;
-            java.util.Arrays.fill(combinedSecret, (byte) 0);
-            DUMMY = combinedSecret;
+            sclear(ssvECC);
+            sclear(ssvKEM);
+            sclear(combinedSecret);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] enc = worker.EnBin(data);
-            java.util.Arrays.fill(gcmKey, (byte) 0);
-            DUMMY = gcmKey;
+            sclear(gcmKey);
 
             byte[] tempPubB = tempPub.getEncoded();
             byte[] res = new byte[tempPubB.length + kemEnc.length + enc.length];
@@ -1119,8 +1108,7 @@ public class Bencrypt {
             // ML-KEM-1024 Decapsulation
             byte[] priKEMt = this.mask.XOR(this.priKEM);
             MLKEMPrivateKeyParameters kemPri = new MLKEMPrivateKeyParameters(MLKEMParameters.ml_kem_1024, priKEMt);
-            java.util.Arrays.fill(priKEMt, (byte) 0);
-            DUMMY = priKEMt;
+            sclear(priKEMt);
             MLKEMExtractor kemExt = new MLKEMExtractor(kemPri);
             byte[] ssvKEM = kemExt.extractSecret(kemEnc);
 
@@ -1130,16 +1118,12 @@ public class Bencrypt {
             System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
 
             byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
-            java.util.Arrays.fill(ssvECC, (byte) 0);
-            DUMMY = ssvECC;
-            java.util.Arrays.fill(ssvKEM, (byte) 0);
-            DUMMY = ssvKEM;
-            java.util.Arrays.fill(combinedSecret, (byte) 0);
-            DUMMY = combinedSecret;
+            sclear(ssvECC);
+            sclear(ssvKEM);
+            sclear(combinedSecret);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] res = worker.DeBin(enc);
-            java.util.Arrays.fill(gcmKey, (byte) 0);
-            DUMMY = gcmKey;
+            sclear(gcmKey);
             return res;
         }
 
@@ -1156,8 +1140,7 @@ public class Bencrypt {
             MLDSASigner mlSigner = new MLDSASigner();
             byte[] priDSAt = this.mask.XOR(this.priDSA);
             MLDSAPrivateKeyParameters dsaPri = new MLDSAPrivateKeyParameters(MLDSAParameters.ml_dsa_87, priDSAt);
-            java.util.Arrays.fill(priDSAt, (byte) 0);
-            DUMMY = priDSAt;
+            sclear(priDSAt);
             mlSigner.init(true, new ParametersWithRandom(dsaPri, rnd));
             mlSigner.update(data, 0, data.length);
             byte[] mlSgn = mlSigner.generateSignature();
