@@ -10,6 +10,7 @@ Summary of CLI tool usage
 
 - ffmpeg: 비디오 변환 Video conversion
 - yt-dlp: 유튜브 다운로드 Youtube download
+- cleaner: OS 흔적 삭제 OS artifact removor
 
 ## devtool
 
@@ -31,7 +32,6 @@ File management/conversion tools
 - codemerge: 코드 파일들을 하나의 텍스트로 병합 Merge codes to single text file
 - pdfobject: PDF 문서를 변환하거나 페이지 편집 Convert PDF documents or edit pages
 - piczip: 이미지이면서 동시에 압축 파일인 배포 파일 생성 Create distribution file that are both image and zip file
-- memeater: OS 메모리와 스왑 파일을 초기화 유도 Induce OS memory and swap file initialization
 
 ## imgtool
 
