@@ -35,7 +35,7 @@ print(f"SHA3512: {fmt_speed(p[2], end - start)}")
 
 time.sleep(1)
 print("\n\n===== Hash Functions =====")
-algos = ["sha3", "pbk2", "arg2"]
+algos = ["sha3", "arg2low", "arg2st"]
 iters = [100000, 5, 5]
 pw, salt = b"\x00" * 64, b"\x00" * 32 # std: 64B password, 32B salt
 for i in range( 0, len(algos) ):
@@ -54,7 +54,7 @@ with open("temp.bin", "wb") as f:
     f.write(b"\xff" * fsize)
 algos = ["gcm1", "gcmx1"]
 for algo in algos:
-    w = Bencrypt.SymMaster(algo, b"0" * 44)
+    w = Bencrypt.SymMaster(algo, b"0" * 32)
     start = time.time()
     w.EnBin(data)
     end = time.time()
@@ -69,9 +69,9 @@ for algo in algos:
 
 time.sleep(1)
 print("\n\n===== Asymmetric Functions =====")
-algos = ["rsa1", "rsa2", "ecc1", "pqc1"]
-iters_g = [3, 1, 20, 20]
-iters_c = [25, 25, 50, 50]
+algos = ["ecc1", "pqc1"]
+iters_g = [20, 20]
+iters_c = [50, 50]
 data = b"\x00" * 64 # std: 64B data
 for i in range( 0, len(algos) ):
     w = Bencrypt.AsymMaster(algos[i])

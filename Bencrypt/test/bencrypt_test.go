@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 
 	// ========== HashMaster test ==========
 	fmt.Println("testing HashMaster...")
-	hashm := []string{"sha3", "pbk2", "arg2"}
+	hashm := []string{"sha3", "arg2low", "arg2st"}
 	pw := []byte("ABCDABCDABCDABCD")
 	salt := []byte("1234123412341234")
 
@@ -71,7 +71,7 @@ func TestMain(m *testing.M) {
 	// ========== SymMaster test ==========
 	fmt.Println("testing SymMaster...")
 	symm := []string{"gcm1", "gcmx1"}
-	key := bytes.Repeat([]byte("0"), 44)
+	key := bytes.Repeat([]byte("0"), 32)
 	plainSym := bytes.Repeat([]byte("Hello, world!"), 32)
 
 	for _, algo := range symm {
@@ -109,7 +109,7 @@ func TestMain(m *testing.M) {
 
 	// ========== AsymMaster test ==========
 	fmt.Println("testing AsymMaster...")
-	asymm := []string{"rsa1", "rsa2", "ecc1", "pqc1"}
+	asymm := []string{"ecc1", "pqc1"}
 	plainAsym := []byte("Hello, world!")
 
 	for _, algo := range asymm {

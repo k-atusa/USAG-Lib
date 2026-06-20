@@ -7,14 +7,14 @@ Encryption module that supports higher security margin than currently recommende
 You can reduce plaintext key exposure during idle time through memory masking.
 
 options
-- Hash: `sha3, pbk2, arg2`
+- Hash: `sha3, arg2low, arg2st`
 - Symmetric: `gcm1, gcmx1`
-- Asymmetric: `rsa1, rsa2, ecc1, pqc1`
+- Asymmetric: `ecc1, pqc1`
 
 #### python
 ```py
 class HashMaster:
-    def __init__(algo: str, hashSize: int = 32, keySize: int = 44) -> None
+    def __init__(algo: str, hashSize: int = 32, keySize: int = 32) -> None
     def KDF(pw: bytes, salt: bytes) -> (bytes, bytes)
     
 class SymMaster:
@@ -40,13 +40,15 @@ class Masker:
 
 def Random(size: int) -> bytes
 def SHA3256(data: bytes) -> bytes
+def HMAC3256(key: bytes, data: bytes) -> bytes
 def SHA3512(data: bytes) -> bytes
+def HMAC3512(key: bytes, data: bytes) -> bytes
 ```
 
 #### javascript
 ```js
 class HashMaster {
-    constructor(algo: string, hashSize: number = 32, keySize: number = 44)
+    constructor(algo: string, hashSize: number = 32, keySize: number = 32)
     async function KDF(pw, salt): Promise<[Uint8Array, Uint8Array]>
 }
 
@@ -76,7 +78,9 @@ class Masker {
 
 function Random(size: number): Uint8Array
 function SHA3256(data: Uint8Array | string): Uint8Array
+function HMAC3256(key: Uint8Array | string, data: Uint8Array | string): Uint8Array
 function SHA3512(data: Uint8Array | string): Uint8Array
+function HMAC3512(key: Uint8Array | string, data: Uint8Array | string): Uint8Array
 ```
 
 #### golang
@@ -113,7 +117,9 @@ type Masker struct {
 
 func Random(size int) []byte
 func SHA3256(data []byte) []byte
+func HMAC3256(key []byte, data []byte) []byte
 func SHA3512(data []byte) []byte
+func HMAC3512(key []byte, data []byte) []byte
 ```
 
 #### java
@@ -153,7 +159,9 @@ class Bencrypt {
     // Basic Functions
     byte[] Random(int size)
     static byte[] SHA3256(byte[] data)
+    static byte[] HMAC3256(byte[] key, byte[] data)
     static byte[] SHA3512(byte[] data)
+    static byte[] HMAC3512(byte[] key, byte[] data)
 }
 ```
 
@@ -189,35 +197,23 @@ class Bencrypt {
 - It can be used for linking subsystems, not directly hashing raw password
 - Method `sha3` parameter: single SHA3-512
 
-#### PBKDF2
-
-- classic key derivation function
-- Method `pbk2` parameter: `Hash=SHA-512, Iter=1000000, Outsize=64B`
-
 #### Argon2id
 
 - Modern key derivation function
-- Method `arg2` parameter: `Time=3, Memory=262144, Parallel=4, Outsize=48B`, requires 256MiB
+- Method `arg2low` parameter: `Time=4, Memory=65536, Parallel=8, Outsize=48B`, requires 64MiB
+- Method `arg2st` parameter: `Time=3, Memory=262144, Parallel=6, Outsize=48B`, requires 256MiB
 
 #### AES-GCM
 
-- 44B integrated key: `[iv 12B][key 32B]`
-- Method `gcm1` format: `[CipherText][Tag 16B]`
-- Method `gcmx1` format: `[CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`, Divides input into 1MiB chunks and applies independent IVs (Base IV[4:12] XOR counter).
-- **Each Message Must Have Their Own Key**: Do not use same key twice, derive key from random source or use random salt (use Opsec layer)
-
-#### RSA
-
-- Legacy asymmetric algorithm
-- Method `rsa1` is RSA-2048 and `rsa2` is RSA-4096
-- Key format: PKIX-DER for public key and PKCS8-DER for private key
-- OAEP-SHA-512 for encryption and PKCS#1 v1.5 SHA-256 for signature
+- 32B key with 12B random generated IV
+- Method `gcm1` format: `[IV 12B][CipherText][Tag 16B]`
+- Method `gcmx1` format: `[GlobalIV 12B][CipherText 0][Tag 0 16B][CipherText 1][Tag 1 16B]...`, Divides input into 1MiB chunks and applies independent IVs (Base IV[4:12] XOR counter).
 
 #### ECC
 
 - Modern asymmetric algorithm using Curve448, which is independent from NSA issues
 - Key format: `[X448 56B][Ed448 57B]` for both public and private key
-- Encryption: `[KeyLen 1B][TempKey][CipherText][Tag 16B]`
+- Encryption: `[KeyLen 1B][TempKey][IV 12B][CipherText][Tag 16B]`
 - Signature: raw bytes using ECDSA Ed448
 
 #### PQC1
@@ -226,5 +222,5 @@ class Bencrypt {
 - Safe after post-quantum attacks
 - Public Key: `[ECC-X448 56B][ECC-Ed448 57B][ML-KEM1024 1568B][ML-DSA87 2592B]` (4273B)
 - Private Key: `[ECC-X448 56B][ECC-Ed448 57B][ML-KEM1024 3168B][ML-DSA87 4896B]` (8177B)
-- Encryption: `[Temp ECC-X448 56B][Temp ML-KEM1024 1568B][CipherText][Tag 16B]` with HMAC(ECDH + ML-SSV)
+- Encryption: `[Temp ECC-X448 56B][Temp ML-KEM1024 1568B][IV 12B][CipherText][Tag 16B]` with HMAC(ECDH + ML-SSV)
 - Signature: `[ECC-Ed448 114B][ML-DSA87 4627B]` (4741B), both parts are verified

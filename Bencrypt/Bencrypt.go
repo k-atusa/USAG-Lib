@@ -4,29 +4,21 @@ package Bencrypt
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/sha3"
-	"crypto/sha512"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/pbkdf2"
 
 	"github.com/cloudflare/circl/dh/x448"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
@@ -56,6 +48,18 @@ func SHA3256(data []byte) []byte {
 func SHA3512(data []byte) []byte {
 	hash := sha3.Sum512(data)
 	return hash[:]
+}
+
+func HMAC3256(key []byte, data []byte) []byte {
+	h := hmac.New(func() hash.Hash { return sha3.New256() }, key)
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+func HMAC3512(key []byte, data []byte) []byte {
+	h := hmac.New(func() hash.Hash { return sha3.New512() }, key)
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 type aesResult struct {
@@ -100,7 +104,6 @@ var (
 	}
 	instance *Masker
 	once     sync.Once
-	initErr  error
 )
 
 type Masker struct {
@@ -193,10 +196,10 @@ func (hm *HashMaster) Init(algo string, hashSize int, keySize int) error {
 		hashSize = 32 // default 32B
 	}
 	if keySize <= 0 {
-		keySize = 44 // default 44B
+		keySize = 32 // default 32B
 	}
 	switch algo {
-	case "sha3", "pbk2", "arg2":
+	case "sha3", "arg2low", "arg2st":
 		hm.algo = algo
 		hm.hashSize = hashSize
 		hm.keySize = keySize
@@ -223,12 +226,12 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 		data = append(data, pw...)
 		defer sclear(data)
 		master = SHA3512(data)
-	case "pbk2":
-		lblStore, lblKeygen = "PWHASH_PBK2", "KEYGEN_PBK2"
-		master = Pbkdf2(pw, salt, 1000000, 64)
-	case "arg2":
-		lblStore, lblKeygen = "PWHASH_ARG2", "KEYGEN_ARG2"
-		master = Argon2(pw, salt)
+	case "arg2low":
+		lblStore, lblKeygen = "PWHASH_ARG2LOW", "KEYGEN_ARG2LOW"
+		master = argon2.IDKey(pw, salt, 4, 65536, 8, 48)
+	case "arg2st":
+		lblStore, lblKeygen = "PWHASH_ARG2ST", "KEYGEN_ARG2ST"
+		master = argon2.IDKey(pw, salt, 3, 262144, 6, 48)
 	default:
 		return nil, nil, errors.New("algorithm not set")
 	}
@@ -246,73 +249,6 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 }
 
 // ========== Hash Functions ==========
-func Pbkdf2(pw []byte, salt []byte, iter int, outsize int) []byte {
-	if iter <= 0 {
-		iter = 1000000 // default iter=1000000
-	}
-	if outsize <= 0 {
-		outsize = 64 // default outsize=64
-	}
-	return pbkdf2.Key(pw, salt, iter, outsize, sha512.New)
-}
-
-func Argon2(pw []byte, salt []byte) []byte {
-	const (
-		time    = 3
-		memory  = 262144
-		threads = 4
-		keyLen  = 48
-	)
-	return argon2.IDKey(pw, salt, time, memory, threads, keyLen)
-}
-
-func Argon2Hash(pw []byte, salt []byte) string {
-	if salt == nil {
-		salt = Random(16)
-	}
-	const (
-		time    = 3
-		memory  = 262144
-		threads = 4
-		keyLen  = 48
-	) // Time=3, Mem=262144(256MB), Parallel=4, HashLen=32
-
-	hash := argon2.IDKey(pw, salt, time, memory, threads, keyLen)
-	b64Salt := base64.RawStdEncoding.EncodeToString(salt) // base64 with no padding
-	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
-	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s", memory, time, threads, b64Salt, b64Hash) // format: $argon2id$v=19$m=262144,t=3,p=4$saltB64$hashB64
-}
-
-func Argon2Verify(hashed string, pw []byte) bool {
-	// Parse parameters
-	parts := strings.Split(hashed, "$")
-	if len(parts) != 6 {
-		return false
-	}
-	if parts[1] != "argon2id" {
-		return false
-	}
-	var memory, time uint32
-	var threads uint8
-	_, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time, &threads)
-	if err != nil {
-		return false
-	}
-
-	// Decode Salt and Hash
-	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
-	if err != nil {
-		return false
-	}
-	originalHash, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil {
-		return false
-	}
-
-	// Re-hash, const-time compare
-	newHash := argon2.IDKey(pw, salt, time, memory, threads, uint32(len(originalHash)))
-	return hmac.Equal(originalHash, newHash)
-}
 
 // ========== Master Class ==========
 type SymMaster struct {
@@ -326,8 +262,8 @@ func (sm *SymMaster) Init(algo string, key []byte) error {
 	sm.mask = GetMasker(-1)
 	switch algo {
 	case "gcm1", "gcmx1":
-		if len(key) != 44 {
-			return errors.New("key length must be 44 bytes")
+		if len(key) != 32 {
+			return errors.New("key length must be 32 bytes")
 		}
 		sm.Algo = algo
 		var err error
@@ -345,14 +281,14 @@ func (sm *SymMaster) Init(algo string, key []byte) error {
 func (sm *SymMaster) AfterSize(size int64) int64 {
 	switch sm.Algo {
 	case "gcm1":
-		return size + 16
+		return size + 28
 	case "gcmx1":
 		chunkSize := int64(1048576)
 		c := size/chunkSize + 1
 		if size != 0 && size%chunkSize == 0 {
 			c -= 1
 		}
-		return size + (16 * c)
+		return size + 12 + (16 * c)
 	default:
 		return 0
 	}
@@ -471,12 +407,12 @@ func (a *AES1) Init() { a.processed = 0 }
 
 func (a *AES1) Processed() int64 { return atomic.LoadInt64(&a.processed) }
 
-// AES-GCM encryption, 44B key (12B IV + 32B AES Key)
+// AES-GCM encryption, 32B key, randomly generated 12B IV prepended to output
 func (a *AES1) EnAESGCM(key []byte, data []byte) ([]byte, error) {
 	// basic setup
 	a.processed = 0
-	iv := key[:12]
-	aeskey := key[12:]
+	iv := Random(12)
+	aeskey := key
 
 	// make AES cipher
 	block, e0 := aes.NewCipher(aeskey)
@@ -491,18 +427,23 @@ func (a *AES1) EnAESGCM(key []byte, data []byte) ([]byte, error) {
 	// encrypt
 	enc := aesgcm.Seal(nil, iv, data, nil)
 	a.processed = int64(len(data))
-	return enc, nil // format: [encdata][tag 16B]
+
+	res := make([]byte, 12+len(enc))
+	copy(res[:12], iv)
+	copy(res[12:], enc)
+	return res, nil // format: [IV 12B][encdata][tag 16B]
 }
 
-// AES-GCM decryption, 44B key (12B IV + 32B AES Key)
+// AES-GCM decryption, 32B key, extracts 12B IV from input
 func (a *AES1) DeAESGCM(key []byte, data []byte) ([]byte, error) {
 	// basic setup
 	a.processed = 0
-	if len(data) < 16 {
+	if len(data) < 28 {
 		return nil, errors.New("data too short")
 	}
-	iv := key[:12]
-	aeskey := key[12:]
+	iv := data[:12]
+	encdata := data[12:]
+	aeskey := key
 
 	// make AES cipher
 	block, e0 := aes.NewCipher(aeskey)
@@ -515,7 +456,7 @@ func (a *AES1) DeAESGCM(key []byte, data []byte) ([]byte, error) {
 	}
 
 	// decrypt
-	plain, e2 := aesgcm.Open(nil, iv, data, nil)
+	plain, e2 := aesgcm.Open(nil, iv, encdata, nil)
 	if e2 != nil {
 		return nil, e2
 	}
@@ -523,15 +464,19 @@ func (a *AES1) DeAESGCM(key []byte, data []byte) ([]byte, error) {
 	return plain, nil
 }
 
-// AES-GCM extended, 44B key (12B IV + 32B AES Key), default chunkSize=1048576
+// AES-GCM extended, 32B key, default chunkSize=1048576
 func (a *AES1) EnAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, chunkSize int) error {
 	// basic setup
 	a.processed = 0
 	if chunkSize <= 0 {
 		chunkSize = 1048576 // 1MiB
 	}
-	globalIV := key[:12]
-	globalKey := key[12:]
+	globalIV := Random(12)
+	globalKey := key
+	_, e_iv := dst.Write(globalIV)
+	if e_iv != nil {
+		return e_iv
+	}
 	var memPool = sync.Pool{
 		New: func() interface{} {
 			return make([]byte, chunkSize+16)
@@ -655,11 +600,16 @@ func (a *AES1) DeAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 	if chunkSize <= 0 {
 		chunkSize = 1048576 // 1MiB
 	}
-	if size < 16 {
+	if size < 28 {
 		return errors.New("cipher too short to decrypt")
 	}
-	globalIV := key[:12]
-	globalKey := key[12:]
+	globalIV := make([]byte, 12)
+	_, e_iv := io.ReadFull(src, globalIV)
+	if e_iv != nil {
+		return e_iv
+	}
+	atomic.StoreInt64(&a.processed, 12)
+	globalKey := key
 	var memPool = sync.Pool{
 		New: func() interface{} {
 			return make([]byte, chunkSize+16)
@@ -716,7 +666,7 @@ func (a *AES1) DeAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 
 	// Read, submit task
 	var counter uint64 = 0
-	remaining := size
+	remaining := size - 12
 	for remaining >= 16 {
 		// get buffer
 		toRead := min(int64(chunkSize+16), remaining)
@@ -774,17 +724,13 @@ func (a *AES1) DeAESGCMx(key []byte, src io.Reader, size int64, dst io.Writer, c
 
 // ========== Asymetric Encryption Master ==========
 type AsymMaster struct {
-	Algo string // algo: "rsa1", "rsa2", "ecc1", "pqc1"
-	rsa  *RSA1
+	Algo string // algo: "ecc1", "pqc1"
 	ecc  *ECC1
 	pqc1 *PQC1
 }
 
 func (am *AsymMaster) Init(algo string) error {
 	switch algo {
-	case "rsa1", "rsa2":
-		am.Algo = algo
-		am.rsa = new(RSA1)
 	case "ecc1":
 		am.Algo = algo
 		am.ecc = new(ECC1)
@@ -800,10 +746,6 @@ func (am *AsymMaster) Init(algo string) error {
 // Generate key pair
 func (am *AsymMaster) Genkey() ([]byte, []byte, error) {
 	switch am.Algo {
-	case "rsa1":
-		return am.rsa.Genkey(2048)
-	case "rsa2":
-		return am.rsa.Genkey(4096)
 	case "ecc1":
 		return am.ecc.Genkey()
 	case "pqc1":
@@ -814,8 +756,6 @@ func (am *AsymMaster) Genkey() ([]byte, []byte, error) {
 
 func (am *AsymMaster) Loadkey(public []byte, private []byte) error {
 	switch am.Algo {
-	case "rsa1", "rsa2":
-		return am.rsa.Loadkey(public, private)
 	case "ecc1":
 		return am.ecc.Loadkey(public, private)
 	case "pqc1":
@@ -826,8 +766,6 @@ func (am *AsymMaster) Loadkey(public []byte, private []byte) error {
 
 func (am *AsymMaster) Encrypt(data []byte) ([]byte, error) {
 	switch am.Algo {
-	case "rsa1", "rsa2":
-		return am.rsa.Encrypt(data)
 	case "ecc1":
 		return am.ecc.Encrypt(data)
 	case "pqc1":
@@ -838,8 +776,6 @@ func (am *AsymMaster) Encrypt(data []byte) ([]byte, error) {
 
 func (am *AsymMaster) Decrypt(data []byte) ([]byte, error) {
 	switch am.Algo {
-	case "rsa1", "rsa2":
-		return am.rsa.Decrypt(data)
 	case "ecc1":
 		return am.ecc.Decrypt(data)
 	case "pqc1":
@@ -850,8 +786,6 @@ func (am *AsymMaster) Decrypt(data []byte) ([]byte, error) {
 
 func (am *AsymMaster) Sign(data []byte) ([]byte, error) {
 	switch am.Algo {
-	case "rsa1", "rsa2":
-		return am.rsa.Sign(data)
 	case "ecc1":
 		return am.ecc.Sign(data)
 	case "pqc1":
@@ -862,100 +796,12 @@ func (am *AsymMaster) Sign(data []byte) ([]byte, error) {
 
 func (am *AsymMaster) Verify(data []byte, signature []byte) bool {
 	switch am.Algo {
-	case "rsa1", "rsa2":
-		return am.rsa.Verify(data, signature)
 	case "ecc1":
 		return am.ecc.Verify(data, signature)
 	case "pqc1":
 		return am.pqc1.Verify(data, signature)
 	}
 	return false
-}
-
-// ========== RSA Encryption ==========
-type RSA1 struct {
-	Private *rsa.PrivateKey
-	Public  *rsa.PublicKey
-}
-
-// DER(PKIX, PKCS8) format, returns (public, private, error)
-func (r *RSA1) Genkey(bits int) ([]byte, []byte, error) {
-	if bits <= 0 {
-		bits = 2048 // Default bits: 2048
-	}
-	// 1. Generate Key
-	key, err := rsa.GenerateKey(rand.Reader, bits)
-	if err != nil {
-		return nil, nil, err
-	}
-	r.Private = key
-	r.Public = &key.PublicKey
-
-	// 2. Marshal Public Key (PKIX / DER)
-	pubBytes, err := x509.MarshalPKIXPublicKey(r.Public)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// 3. Marshal Private Key (PKCS8 / DER)
-	privBytes, err := x509.MarshalPKCS8PrivateKey(r.Private)
-	if err != nil {
-		return nil, nil, err
-	}
-	return pubBytes, privBytes, nil
-}
-
-// Load keys from DER(PKIX, PKCS8) format bytes. Pass nil to skip.
-func (r *RSA1) Loadkey(public []byte, private []byte) error {
-	if public != nil {
-		pubInterface, err := x509.ParsePKIXPublicKey(public)
-		if err != nil {
-			return err
-		}
-		pubKey, ok := pubInterface.(*rsa.PublicKey)
-		if !ok {
-			return errors.New("not an RSA public key")
-		}
-		r.Public = pubKey
-	}
-
-	if private != nil {
-		privInterface, err := x509.ParsePKCS8PrivateKey(private)
-		if err != nil {
-			return err
-		}
-		privKey, ok := privInterface.(*rsa.PrivateKey)
-		if !ok {
-			return errors.New("not an RSA private key")
-		}
-		r.Private = privKey
-	}
-	return nil
-}
-
-// OAEP-SHA-512
-func (r *RSA1) Encrypt(data []byte) ([]byte, error) {
-	hash := sha512.New()
-	return rsa.EncryptOAEP(hash, rand.Reader, r.Public, data, nil)
-}
-
-// OAEP-SHA-512
-func (r *RSA1) Decrypt(data []byte) ([]byte, error) {
-	hash := sha512.New()
-	return rsa.DecryptOAEP(hash, rand.Reader, r.Private, data, nil)
-}
-
-// PKCS1 v1.5 + SHA256
-func (r *RSA1) Sign(data []byte) ([]byte, error) {
-	hashed := sha256.Sum256(data)
-	return rsa.SignPKCS1v15(rand.Reader, r.Private, crypto.SHA256, hashed[:])
-}
-
-// PKCS1 v1.5 + SHA256, returns true if valid
-func (r *RSA1) Verify(data []byte, signature []byte) bool {
-	hashed := sha256.Sum256(data)
-	err := rsa.VerifyPKCS1v15(r.Public, crypto.SHA256, hashed[:], signature)
-	return err == nil
 }
 
 // ========== ECC Encryption ==========
@@ -1051,7 +897,7 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 	}
 
 	// 3. Derive Key & Encrypt with AES-GCM
-	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
+	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 32)
 	defer sclear(gcmKey)
 	if err != nil {
 		return nil, err
@@ -1094,7 +940,7 @@ func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 	}
 
 	// 3. Decrypt with AES-GCM
-	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 44)
+	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 32)
 	defer sclear(gcmKey)
 	if err != nil {
 		return nil, err
@@ -1370,7 +1216,7 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	sharedSecret = append(sharedSecret, ssvKEM...)
 	defer sclear(sharedSecret)
 
-	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
+	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 32)
 	defer sclear(gcmKey)
 	if err != nil {
 		return nil, err
@@ -1467,7 +1313,7 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	sharedSecret = append(sharedSecret, ssvKEM...)
 	defer sclear(sharedSecret)
 
-	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 44)
+	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 32)
 	defer sclear(gcmKey)
 	if err != nil {
 		return nil, err

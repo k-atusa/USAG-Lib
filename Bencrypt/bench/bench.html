@@ -119,7 +119,7 @@
 
                 // ===== 2. Hash Functions =====
                 log("\n===== Hash Functions =====");
-                const algos_h = ["sha3", "pbk2", "arg2"];
+                const algos_h = ["sha3", "arg2low", "arg2st"];
                 const iters_h = [100000, 5, 5];
                 const pw = new Uint8Array(64);
                 const salt = new Uint8Array(32);
@@ -148,7 +148,7 @@
 
                 if (symData) {
                     const algos_s = ["gcm1", "gcmx1"];
-                    const key = new Uint8Array(44).fill(0); // 44B Null Key
+                    const key = new Uint8Array(32).fill(0); // 32B Null Key
 
                     for (let algo of algos_s) {
                         let w = new window.Bencrypt.SymMaster(algo, key);
@@ -163,9 +163,9 @@
 
                 // ===== 4. Asymmetric Functions =====
                 log("\n===== Asymmetric Functions =====");
-                const algos_a = ["rsa1", "rsa2", "ecc1", "pqc1"];
-                const iters_g = [3, 1, 20, 20];
-                const iters_c = [25, 25, 50, 50];
+                const algos_a = ["ecc1", "pqc1"];
+                const iters_g = [20, 20];
+                const iters_c = [50, 50];
                 const asymData = new Uint8Array(64); // std: 64B data
 
                 for (let i = 0; i < algos_a.length; i++) {

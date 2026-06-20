@@ -48,14 +48,14 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 	fmt.Println("\n\n===== Hash Functions =====")
-	hashAlgos := []string{"sha3", "pbk2", "arg2"}
+	hashAlgos := []string{"sha3", "arg2low", "arg2st"}
 	itersH := []int{100000, 5, 5}
 	pw := make([]byte, 64)   // std: 64B password
 	salt := make([]byte, 32) // std: 32B salt
 
 	for i, algo := range hashAlgos {
 		w := new(Bencrypt.HashMaster)
-		w.Init(algo, 32, 44)
+		w.Init(algo, 32, 32)
 		start = time.Now()
 		for j := 0; j < itersH[i]; j++ {
 			w.KDF(pw, salt)
@@ -79,7 +79,7 @@ func main() {
 	tempBin.Close()
 
 	symAlgos := []string{"gcm1", "gcmx1"}
-	symKey := bytes.Repeat([]byte("0"), 44) // 44B Null Key
+	symKey := bytes.Repeat([]byte("0"), 32) // 32B Null Key
 
 	for _, algo := range symAlgos {
 		w := new(Bencrypt.SymMaster)
@@ -106,9 +106,9 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 	fmt.Println("\n\n===== Asymmetric Functions =====")
-	asymAlgos := []string{"rsa1", "rsa2", "ecc1", "pqc1"}
-	itersG := []int{3, 1, 20, 20}
-	itersC := []int{25, 25, 50, 50}
+	asymAlgos := []string{"ecc1", "pqc1"}
+	itersG := []int{20, 20}
+	itersC := []int{50, 50}
 	asymData := make([]byte, 64) // std: 64B data
 
 	for i, algo := range asymAlgos {

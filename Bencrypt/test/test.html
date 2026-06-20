@@ -4,29 +4,50 @@
 -->
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test</title>
     <style>
-        body { font-family: monospace; padding: 20px; background-color: #f0f0f0; }
-        #console { 
-            background-color: #1e1e1e; 
-            color: #d4d4d4; 
-            padding: 15px; 
-            border-radius: 5px; 
-            white-space: pre-wrap; 
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+
+        #console {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
             min-height: 400px;
             max-height: 700px;
             overflow-y: auto;
             word-break: break-all;
         }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-        .success { color: #4caf50; }
-        .info { color: #569cd6; }
-        .error { color: #f44336; }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .success {
+            color: #4caf50;
+        }
+
+        .info {
+            color: #569cd6;
+        }
+
+        .error {
+            color: #f44336;
+        }
     </style>
 </head>
+
 <body>
     <h1>Library Test</h1>
     <p>test will be executed on your browser</p>
@@ -36,20 +57,15 @@
 
     <script type="module">
         import {
-            TestReader, TestWriter, Random, SHA3256, SHA3512, pbkdf2, argon2Hash, argon2Verify, genkey, 
-            Masker, HashMaster, SymMaster, AsymMaster
+            TestReader, TestWriter, Random, SHA3256, SHA3512, Masker, HashMaster, SymMaster, AsymMaster
         } from '../Bencrypt.js';
-        
+
         window.Bencrypt = {
             "TestReader": TestReader,
             "TestWriter": TestWriter,
             "Random": Random,
             "SHA3256": SHA3256,
             "SHA3512": SHA3512,
-            "pbkdf2": pbkdf2,
-            "argon2Hash": argon2Hash,
-            "argon2Verify": argon2Verify,
-            "genkey": genkey,
             "Masker": Masker,
             "HashMaster": HashMaster,
             "SymMaster": SymMaster,
@@ -59,8 +75,8 @@
 
     <script>
         const consoleDiv = document.getElementById('console');
-        
-        function log(message, color = '') { 
+
+        function log(message, color = '') {
             const span = document.createElement('span');
             span.textContent = message + "\n";
             if (color) span.className = color;
@@ -95,7 +111,7 @@
             }
             return true;
         }
-        
+
         function printPyBool(val) {
             return val ? "True" : "False";
         }
@@ -112,7 +128,7 @@
                 log("loading testsheet...", "info");
                 const response = await fetch('testsheet.txt');
                 if (!response.ok) throw new Error("Failed to load testsheet.txt. Make sure you are running via local HTTP server.");
-                
+
                 const text = await response.text();
                 const sheet = [];
                 const lines = text.split(/\r?\n/);
@@ -144,10 +160,10 @@
 
                 // --- 3. HashMaster (pw_store, keygen) ---
                 log("\ntesting HashMaster...");
-                const hashm = ["sha3", "pbk2", "arg2"];
+                const hashm = ["sha3", "arg2low", "arg2st"];
                 const pw = new TextEncoder().encode("ABCDABCDABCDABCD");
                 const salt = new TextEncoder().encode("1234123412341234");
-                
+
                 for (let algo of hashm) {
                     const w = new window.Bencrypt.HashMaster(algo);
                     const [pwst, keygen] = await w.KDF(pw, salt);
@@ -160,12 +176,12 @@
                 // --- 4. SymMaster (enbin, enfile) ---
                 log("\ntesting SymMaster...");
                 const symm = ["gcm1", "gcmx1"];
-                const key = new TextEncoder().encode("0".repeat(44));
+                const key = new TextEncoder().encode("0".repeat(32));
                 const plain = new TextEncoder().encode("Hello, world!".repeat(32));
-                
+
                 for (let algo of symm) {
                     const w = new window.Bencrypt.SymMaster(algo, key);
-                    
+
                     // DeBin Memory Test
                     let debinRes = await w.DeBin(sheet[pos]);
                     log(printPyBool(areEqual(plain, debinRes)));
@@ -197,42 +213,42 @@
 
                 // --- 5. AsymMaster (pubkey, prikey, enc, sign) ---
                 log("\ntesting AsymMaster...");
-                const asymm = ["rsa1", "rsa2", "ecc1", "pqc1"];
+                const asymm = ["ecc1", "pqc1"];
                 const plainAsym = new TextEncoder().encode("Hello, world!");
-                
+
                 for (let algo of asymm) {
                     const w = new window.Bencrypt.AsymMaster(algo);
                     let pub = sheet[pos];
                     let pri = sheet[pos + 1];
                     pos += 2;
                     await w.Loadkey(pub, pri);
-                    
+
                     let enc = sheet[pos];
                     let sign = sheet[pos + 1];
                     pos += 2;
-                    
+
                     // Decrypt and Verify compatibility with Python generated cipher/signature
                     let dec = await w.Decrypt(enc);
                     log(printPyBool(areEqual(plainAsym, dec)));
-                    
+
                     let ver = await w.Verify(plainAsym, sign);
                     log(printPyBool(ver));
 
                     // Internal Generate, Encrypt, Sign loop
                     const temp = new window.Bencrypt.AsymMaster(algo);
                     const [pub_new, pri_new] = await temp.Genkey();
-                    
+
                     const a = new window.Bencrypt.AsymMaster(algo);
                     const b = new window.Bencrypt.AsymMaster(algo);
                     await a.Loadkey(pub_new, null);
                     await b.Loadkey(null, pri_new);
-                    
+
                     let enc_new = await a.Encrypt(plainAsym);
                     let sign_new = await b.Sign(plainAsym);
-                    
+
                     let dec_new = await b.Decrypt(enc_new);
                     log(printPyBool(areEqual(plainAsym, dec_new)));
-                    
+
                     let ver_new = await a.Verify(plainAsym, sign_new);
                     log(printPyBool(ver_new));
                 }
@@ -247,4 +263,5 @@
         }
     </script>
 </body>
+
 </html>

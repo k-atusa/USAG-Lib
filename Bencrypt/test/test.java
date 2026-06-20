@@ -67,7 +67,7 @@ public class test {
 
             // HashMaster (pw_store, keygen)
             System.out.println("testing HashMaster...");
-            String[] hashm = {"sha3", "pbk2", "arg2"};
+            String[] hashm = {"sha3", "arg2low", "arg2st"};
             byte[] pw = "ABCDABCDABCDABCD".getBytes(StandardCharsets.UTF_8);
             byte[] salt = "1234123412341234".getBytes(StandardCharsets.UTF_8);
             
@@ -81,7 +81,7 @@ public class test {
             // SymMaster (enbin, enfile)
             System.out.println("testing SymMaster...");
             String[] symm = {"gcm1", "gcmx1"};
-            byte[] key = repeat("0".getBytes(StandardCharsets.UTF_8), 44);
+            byte[] key = repeat("0".getBytes(StandardCharsets.UTF_8), 32);
             byte[] plain = repeat("Hello, world!".getBytes(StandardCharsets.UTF_8), 32);
             
             for (String algo : symm) {
@@ -109,7 +109,7 @@ public class test {
 
             // AsymMaster (pubkey, prikey, enc, sign)
             System.out.println("testing AsymMaster...");
-            String[] asymm = {"rsa1", "rsa2", "ecc1", "pqc1"};
+            String[] asymm = {"ecc1", "pqc1"};
             byte[] plainAsym = "Hello, world!".getBytes(StandardCharsets.UTF_8);
             
             for (String algo : asymm) {

@@ -52,7 +52,7 @@ public class bench {
 
             Thread.sleep(1000);
             System.out.println("\n\n===== Hash Functions =====");
-            String[] hashm = {"sha3", "pbk2", "arg2"};
+            String[] hashm = {"sha3", "arg2low", "arg2st"};
             int[] iters_h = {100000, 5, 5};
             byte[] pw = new byte[64];
             byte[] salt = new byte[32];
@@ -82,7 +82,7 @@ public class bench {
             tempOut.close();
 
             String[] symm = {"gcm1", "gcmx1"};
-            byte[] symKey = repeat((byte)'0', 44);
+            byte[] symKey = repeat((byte)'0', 32);
 
             for (String algo : symm) {
                 Bencrypt.SymMaster w = new Bencrypt.SymMaster(algo, symKey);
@@ -110,9 +110,9 @@ public class bench {
 
             Thread.sleep(1000);
             System.out.println("\n\n===== Asymmetric Functions =====");
-            String[] asymm = {"rsa1", "rsa2", "ecc1", "pqc1"};
-            int[] iters_g = {3, 1, 20, 20};
-            int[] iters_c = {25, 25, 50, 50};
+            String[] asymm = {"ecc1", "pqc1"};
+            int[] iters_g = {20, 20};
+            int[] iters_c = {50, 50};
             byte[] asymData = new byte[64];
 
             for (int i = 0; i < asymm.length; i++) {

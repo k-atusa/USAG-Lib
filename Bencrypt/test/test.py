@@ -26,7 +26,7 @@ print(mB.XOR(mA.XOR(key)) == key)
 
 # HashMaster (pw_store, keygen)
 print("testing HashMaster...")
-hashm = ["sha3", "pbk2", "arg2"]
+hashm = ["sha3", "arg2low", "arg2st"]
 pw, salt = b"ABCDABCDABCDABCD", b"1234123412341234"
 for algo in hashm:
     w = Bencrypt.HashMaster(algo)
@@ -39,7 +39,7 @@ for algo in hashm:
 # SymMaster (enbin, enfile)
 print("testing SymMaster...")
 symm = ["gcm1", "gcmx1"]
-key = b"0" * 44
+key = b"0" * 32
 plain = b"Hello, world!" * 32
 for algo in symm:
     w = Bencrypt.SymMaster(algo, key)
@@ -62,7 +62,7 @@ for algo in symm:
 
 # AsymMaster (pubkey, prikey, enc, sign)
 print("testing AsymMaster...")
-asymm = ["rsa1", "rsa2", "ecc1", "pqc1"]
+asymm = ["ecc1", "pqc1"]
 plain = b"Hello, world!"
 for algo in asymm:
     w = Bencrypt.AsymMaster(algo)

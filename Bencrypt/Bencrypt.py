@@ -7,14 +7,9 @@ import secrets
 import hashlib
 import hmac
 
-from argon2 import PasswordHasher
 from argon2 import low_level
 
 from Cryptodome.Cipher import AES
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Cipher import PKCS1_OAEP
-from Cryptodome.Signature import pkcs1_15
-from Cryptodome.Hash import SHA256, SHA512
 
 from cryptography.hazmat.primitives.asymmetric import x448, ed448
 from cryptography.hazmat.primitives import serialization
@@ -29,8 +24,14 @@ def Random(size: int) -> bytes:
 def SHA3256(data: bytes) -> bytes:
     return hashlib.sha3_256(data).digest()
 
+def HMAC3256(key: bytes, data: bytes) -> bytes:
+    return hmac.new(key, data, hashlib.sha3_256).digest()
+
 def SHA3512(data: bytes) -> bytes:
     return hashlib.sha3_512(data).digest()
+
+def HMAC3512(key: bytes, data: bytes) -> bytes:
+    return hmac.new(key, data, hashlib.sha3_512).digest()
 
 def genkey(data: bytes, lbl: str, size: int) -> bytes: # HMAC-SHA3-512
     key = hmac.new(data, lbl.encode('utf-8'), hashlib.sha3_512).digest()
@@ -93,8 +94,8 @@ class Masker:
 
 # ========== Hash Function Master ==========
 class HashMaster:
-    def __init__(self, algo: str, hashSize: int = 32, keySize: int = 44):
-        if algo not in ["sha3", "pbk2", "arg2"]:
+    def __init__(self, algo: str, hashSize: int = 32, keySize: int = 32):
+        if algo not in ["sha3", "arg2low", "arg2st"]:
             raise ValueError(f"Unsupported algorithm: {algo}")
         self.algo = algo
         self.hashSize = hashSize
@@ -105,12 +106,12 @@ class HashMaster:
         if self.algo == "sha3":
             lblStore, lblKeygen = "PWHASH_SHA3", "KEYGEN_SHA3"
             master = SHA3512(salt + pw)
-        elif self.algo == "pbk2":
-            lblStore, lblKeygen = "PWHASH_PBK2", "KEYGEN_PBK2"
-            master = pbkdf2(pw, salt)
-        elif self.algo == "arg2":
-            lblStore, lblKeygen = "PWHASH_ARG2", "KEYGEN_ARG2"
-            master = argon2(pw, salt)
+        elif self.algo == "arg2low":
+            lblStore, lblKeygen = "PWHASH_ARG2LOW", "KEYGEN_ARG2LOW"
+            master = argon2low(pw, salt)
+        elif self.algo == "arg2st":
+            lblStore, lblKeygen = "PWHASH_ARG2ST", "KEYGEN_ARG2ST"
+            master = argon2st(pw, salt)
         else:
             return (None, None)
         pwStore, keyGen = genkey(master, lblStore, self.hashSize), genkey(master, lblKeygen, self.keySize)
@@ -118,23 +119,11 @@ class HashMaster:
         return pwStore, keyGen
     
 # ========== Hash Functions ==========
-def pbkdf2(pw: bytes, salt: bytes, iter: int = 1000000, outsize: int = 64) -> bytes:
-    return hashlib.pbkdf2_hmac('sha512', pw, salt, iter, dklen=outsize)
+def argon2low(pw: bytes, salt: bytes) -> bytes:
+    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=4, memory_cost=65536, parallelism=8, hash_len=48, type=low_level.Type.ID)
 
-def argon2(pw: bytes, salt: bytes) -> bytes:
-    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=3, memory_cost=262144, parallelism=4, hash_len=48, type=low_level.Type.ID)
-
-def argon2Hash(pw: bytes, salt: bytes | None = None) -> str:
-    p = PasswordHasher(time_cost=3, memory_cost=262144, parallelism=4, hash_len=48, salt_len=16) # fix parameters
-    return p.hash(pw) if salt == None else p.hash(pw, salt=salt)
-
-def argon2Verify(hashed: str, pw: bytes) -> bool:
-    p = PasswordHasher()
-    try:
-        p.verify(hashed, pw)
-        return True
-    except:
-        return False
+def argon2st(pw: bytes, salt: bytes) -> bytes:
+    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=3, memory_cost=262144, parallelism=6, hash_len=48, type=low_level.Type.ID)
 
 # ========== Symmetric Encryption Master ==========
 class SymMaster:
@@ -143,8 +132,8 @@ class SymMaster:
             raise ValueError(f"Unsupported algorithm: {algo}")
         self.algo = algo
         if self.algo == 'gcm1' or self.algo == 'gcmx1':
-            if len(key) != 44:
-                raise ValueError("Key length must be 44 bytes (12B IV + 32B Key)")
+            if len(key) != 32:
+                raise ValueError("Key length must be 32 bytes")
             self.mask = Masker()
             self.key, self.worker = self.mask.XOR(key), AES1() # saved as XOR masked
 
@@ -156,12 +145,12 @@ class SymMaster:
 
     def AfterSize(self, size: int) -> int:
         if self.algo == "gcm1":
-            return size + 16 # tag size
+            return size + 28
         elif self.algo == "gcmx1":
             c = size // 1048576 + 1
             if size != 0 and size % 1048576 == 0:
                 c -= 1
-            return size + 16 * c
+            return size + 12 + 16 * c
         
     def Processed(self) -> int:
         if self.algo == 'gcm1' or self.algo == 'gcmx1':
@@ -209,27 +198,32 @@ class AES1:
 
     def enAESGCM(self, key: bytes, data: bytes) -> bytes: # AES-GCM
         with self._lock: self._processed = 0
-        if len(key) != 44:
-            raise ValueError("key size must be 44 bytes")
-        cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
+        if len(key) != 32:
+            raise ValueError("key size must be 32 bytes")
+        iv = Random(12)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
         ciphertext, tag = cipher.encrypt_and_digest(data)
         with self._lock: self._processed = len(data)
-        return ciphertext + tag # [encdata][tag 16B]
+        return iv + ciphertext + tag # [IV 12B][encdata][tag 16B]
 
     def deAESGCM(self, key: bytes, data: bytes) -> bytes: # AES-GCM
         with self._lock: self._processed = 0
-        if len(key) != 44:
-            raise ValueError("key size must be 44 bytes")
-        cipher = AES.new(key[12:], AES.MODE_GCM, nonce=key[:12])
-        plaintext = cipher.decrypt_and_verify(data[:-16], data[-16:])
+        if len(key) != 32:
+            raise ValueError("key size must be 32 bytes")
+        if len(data) < 28:
+            raise ValueError("cipher too short")
+        iv = data[:12]
+        cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+        plaintext = cipher.decrypt_and_verify(data[12:-16], data[-16:])
         with self._lock: self._processed = len(data)
         return plaintext
 
     def enAESGCMx(self, key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
         with self._lock: self._processed = 0
-        if len(key) != 44:
-            raise ValueError("key size must be 44 bytes")
-        globalIV, globalKey, count = key[:12], key[12:], 0
+        if len(key) != 32:
+            raise ValueError("key size must be 32 bytes")
+        globalIV, globalKey, count = Random(12), key, 0
+        dst.write(globalIV)
         for i in range(0, size // chunkSize):
             iv = mkiv(globalIV, count)
             count += 1
@@ -250,12 +244,15 @@ class AES1:
 
     def deAESGCMx(self, key: bytes, src: io.IOBase, size: int, dst: io.IOBase, chunkSize: int = 1048576): # AES-GCM extended
         with self._lock: self._processed = 0
-        if len(key) != 44:
-            raise ValueError("key size must be 44 bytes")
-        if size < 16:
+        if len(key) != 32:
+            raise ValueError("key size must be 32 bytes")
+        if size < 28:
             raise ValueError("cipher too short to decrypt")
-        globalIV, globalKey, count = key[:12], key[12:], 0
-        for i in range(0, size // (chunkSize + 16)):
+        globalIV = src.read(12)
+        globalKey, count = key, 0
+        rem_size = size - 12
+        with self._lock: self._processed = 12
+        for i in range(0, rem_size // (chunkSize + 16)):
             iv = mkiv(globalIV, count)
             count += 1
             cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
@@ -264,24 +261,22 @@ class AES1:
             plaintext = cipher.decrypt_and_verify(chunk, tag)
             dst.write(plaintext)
             with self._lock: self._processed += chunkSize + 16
-        if size == 0 or size % (chunkSize + 16) != 0:
+        if rem_size == 0 or rem_size % (chunkSize + 16) != 0:
             iv = mkiv(globalIV, count)
             cipher = AES.new(globalKey, AES.MODE_GCM, nonce=iv)
-            chunk = src.read(size % (chunkSize + 16) - 16)
+            chunk = src.read(rem_size % (chunkSize + 16) - 16)
             tag = src.read(16)
             plaintext = cipher.decrypt_and_verify(chunk, tag)
             dst.write(plaintext)
-            with self._lock: self._processed += size % (chunkSize + 16)
+            with self._lock: self._processed += rem_size % (chunkSize + 16)
 
 # ========== Asymmetric Encryption Master ==========
 class AsymMaster:
     def __init__(self, algo: str):
-        if algo not in ["rsa1", "rsa2", "ecc1", "pqc1"]:
+        if algo not in ["ecc1", "pqc1"]:
             raise ValueError(f"Unsupported algorithm: {algo}")
         self.algo = algo
-        if self.algo == 'rsa1' or self.algo == 'rsa2':
-            self.worker = RSA1()
-        elif self.algo == 'ecc1':
+        if self.algo == 'ecc1':
             self.worker = ECC1()
         elif self.algo == 'pqc1':
             self.worker = PQC1()
@@ -291,76 +286,31 @@ class AsymMaster:
             del self.worker
 
     def Genkey(self) -> Tuple[bytes, bytes]:
-        if self.algo == 'rsa1':
-            return self.worker.genkey(2048)
-        elif self.algo == 'rsa2':
-            return self.worker.genkey(4096)
-        elif self.algo == 'ecc1':
+        if self.algo == 'ecc1':
             return self.worker.genkey()
         elif self.algo == 'pqc1':
             return self.worker.genkey()
 
     def Loadkey(self, public: bytes|None, private: bytes|None):
-        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
+        if self.algo in ["ecc1", "pqc1"]:
             self.worker.loadkey(public, private)
 
     def Encrypt(self, data: bytes) -> bytes:
-        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
+        if self.algo in ["ecc1", "pqc1"]:
             return self.worker.encrypt(data)
 
     def Decrypt(self, data: bytes) -> bytes:
-        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
+        if self.algo in ["ecc1", "pqc1"]:
             return self.worker.decrypt(data)
 
     def Sign(self, data: bytes) -> bytes:
-        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
+        if self.algo in ["ecc1", "pqc1"]:
             return self.worker.sign(data)
 
     def Verify(self, data: bytes, signature: bytes) -> bool:
-        if self.algo in ["rsa1", "rsa2", "ecc1", "pqc1"]:
+        if self.algo in ["ecc1", "pqc1"]:
             return self.worker.verify(data, signature)
 
-# ========== RSA Encryption ==========
-class RSA1:
-    def __init__(self):
-        self.public: Optional[RSA.RsaKey] = None
-        self.private: Optional[RSA.RsaKey] = None
-
-    def __del__(self):
-        self.public = None
-        self.private = None
-
-    def genkey(self, bits: int = 2048) -> Tuple[bytes, bytes]: # DER(PKIX, PKCS8) format, (public, private)
-        key = RSA.generate(bits) # 2048, 3072, 4096
-        self.private = key
-        self.public = key.publickey()
-        return (self.public.export_key(format='DER'), self.private.export_key(format='DER', pkcs=8))
-
-    def loadkey(self, public: bytes|None, private: bytes|None): # DER(PKIX, PKCS8) format, load if not None
-        if public != None:
-            self.public = RSA.import_key(public)
-        if private != None:
-            self.private = RSA.import_key(private)
-
-    def encrypt(self, data: bytes) -> bytes: # OAEP-SHA-512
-        cipher = PKCS1_OAEP.new(self.public, hashAlgo=SHA512)
-        return cipher.encrypt(data)
-
-    def decrypt(self, data: bytes) -> bytes: # OAEP-SHA-512
-        cipher = PKCS1_OAEP.new(self.private, hashAlgo=SHA512)
-        return cipher.decrypt(data)
-
-    def sign(self, data: bytes) -> bytes: # PKCS1 v1.5 + SHA256
-        h = SHA256.new(data)
-        return pkcs1_15.new(self.private).sign(h)
-
-    def verify(self, data: bytes, signature: bytes) -> bool: # PKCS1 v1.5 + SHA256
-        try:
-            h = SHA256.new(data)
-            pkcs1_15.new(self.public).verify(h, signature)
-            return True
-        except (ValueError, TypeError):
-            return False
 
 # ========== ECC Encryption ==========
 class ECC1: # Curve448
@@ -407,7 +357,7 @@ class ECC1: # Curve448
         tempKey = x448.X448PrivateKey.generate() # 1. Generate temp ephemeral key
         tempPub = tempKey.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
         shared = tempKey.exchange(self.pubX) # 2. Get shared secret (ECDH)
-        gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
+        gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 32)
         enc = SymMaster("gcm1", gcmKey).EnBin(data) # 3. Encrypt with AES-GCM
 
         del tempKey
@@ -426,7 +376,7 @@ class ECC1: # Curve448
         shared = self.priX.exchange(tempKey)
 
         # 3. Decrypt with AES-GCM
-        gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 44)
+        gcmKey = genkey(shared, "KEYGEN_ECC1_ENCRYPT", 32)
         del tempKey
         del shared
         return SymMaster("gcm1", gcmKey).DeBin(enc)
@@ -520,7 +470,7 @@ class PQC1:
         kemEnc, ssvKEM = mlkem_enc(self.pubKEM) # Cipher 1568B, Secret 32B
 
         # 3. Hybrid KDF & Encryption
-        gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 44)
+        gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 32)
         enc = SymMaster("gcm1", gcmKey).EnBin(data)
 
         # [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
@@ -542,7 +492,7 @@ class PQC1:
         ssvKEM = mlkem_dec(self.mask.XOR(self.priKEM), kemEnc)
 
         # 3. Hybrid KDF & Decryption
-        gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 44)
+        gcmKey = genkey(ssvECC + ssvKEM, "KEYGEN_PQC1_ENCRYPT", 32)
         del tempXKey
         del ssvECC
         del ssvKEM

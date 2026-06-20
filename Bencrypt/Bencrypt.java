@@ -20,25 +20,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.Arrays;
 
 import java.security.SecureRandom;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.Signature;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.spec.MGF1ParameterSpec;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.OAEPParameterSpec;
-import javax.crypto.spec.PSource;
 
 import org.bouncycastle.crypto.params.ParametersWithRandom;
-import org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator;
-import org.bouncycastle.crypto.digests.SHA512Digest;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.digests.SHA3Digest;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
@@ -145,6 +132,24 @@ public class Bencrypt {
         return result;
     }
 
+    public static byte[] HMAC3256(byte[] key, byte[] data) {
+        HMac hmac = new HMac(new SHA3Digest(256));
+        hmac.init(new KeyParameter(key));
+        hmac.update(data, 0, data.length);
+        byte[] result = new byte[hmac.getMacSize()];
+        hmac.doFinal(result, 0);
+        return result;
+    }
+
+    public static byte[] HMAC3512(byte[] key, byte[] data) {
+        HMac hmac = new HMac(new SHA3Digest(512));
+        hmac.init(new KeyParameter(key));
+        hmac.update(data, 0, data.length);
+        byte[] result = new byte[hmac.getMacSize()];
+        hmac.doFinal(result, 0);
+        return result;
+    }
+
     // ========== Data Masker ==========
     public static class Masker {
         private static volatile Masker instance = null; // singleton
@@ -234,7 +239,7 @@ public class Bencrypt {
         private int keySize;
 
         public HashMaster(String algo, int hashSize, int keySize) {
-            if (!algo.equals("sha3") && !algo.equals("pbk2") && !algo.equals("arg2")) {
+            if (!algo.equals("sha3") && !algo.equals("arg2low") && !algo.equals("arg2st")) {
                 throw new IllegalArgumentException("Unsupported algorithm: " + algo);
             }
             this.algo = algo;
@@ -243,7 +248,7 @@ public class Bencrypt {
         }
 
         public HashMaster(String algo) {
-            this(algo, 32, 44); // default hashSize=32 bytes, keySize=44 bytes
+            this(algo, 32, 32); // default hashSize=32 bytes, keySize=32 bytes
         }
 
         public byte[][] KDF(byte[] pw, byte[] salt) {
@@ -259,15 +264,15 @@ public class Bencrypt {
                 master = Bencrypt.SHA3512(combined);
                 sclear(combined);
 
-            } else if (this.algo.equals("pbk2")) {
-                lblStore = "PWHASH_PBK2";
-                lblKeygen = "KEYGEN_PBK2";
-                master = Bencrypt.pbkdf2(pw, salt, 1000000, 64);
+            } else if (this.algo.equals("arg2low")) {
+                lblStore = "PWHASH_ARG2LOW";
+                lblKeygen = "KEYGEN_ARG2LOW";
+                master = Bencrypt.argon2low(pw, salt);
 
-            } else if (this.algo.equals("arg2")) {
-                lblStore = "PWHASH_ARG2";
-                lblKeygen = "KEYGEN_ARG2";
-                master = Bencrypt.argon2(pw, salt);
+            } else if (this.algo.equals("arg2st")) {
+                lblStore = "PWHASH_ARG2ST";
+                lblKeygen = "KEYGEN_ARG2ST";
+                master = Bencrypt.argon2st(pw, salt);
 
             } else {
                 return new byte[0][0];
@@ -281,23 +286,12 @@ public class Bencrypt {
     }
 
     // ========== Hash Functions ==========
-    public static byte[] pbkdf2(byte[] pw, byte[] salt, int iter, int outsize) {
-        if (iter <= 0) // set iter, outsize to 0 for default (1000000, 64)
-            iter = 1000000;
-        if (outsize <= 0)
-            outsize = 64;
-        PKCS5S2ParametersGenerator gen = new PKCS5S2ParametersGenerator(new SHA512Digest());
-        gen.init(pw, salt, iter);
-        KeyParameter params = (KeyParameter) gen.generateDerivedParameters(outsize * 8); // byte -> bit
-        return params.getKey();
-    }
-
-    public static byte[] argon2(byte[] pw, byte[] salt) {
+    public static byte[] argon2low(byte[] pw, byte[] salt) {
         Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                 .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                .withIterations(3)
-                .withMemoryAsKB(262144)
-                .withParallelism(4)
+                .withIterations(4)
+                .withMemoryAsKB(65536)
+                .withParallelism(8)
                 .withSalt(salt);
         Argon2BytesGenerator gen = new Argon2BytesGenerator();
         gen.init(builder.build());
@@ -306,70 +300,18 @@ public class Bencrypt {
         return result;
     }
 
-    public String argon2Hash(byte[] pw, byte[] salt) {
-        if (salt == null) { // Argon2 Parameters: Type=Argon2id, Time=3, Mem=262144(256MiB), Parallel=4,
-                            // Len=48, Salt=16
-            salt = this.Random(16);
-        }
+    public static byte[] argon2st(byte[] pw, byte[] salt) {
         Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                 .withVersion(Argon2Parameters.ARGON2_VERSION_13)
                 .withIterations(3)
                 .withMemoryAsKB(262144)
-                .withParallelism(4)
+                .withParallelism(6)
                 .withSalt(salt);
         Argon2BytesGenerator gen = new Argon2BytesGenerator();
         gen.init(builder.build());
         byte[] result = new byte[48];
         gen.generateBytes(pw, result, 0, result.length);
-
-        // generate formatted string ( $argon2id$v=19$m=262144,t=3,p=4$saltB64$hashB64 )
-        String b64Salt = Base64.getEncoder().withoutPadding().encodeToString(salt); // base64 without padding
-        String b64Hash = Base64.getEncoder().withoutPadding().encodeToString(result);
-        return String.format("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s", 262144, 3, 4, b64Salt, b64Hash);
-    }
-
-    public boolean argon2Verify(String hashed, byte[] pw) {
-        try {
-            // make simple parser
-            String[] parts = hashed.split("\\$");
-            if (parts.length != 6)
-                return false;
-            if (!parts[1].equals("argon2id"))
-                return false;
-
-            // get parameters
-            String[] params = parts[3].split(",");
-            int memory = 0, iterations = 0, parallelism = 0;
-            for (String p : params) {
-                String[] kv = p.split("=");
-                int val = Integer.parseInt(kv[1]);
-                if (kv[0].equals("m"))
-                    memory = val;
-                else if (kv[0].equals("t"))
-                    iterations = val;
-                else if (kv[0].equals("p"))
-                    parallelism = val;
-            }
-            byte[] salt = decodeB64(parts[4]);
-            byte[] originalHash = decodeB64(parts[5]);
-
-            // rehash
-            Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                    .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                    .withIterations(iterations)
-                    .withMemoryAsKB(memory)
-                    .withParallelism(parallelism)
-                    .withSalt(salt);
-
-            Argon2BytesGenerator gen = new Argon2BytesGenerator();
-            gen.init(builder.build());
-            byte[] newHash = new byte[originalHash.length];
-            gen.generateBytes(pw, newHash, 0, newHash.length);
-            return Arrays.equals(originalHash, newHash);
-
-        } catch (Exception e) {
-            return false;
-        }
+        return result;
     }
 
     // ========== Symmetric Encryption Master ==========
@@ -381,14 +323,14 @@ public class Bencrypt {
 
         /**
          * @param algo "gcm1" or "gcmx1"
-         * @param key  44 bytes (12B IV + 32B Key)
+         * @param key  32 bytes Key
          */
         public SymMaster(String algo, byte[] key) {
             if (!algo.equals("gcm1") && !algo.equals("gcmx1")) {
                 throw new IllegalArgumentException("Unsupported algorithm: " + algo);
             }
-            if (key.length != 44) {
-                throw new IllegalArgumentException("Key length must be 44 bytes (12B IV + 32B Key)");
+            if (key.length != 32) {
+                throw new IllegalArgumentException("Key length must be 32 bytes");
             }
             this.algo = algo;
             this.mask = Masker.GetMasker();
@@ -399,14 +341,14 @@ public class Bencrypt {
         // Calculate expected output size
         public long AfterSize(long size) {
             if (this.algo.equals("gcm1")) {
-                return size + 16;
+                return size + 28;
             } else if (this.algo.equals("gcmx1")) {
                 long chunkSize = 1048576;
                 long c = size / chunkSize + 1;
                 if (size != 0 && size % chunkSize == 0) {
                     c -= 1;
                 }
-                return size + (16 * c);
+                return size + 12 + (16 * c);
             }
             return 0;
         }
@@ -499,44 +441,52 @@ public class Bencrypt {
             return this.processed.get();
         }
 
-        // encrypt single block with 44B key, output: [Ciphertext][Tag 16B]
+        // encrypt single block with 32B key, output: [IV 12B][Ciphertext][Tag 16B]
         public byte[] enAESGCM(byte[] key, byte[] data) throws Exception {
             this.processed.set(0);
-            if (key.length != 44)
-                throw new IllegalArgumentException("key size must be 44 bytes");
-            byte[] iv = Arrays.copyOfRange(key, 0, 12);
-            byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
-            byte[] result = inlineEnc(keyBytes, iv, data);
-            sclear(keyBytes);
+            if (key.length != 32)
+                throw new IllegalArgumentException("key size must be 32 bytes");
+            Bencrypt rg = new Bencrypt();
+            byte[] iv = rg.Random(12);
+            byte[] keyBytes = key;
+            byte[] encrypted = inlineEnc(keyBytes, iv, data);
+
+            byte[] result = new byte[12 + encrypted.length];
+            System.arraycopy(iv, 0, result, 0, 12);
+            System.arraycopy(encrypted, 0, result, 12, encrypted.length);
+
             this.processed.set(data.length);
             return result;
         }
 
-        // decrypt single block with 44B key
+        // decrypt single block with 32B key
         public byte[] deAESGCM(byte[] key, byte[] data) throws Exception {
             this.processed.set(0);
-            if (key.length != 44)
-                throw new IllegalArgumentException("key size must be 44 bytes");
-            if (data.length < 16)
-                throw new IllegalArgumentException("data size must be at least 16 bytes");
-            byte[] iv = Arrays.copyOfRange(key, 0, 12);
-            byte[] keyBytes = Arrays.copyOfRange(key, 12, 44);
-            byte[] result = inlineDec(keyBytes, iv, data);
-            sclear(keyBytes);
+            if (key.length != 32)
+                throw new IllegalArgumentException("key size must be 32 bytes");
+            if (data.length < 28)
+                throw new IllegalArgumentException("data size must be at least 28 bytes");
+            byte[] iv = Arrays.copyOfRange(data, 0, 12);
+            byte[] encrypted = Arrays.copyOfRange(data, 12, data.length);
+            byte[] keyBytes = key;
+            byte[] result = inlineDec(keyBytes, iv, encrypted);
             this.processed.set(data.length);
             return result;
         }
 
-        // encrypt stream with 44B key, default chunkSize=1048576
+        // encrypt stream with 32B key, default chunkSize=1048576
         public void enAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize)
                 throws Exception {
             this.processed.set(0);
-            if (key.length != 44)
-                throw new IllegalArgumentException("key size must be 44 bytes");
+            if (key.length != 32)
+                throw new IllegalArgumentException("key size must be 32 bytes");
             if (chunkSize <= 0)
                 chunkSize = 1048576;
-            byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
-            byte[] globalKey = Arrays.copyOfRange(key, 12, 44);
+            Bencrypt rg = new Bencrypt();
+            byte[] globalIV = rg.Random(12);
+            byte[] globalKey = key;
+
+            dst.write(globalIV);
 
             // 1. Generate Thread x8 Pool
             ExecutorService executor = Executors.newFixedThreadPool(8);
@@ -578,28 +528,29 @@ public class Bencrypt {
 
             } finally { // 6. Close Thread x8 Pool
                 executor.shutdown();
-                sclear(globalKey);
             }
         }
 
-        // decrypt stream with 44B key, default chunkSize=1048576
+        // decrypt stream with 32B key, default chunkSize=1048576
         public void deAESGCMx(byte[] key, InputStream src, long size, OutputStream dst, int chunkSize)
                 throws Exception {
             this.processed.set(0);
-            if (key.length != 44)
-                throw new IllegalArgumentException("key size must be 44 bytes");
-            if (size < 16)
+            if (key.length != 32)
+                throw new IllegalArgumentException("key size must be 32 bytes");
+            if (size < 28)
                 throw new IllegalArgumentException("cipher too short to decrypt");
             if (chunkSize <= 0)
                 chunkSize = 1048576;
-            byte[] globalIV = Arrays.copyOfRange(key, 0, 12);
-            byte[] globalKey = Arrays.copyOfRange(key, 12, 44);
+
+            byte[] globalIV = src.readNBytes(12);
+            byte[] globalKey = key;
+            this.processed.set(12);
 
             // 1. Generate Thread x8 Pool
             ExecutorService executor = Executors.newFixedThreadPool(8);
             LinkedList<Future<byte[]>> futures = new LinkedList<>();
             long counter = 0;
-            long remaining = size;
+            long remaining = size - 12;
 
             try {
                 while (remaining >= 16) {
@@ -633,7 +584,6 @@ public class Bencrypt {
 
             } finally { // 6. Close Thread x8 Pool
                 executor.shutdown();
-                sclear(globalKey);
             }
         }
     }
@@ -641,20 +591,14 @@ public class Bencrypt {
     // ========== Asymmetric Encryption Master ==========
     public static class AsymMaster {
         private String algo;
-        private Bencrypt.RSA1 worker0;
         private Bencrypt.ECC1 worker1;
         private Bencrypt.PQC1 worker2;
 
         /**
-         * @param algo "rsa1", "rsa2", "ecc1", "pqc1"
+         * @param algo "ecc1", "pqc1"
          */
         public AsymMaster(String algo) {
             switch (algo) {
-                case "rsa1":
-                case "rsa2":
-                    this.algo = algo;
-                    this.worker0 = new Bencrypt.RSA1();
-                    break;
                 case "ecc1":
                     this.algo = algo;
                     this.worker1 = new Bencrypt.ECC1();
@@ -670,11 +614,7 @@ public class Bencrypt {
 
         // Generate key pair, {public, private}
         public byte[][] Genkey() throws Exception {
-            if (this.algo.equals("rsa1")) {
-                return this.worker0.genkey(2048);
-            } else if (this.algo.equals("rsa2")) {
-                return this.worker0.genkey(4096);
-            } else if (this.algo.equals("ecc1")) {
+            if (this.algo.equals("ecc1")) {
                 return this.worker1.genkey();
             } else if (this.algo.equals("pqc1")) {
                 return this.worker2.genkey();
@@ -683,9 +623,7 @@ public class Bencrypt {
         }
 
         public void Loadkey(byte[] publicBuf, byte[] privateBuf) throws Exception {
-            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
-                this.worker0.loadkey(publicBuf, privateBuf);
-            } else if (this.algo.equals("ecc1")) {
+            if (this.algo.equals("ecc1")) {
                 this.worker1.loadkey(publicBuf, privateBuf);
             } else if (this.algo.equals("pqc1")) {
                 this.worker2.loadkey(publicBuf, privateBuf);
@@ -693,9 +631,7 @@ public class Bencrypt {
         }
 
         public byte[] Encrypt(byte[] data) throws Exception {
-            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
-                return this.worker0.encrypt(data);
-            } else if (this.algo.equals("ecc1")) {
+            if (this.algo.equals("ecc1")) {
                 return this.worker1.encrypt(data);
             } else if (this.algo.equals("pqc1")) {
                 return this.worker2.encrypt(data);
@@ -704,9 +640,7 @@ public class Bencrypt {
         }
 
         public byte[] Decrypt(byte[] data) throws Exception {
-            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
-                return this.worker0.decrypt(data);
-            } else if (this.algo.equals("ecc1")) {
+            if (this.algo.equals("ecc1")) {
                 return this.worker1.decrypt(data);
             } else if (this.algo.equals("pqc1")) {
                 return this.worker2.decrypt(data);
@@ -715,9 +649,7 @@ public class Bencrypt {
         }
 
         public byte[] Sign(byte[] data) throws Exception {
-            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
-                return this.worker0.sign(data);
-            } else if (this.algo.equals("ecc1")) {
+            if (this.algo.equals("ecc1")) {
                 return this.worker1.sign(data);
             } else if (this.algo.equals("pqc1")) {
                 return this.worker2.sign(data);
@@ -726,88 +658,12 @@ public class Bencrypt {
         }
 
         public boolean Verify(byte[] data, byte[] signature) {
-            if (this.algo.equals("rsa1") || this.algo.equals("rsa2")) {
-                return this.worker0.verify(data, signature);
-            } else if (this.algo.equals("ecc1")) {
+            if (this.algo.equals("ecc1")) {
                 return this.worker1.verify(data, signature);
             } else if (this.algo.equals("pqc1")) {
                 return this.worker2.verify(data, signature);
             }
             return false;
-        }
-    }
-
-    // ========== RSA Encryption ==========
-    public static class RSA1 {
-        public PublicKey RSApub = null;
-        public PrivateKey RSApri = null;
-
-        // Generate RSA key (public, private), DER(PKIX, PKCS8) format
-        public byte[][] genkey(int bits) throws Exception {
-            KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-            kpg.initialize(bits); // 2048, 3072, 4096
-            KeyPair kp = kpg.generateKeyPair();
-            this.RSApub = kp.getPublic();
-            this.RSApri = kp.getPrivate();
-            return new byte[][] {
-                    this.RSApub.getEncoded(),
-                    this.RSApri.getEncoded()
-            };
-        }
-
-        // Load RSA key if not null (public, private), DER(PKIX, PKCS8) format
-        public void loadkey(byte[] pubBytes, byte[] priBytes) throws Exception {
-            KeyFactory kf = KeyFactory.getInstance("RSA");
-            if (pubBytes != null) {
-                this.RSApub = kf.generatePublic(new X509EncodedKeySpec(pubBytes));
-            }
-            if (priBytes != null) {
-                this.RSApri = kf.generatePrivate(new PKCS8EncodedKeySpec(priBytes));
-            }
-        }
-
-        // RSA encrypt: OAEP-SHA-512
-        public byte[] encrypt(byte[] data) throws Exception {
-            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding");
-            OAEPParameterSpec oaepSpec = new OAEPParameterSpec(
-                    "SHA-512",
-                    "MGF1",
-                    MGF1ParameterSpec.SHA512,
-                    PSource.PSpecified.DEFAULT);
-            cipher.init(Cipher.ENCRYPT_MODE, this.RSApub, oaepSpec);
-            return cipher.doFinal(data);
-        }
-
-        // RSA decrypt: OAEP-SHA-512
-        public byte[] decrypt(byte[] data) throws Exception {
-            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding");
-            OAEPParameterSpec oaepSpec = new OAEPParameterSpec(
-                    "SHA-512",
-                    "MGF1",
-                    MGF1ParameterSpec.SHA512,
-                    PSource.PSpecified.DEFAULT); // set OAEP, MGF1 to SHA-512
-            cipher.init(Cipher.DECRYPT_MODE, this.RSApri, oaepSpec);
-            return cipher.doFinal(data);
-        }
-
-        // RSA sign: PKCS#1 v1.5 SHA-256
-        public byte[] sign(byte[] data) throws Exception {
-            Signature sig = Signature.getInstance("SHA256withRSA");
-            sig.initSign(this.RSApri);
-            sig.update(data);
-            return sig.sign();
-        }
-
-        // RSA verify: PKCS#1 v1.5 SHA-256
-        public boolean verify(byte[] data, byte[] signature) {
-            try {
-                Signature sig = Signature.getInstance("SHA256withRSA");
-                sig.initVerify(this.RSApub);
-                sig.update(data);
-                return sig.verify(signature);
-            } catch (Exception e) {
-                return false;
-            }
         }
     }
 
@@ -889,7 +745,7 @@ public class Bencrypt {
             agreement.calculateAgreement(this.pubX, sharedSecret, 0);
 
             // 3. KDF & Encrypt
-            byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
+            byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 32);
             sclear(sharedSecret);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] enc = worker.EnBin(data);
@@ -921,7 +777,7 @@ public class Bencrypt {
             agreement.calculateAgreement(ephPub, sharedSecret, 0);
 
             // 4. KDF & Decrypt
-            byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 44);
+            byte[] gcmKey = Bencrypt.genkey(sharedSecret, "KEYGEN_ECC1_ENCRYPT", 32);
             sclear(sharedSecret);
             Bencrypt.SymMaster worker = new Bencrypt.SymMaster("gcm1", gcmKey);
             byte[] res = worker.DeBin(enc);
@@ -1076,7 +932,7 @@ public class Bencrypt {
             System.arraycopy(ssvECC, 0, combinedSecret, 0, ssvECC.length);
             System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
 
-            byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+            byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 32);
             sclear(ssvECC);
             sclear(ssvKEM);
             sclear(combinedSecret);
@@ -1117,7 +973,7 @@ public class Bencrypt {
             System.arraycopy(ssvECC, 0, combinedSecret, 0, ssvECC.length);
             System.arraycopy(ssvKEM, 0, combinedSecret, ssvECC.length, ssvKEM.length);
 
-            byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 44);
+            byte[] gcmKey = Bencrypt.genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 32);
             sclear(ssvECC);
             sclear(ssvKEM);
             sclear(combinedSecret);
