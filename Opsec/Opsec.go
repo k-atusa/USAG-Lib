@@ -18,7 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	Bencrypt "github.com/k-atusa/USAG-Lib/v2/Bencrypt"
+	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
 )
 
 // ========== Helper Functions ==========

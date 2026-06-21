@@ -1,4 +1,4 @@
-module github.com/k-atusa/USAG-Lib/v2
+module github.com/k-atusa/USAG-Lib
 
 go 1.25.5
 

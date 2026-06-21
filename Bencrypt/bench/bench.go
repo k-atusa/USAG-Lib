@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	Bencrypt "github.com/k-atusa/USAG-Lib/v2/Bencrypt"
+	Bencrypt "github.com/k-atusa/USAG-Lib/Bencrypt"
 )
 
 func fmtSpeed(sizeBytes int64, duration time.Duration) string {
