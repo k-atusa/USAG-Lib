@@ -49,11 +49,23 @@ public class Opsec {
     public int SaltLen = 32;
 
     public Opsec() {
-        Reset();
+        Init();
     }
 
-    // reset after reading BodyKey
-    public void Reset() {
+    public void Clear() {
+        sclear(salt);
+        sclear(pwHash);
+        sclear(encHeadData);
+        sclear(MsgInfo);
+        sclear(SmsgInfo);
+        sclear(sign);
+        sclear(BodyKey);
+        sclear(BodyInfo);
+        Init();
+    }
+
+    // set initial values
+    public void Init() {
         Msg = "";
         MsgInfo = new byte[0];
         headAlgo = "";
@@ -363,7 +375,7 @@ public class Opsec {
         headAlgo = method;
         salt = worker.Random(SaltLen);
         if (BodySize >= 0) {
-            BodyKey = worker.Random(44);
+            BodyKey = worker.Random(32);
         }
 
         // get pwhash & header key, encrypt header
@@ -400,7 +412,7 @@ public class Opsec {
         Bencrypt worker = new Bencrypt();
         headAlgo = method;
         if (BodySize >= 0) {
-            BodyKey = worker.Random(44);
+            BodyKey = worker.Random(32);
         }
 
         // sign with private key if provided
@@ -418,18 +430,8 @@ public class Opsec {
         am.Loadkey(peerPub, null);
         byte[] headData = wrapEncHead();
 
-        if (method.equals("rsa1") || method.equals("rsa2")) {
-            // RSA Hybrid: Encrypt Key with RSA, Data with AES
-            byte[] hkey = worker.Random(44);
-            MsgInfo = am.Encrypt(hkey); // store encHeadKey to MsgInfo
-
-            Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
-            encHeadData = sm.EnBin(headData);
-            sclear(hkey);
-        } else {
-            // ECC/PQC Hybrid: Handled internally
-            encHeadData = am.Encrypt(headData);
-        }
+        // ECC/PQC Hybrid: Handled internally
+        encHeadData = am.Encrypt(headData);
         sclear(headData);
 
         // wrap header
@@ -446,7 +448,7 @@ public class Opsec {
 
     // load outer layer of header
     public void View(byte[] data) {
-        Reset();
+        Init();
         Map<String, byte[]> cfg = DecodeCfg(data);
         if (cfg.containsKey("msg"))
             Msg = bytesToStr(cfg.get("msg"));
@@ -504,16 +506,7 @@ public class Opsec {
         Bencrypt.AsymMaster am = new Bencrypt.AsymMaster(headAlgo);
         am.Loadkey(null, myPri);
 
-        byte[] decryptedHead;
-        if (headAlgo.equals("rsa1") || headAlgo.equals("rsa2")) {
-            // RSA Hybrid
-            byte[] hkey = am.Decrypt(MsgInfo);
-            Bencrypt.SymMaster sm = new Bencrypt.SymMaster("gcm1", hkey);
-            decryptedHead = sm.DeBin(encHeadData);
-            sclear(hkey);
-        } else {
-            decryptedHead = am.Decrypt(encHeadData);
-        }
+        byte[] decryptedHead = am.Decrypt(encHeadData);
 
         if (decryptedHead == null)
             throw new SecurityException("Decryption failed");

@@ -261,8 +261,20 @@ type Opsec struct {
 	SaltLen int
 }
 
-// reset after reading BodyKey
-func (o *Opsec) Reset() {
+func (o *Opsec) Clear() {
+	sclear(o.salt)
+	sclear(o.pwHash)
+	sclear(o.encHeadData)
+	sclear(o.MsgInfo)
+	sclear(o.SmsgInfo)
+	sclear(o.sign)
+	sclear(o.BodyKey)
+	sclear(o.BodyInfo)
+	o.Init()
+}
+
+// set initial values
+func (o *Opsec) Init() {
 	o.Msg = ""
 	o.MsgInfo = []byte{}
 	o.headAlgo = ""
@@ -424,7 +436,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	o.headAlgo = method
 	o.salt = Bencrypt.Random(o.SaltLen)
 	if o.BodySize >= 0 {
-		o.BodyKey = Bencrypt.Random(44)
+		o.BodyKey = Bencrypt.Random(32)
 	}
 
 	// Combine pw + kf
@@ -435,7 +447,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
-	if err := hm.Init(method, 32, 44); err != nil {
+	if err := hm.Init(method, 0, 0); err != nil {
 		return nil, err
 	}
 	pwHash, hkey, err := hm.KDF(combinedPw, o.salt)
@@ -479,7 +491,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, error) {
 	o.headAlgo = method
 	if o.BodySize >= 0 {
-		o.BodyKey = Bencrypt.Random(44)
+		o.BodyKey = Bencrypt.Random(32)
 	}
 
 	// Sign if private key is provided
@@ -521,28 +533,9 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 		return nil, err
 	}
 
-	if method == "rsa1" || method == "rsa2" {
-		// RSA Hybrid: Encrypt Key with RSA, Data with AES
-		hkey := Bencrypt.Random(44)
-		defer sclear(hkey)
-		o.MsgInfo, err = amEncrypt.Encrypt(hkey)
-		if err != nil {
-			return nil, err
-		}
-		sm := new(Bencrypt.SymMaster)
-		if err := sm.Init("gcm1", hkey); err != nil {
-			return nil, err
-		}
-		o.encHeadData, err = sm.EnBin(headData)
-		if err != nil {
-			return nil, err
-		}
-
-	} else {
-		o.encHeadData, err = amEncrypt.Encrypt(headData)
-		if err != nil {
-			return nil, err
-		}
+	o.encHeadData, err = amEncrypt.Encrypt(headData)
+	if err != nil {
+		return nil, err
 	}
 
 	// Wrap outer header
@@ -560,7 +553,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 
 // Load outer layer of header
 func (o *Opsec) View(data []byte) {
-	o.Reset()
+	o.Init()
 	cfg := DecodeCfg(data)
 	if v, ok := cfg["msg"]; ok {
 		o.Msg = string(v)
@@ -595,7 +588,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
-	if err := hm.Init(o.headAlgo, 32, 44); err != nil {
+	if err := hm.Init(o.headAlgo, 0, 0); err != nil {
 		return err
 	}
 	calcHash, hkey, err := hm.KDF(combinedPw, o.salt)
@@ -641,27 +634,9 @@ func (o *Opsec) Decpub(myPri []byte, myPub []byte, peerPub []byte) error {
 	var decryptedHead []byte
 	var err error
 
-	if o.headAlgo == "rsa1" || o.headAlgo == "rsa2" {
-		// RSA Hybrid
-		hkey, err := am.Decrypt(o.MsgInfo)
-		defer sclear(hkey)
-		if err != nil {
-			return fmt.Errorf("RSA decryption failed: %w", err)
-		}
-		sm := new(Bencrypt.SymMaster)
-		if err := sm.Init("gcm1", hkey); err != nil {
-			return err
-		}
-		decryptedHead, err = sm.DeBin(o.encHeadData)
-		if err != nil {
-			return fmt.Errorf("AES decryption failed: %w", err)
-		}
-
-	} else {
-		decryptedHead, err = am.Decrypt(o.encHeadData)
-		if err != nil {
-			return fmt.Errorf("Asymmetric decryption failed: %w", err)
-		}
+	decryptedHead, err = am.Decrypt(o.encHeadData)
+	if err != nil {
+		return fmt.Errorf("Asymmetric decryption failed: %w", err)
 	}
 	o.unwrapEncHead(decryptedHead)
 

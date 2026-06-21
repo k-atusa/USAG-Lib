@@ -32,7 +32,7 @@ func TestMain(t *testing.T) {
 	w.Write(make([]byte, 128*4))
 
 	m := new(Opsec)
-	m.Reset()
+	m.Init()
 	err := m.Write(&w, []byte("Hello, world!"))
 	if err != nil {
 		t.Fatalf("Write error: %v", err)
@@ -54,10 +54,10 @@ func TestMain(t *testing.T) {
 	bodyinfo := []byte("binf-test")
 
 	// 3. pw-mode (sha3, pbk2, arg2)
-	fmt.Println("\n--- pw-mode tests (sha3, pbk2, arg2) ---")
-	pwMethods := []string{"sha3", "pbk2", "arg2"}
+	fmt.Println("\n--- pw-mode tests (sha3, arg2low, arg2st) ---")
+	pwMethods := []string{"sha3", "arg2low", "arg2st"}
 	for _, method := range pwMethods {
-		m.Reset()
+		m.Init()
 		m.Msg = msg
 		m.Smsg = smsg
 		m.SmsgInfo = sinf
@@ -101,9 +101,9 @@ func TestMain(t *testing.T) {
 			formatResult(b4), formatResult(b5), formatResult(b6), formatResult(b7))
 	}
 
-	// 4. pub-mode (rsa1, rsa2, ecc1, pqc1)
-	fmt.Println("\n--- pub-mode tests (rsa1, rsa2, ecc1, pqc1) ---")
-	pubMethods := []string{"rsa1", "rsa2", "ecc1", "pqc1"}
+	// 4. pub-mode (ecc1, pqc1)
+	fmt.Println("\n--- pub-mode tests (ecc1, pqc1) ---")
+	pubMethods := []string{"ecc1", "pqc1"}
 	for _, method := range pubMethods {
 		me := new(Bencrypt.AsymMaster)
 		me.Init(method)
@@ -119,7 +119,7 @@ func TestMain(t *testing.T) {
 			t.Fatalf("[%s] Key generation error (peer): %v", method, err)
 		}
 
-		m.Reset()
+		m.Init()
 		m.Msg = msg
 		m.Smsg = smsg
 		m.SmsgInfo = sinf

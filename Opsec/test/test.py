@@ -31,9 +31,9 @@ bodysize = 1048576
 bodyinfo = b"binf-test"
 
 # pw-mode
-methods = ["sha3", "pbk2", "arg2"]
+methods = ["sha3", "arg2low", "arg2st"]
 for method in methods:
-    m.Reset()
+    m.Init()
     m.Msg, m.Smsg, m.SmsgInfo, m.BodyAlgo, m.BodySize, m.BodyInfo = msg, smsg, sinf, bodyalgo, bodysize, bodyinfo
     enc = m.Encpw(method, b"password", b"keyfile")
     bodykey = m.BodyKey # get generated BodyKey
@@ -43,14 +43,14 @@ for method in methods:
     print(msg == m.Msg, smsg == m.Smsg, sinf == m.SmsgInfo, bodyalgo == m.BodyAlgo, bodysize == m.BodySize, bodyinfo == m.BodyInfo, bodykey == m.BodyKey)
 
 # pub-mode (from peer to me)
-methods = ["rsa1", "rsa2", "ecc1", "pqc1"]
+methods = ["ecc1", "pqc1"]
 for method in methods:
     me = Bencrypt.AsymMaster(method)
     myPub, myPri = me.Genkey()
     peer = Bencrypt.AsymMaster(method)
     peerPub, peerPri = peer.Genkey()
 
-    m.Reset()
+    m.Init()
     m.Msg, m.Smsg, m.SmsgInfo, m.BodyAlgo, m.BodySize, m.BodyInfo = msg, smsg, sinf, bodyalgo, bodysize, bodyinfo
     enc = m.Encpub(method, myPub, peerPri)
     bodykey = m.BodyKey # get generated BodyKey

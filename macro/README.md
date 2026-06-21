@@ -62,6 +62,8 @@ pip install PyMuPDF
 pip install pyautogui
 ```
 
-#### pkg.go.dev Update
+#### Package Update
+
+[CDN Update](https://www.jsdelivr.com/tools/purge)
 
 `https://pkg.go.dev/github.com/k-atusa/USAG-Lib@vX.Y.Z`

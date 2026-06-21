@@ -218,12 +218,24 @@ export function DecodeCfg(data) {
 // Opsec header handler
 export class Opsec {
     constructor() {
-        this.Reset();
-        this.SaltLen = 32;
+        this.Init();
+        this.SaltLen = 32
     }
 
-    // reset after reading BodyKey
-    Reset() {
+    Clear() {
+        zeroize(this._salt);
+        zeroize(this._pwHash);
+        zeroize(this._encHeadData);
+        zeroize(this.MsgInfo);
+        zeroize(this.SmsgInfo);
+        zeroize(this._sign);
+        zeroize(this.BodyKey);
+        zeroize(this.BodyInfo);
+        this.Init();
+    }
+
+    // set initial values
+    Init() {
         this._headAlgo = "";
         this.Msg = "";
         this.MsgInfo = new Uint8Array(0);
@@ -330,7 +342,7 @@ export class Opsec {
         this._headAlgo = method;
         this._salt = Random(this.SaltLen);
         if (this.BodySize >= 0) {
-            this.BodyKey = Random(44);
+            this.BodyKey = Random(32);
         }
 
         const pwBytes = (typeof pw === 'string') ? strToU8(pw) : pw;
@@ -371,7 +383,7 @@ export class Opsec {
         // generate random parameters
         this._headAlgo = method;
         if (this.BodySize >= 0) {
-            this.BodyKey = Random(44);
+            this.BodyKey = Random(32);
         }
 
         const peerPubBytes = (typeof peerPub === 'string') ? strToU8(peerPub) : peerPub;
@@ -395,17 +407,7 @@ export class Opsec {
         const am = new AsymMaster(method);
         await am.Loadkey(peerPubBytes, null);
         const headData = this._wrapEncHead();
-
-        if (method === "rsa1" || method === "rsa2") {
-            // RSA Hybrid: Encrypt Key with RSA, Data with AES
-            const hkey = Random(44);
-            this.MsgInfo = await am.Encrypt(hkey);
-            const sm = new SymMaster("gcm1", hkey);
-            this._encHeadData = await sm.EnBin(headData);
-            zeroize(hkey);
-        } else {
-            this._encHeadData = await am.Encrypt(headData);
-        }
+        this._encHeadData = await am.Encrypt(headData);
         zeroize(headData);
 
         // wrap header
@@ -422,7 +424,7 @@ export class Opsec {
      * @param {Uint8Array} data
      */
     View(data) {
-        this.Reset();
+        this.Init();
         const cfg = DecodeCfg(data);
         if (cfg["msg"]) this.Msg = u8ToStr(cfg["msg"]);
         if (cfg["minf"]) this.MsgInfo = cfg["minf"];
@@ -476,16 +478,7 @@ export class Opsec {
         const am = new AsymMaster(this._headAlgo);
         await am.Loadkey(null, myPri);
 
-        let headData;
-        if (this._headAlgo === "rsa1" || this._headAlgo === "rsa2") {
-            // RSA Hybrid
-            const hkey = await am.Decrypt(this.MsgInfo);
-            const sm = new SymMaster("gcm1", hkey);
-            headData = await sm.DeBin(this._encHeadData);
-            zeroize(hkey);
-        } else {
-            headData = await am.Decrypt(this._encHeadData);
-        }
+        let headData = await am.Decrypt(this._encHeadData);
         this._unwrapEncHead(headData);
         zeroize(headData);
 

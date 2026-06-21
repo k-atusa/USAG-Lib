@@ -101,19 +101,31 @@ def DecodeCfg(data: bytes) -> Dict[str, bytes]: # format: [keyLen 1B][key][dataL
 # Opsec header handler
 class Opsec:
     def __init__(self):
-        self.Reset()
+        self.Init()
         self.SaltLen = 32
 
     def __del__(self):
-        self.Reset()
+        self.Clear()
         if hasattr(self, 'BodyKey'):
             del self.BodyKey
 
-    # reset after reading BodyKey
-    def Reset(self):
+    def Clear(self):
+        # Memory initialization in Python is not practical, but we do this to match with other codes
+        self._salt = b""
+        self._pwHash = b""
+        self._encHeadData = b""
+        self.MsgInfo = b""
+        self.SmsgInfo = b""
+        self._sign = b""
+        self.BodyKey = b""
+        self.BodyInfo = b""
+        self.Init()
+
+    # set initial values
+    def Init(self):
         self._headAlgo: str = ""
         self.Msg: str = "" # public message
-        self.MsgInfo: bytes = b"" # additional info (for RSA-mode)
+        self.MsgInfo: bytes = b"" # additional info
 
         self._salt: bytes = b""
         self._pwHash: bytes = b""
@@ -203,7 +215,7 @@ class Opsec:
         self._headAlgo = method
         self._salt = Bencrypt.Random(self.SaltLen)
         if self.BodySize >= 0:
-            self.BodyKey = Bencrypt.Random(44)
+            self.BodyKey = Bencrypt.Random(32)
 
         # get pwhash & header key, encrypt header
         hm = Bencrypt.HashMaster(method) # Bencrypt will check if method is valid
@@ -230,7 +242,7 @@ class Opsec:
         # generate random parameters
         self._headAlgo = method
         if self.BodySize >= 0:
-            self.BodyKey = Bencrypt.Random(44)
+            self.BodyKey = Bencrypt.Random(32)
         
         # sign with private key if provided
         if myPri != None:
@@ -244,15 +256,7 @@ class Opsec:
         am = Bencrypt.AsymMaster(method) # Bencrypt will check if method is valid
         am.Loadkey(peerPub, None)
         headData = self._wrapEncHead()
-        if method == "rsa1" or method == "rsa2":
-            # RSA Hybrid: Encrypt Key with RSA, Data with AES
-            hkey = Bencrypt.Random(44)
-            self.MsgInfo = am.Encrypt(hkey)
-            sm = Bencrypt.SymMaster("gcm1", hkey)
-            del hkey
-            self._encHeadData = sm.EnBin(headData)
-        else:
-            self._encHeadData = am.Encrypt(headData)
+        self._encHeadData = am.Encrypt(headData)
         del headData
 
         # warp header
@@ -266,7 +270,7 @@ class Opsec:
         return EncodeCfg(cfg)
         
     def View(self, data: bytes):
-        self.Reset()
+        self.Init()
         cfg = DecodeCfg(data)
         if "msg" in cfg:
             self.Msg = cfg["msg"].decode('utf-8')
@@ -303,14 +307,7 @@ class Opsec:
             raise ValueError("Call view() first")
         am = Bencrypt.AsymMaster(self._headAlgo)
         am.Loadkey(None, myPri)
-        if self._headAlgo == "rsa1" or self._headAlgo == "rsa2":
-            # RSA Hybrid: Encrypt Key with RSA, Data with AES
-            hkey = am.Decrypt(self.MsgInfo)
-            sm = Bencrypt.SymMaster("gcm1", hkey)
-            del hkey
-            headData = sm.DeBin(self._encHeadData)
-        else:
-            headData = am.Decrypt(self._encHeadData)
+        headData = am.Decrypt(self._encHeadData)
         self._unwrapEncHead(headData)
         del headData
 

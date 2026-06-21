@@ -51,9 +51,9 @@ public class test {
             byte[] bodyinfo = "binf-test".getBytes(StandardCharsets.UTF_8);
 
             // 3. pw-mode (sha3, pbk2, arg2)
-            String[] pwMethods = { "sha3", "pbk2", "arg2" };
+            String[] pwMethods = { "sha3", "arg2low", "arg2st" };
             for (String method : pwMethods) {
-                m.Reset();
+                m.Init();
                 m.Msg = msg;
                 m.Smsg = smsg;
                 m.SmsgInfo = sinf;
@@ -83,7 +83,7 @@ public class test {
             }
 
             // 4. pub-mode (rsa1, rsa2, ecc1, pqc1)
-            String[] pubMethods = { "rsa1", "rsa2", "ecc1", "pqc1" };
+            String[] pubMethods = { "ecc1", "pqc1" };
             for (String method : pubMethods) {
                 Bencrypt.AsymMaster me = new Bencrypt.AsymMaster(method);
                 byte[][] meKeys = me.Genkey();
@@ -95,7 +95,7 @@ public class test {
                 byte[] peerPub = peerKeys[0];
                 byte[] peerPri = peerKeys[1];
 
-                m.Reset();
+                m.Init();
                 m.Msg = msg;
                 m.Smsg = smsg;
                 m.SmsgInfo = sinf;

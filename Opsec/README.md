@@ -6,8 +6,8 @@ Secure file container and helper functions based on Bencrypt. Supports password-
 
 #### Supported Methods
 
-- pw-mode: `sha3, pbk2, arg2`
-- pub-mode: `rsa1, rsa2, ecc1, pqc1`
+- pw-mode: `sha3, arg2low, arg2st`
+- pub-mode: `ecc1, pqc1`
 
 #### python
 ```py
@@ -30,7 +30,8 @@ class Opsec:
     BodySize: int
     BodyInfo: bytes
     
-    def Reset()
+    def Init()
+    def Clear()
     def Read(ins: io.IOBase, cut: int = 65535) -> bytes
     def Write(outs: io.IOBase, head: bytes)
     
@@ -62,7 +63,8 @@ class Opsec {
     BodySize: number
     BodyInfo: Uint8Array
     
-    Reset()
+    Init()
+    Clear()
     async function Read(ins, cut): Promise<Uint8Array>
     async function Write(outs, head)
     
@@ -95,7 +97,8 @@ type Opsec struct {
     BodySize int64
     BodyInfo []byte
 
-    func Reset()
+    func Init()
+    func Clear()
     func Read(r io.Reader, cut int) ([]byte, error)
     func Write(w io.Writer, head []byte) error
     
@@ -128,7 +131,8 @@ class Opsec {
     long BodySize;
     byte[] BodyInfo;
 
-    void Reset()
+    void Init()
+    void Clear()
     byte[] Read(InputStream ins, int cut) throws IOException
     void Write(OutputStream outs, byte[] head) throws IOException
 

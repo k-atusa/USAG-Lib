@@ -60,7 +60,6 @@
     <script type="module">
         import { Opsec, Crc32, PadLen, PadFile } from '../Opsec.js';
         const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
-        // load TestReader, TestWriter from Bencrypt.js
         const { AsymMaster, TestReader, TestWriter, Random } = await import(BencryptURL);
 
         window.LibTest = {
@@ -137,9 +136,9 @@
 
                 // pw-mode
                 log("--- pw-mode tests ---", "warn");
-                const methodsPw = ["sha3", "pbk2", "arg2"];
+                const methodsPw = ["sha3", "arg2low", "arg2st"];
                 for (const method of methodsPw) {
-                    m.Reset();
+                    m.Init();
                     m.Msg = msg; m.Smsg = smsg; m.SmsgInfo = sinf;
                     m.BodyAlgo = bodyalgo; m.BodySize = bodysize; m.BodyInfo = bodyinfo;
 
@@ -167,7 +166,7 @@
 
                 // pub-mode (from peer to me)
                 log("\n--- pub-mode tests ---", "warn");
-                const methodsPub = ["rsa1", "rsa2", "ecc1", "pqc1"];
+                const methodsPub = ["ecc1", "pqc1"];
                 for (const method of methodsPub) {
                     log(`Generating keys for ${method}...`);
                     const me = new AsymMaster(method);
@@ -175,7 +174,7 @@
                     const peer = new AsymMaster(method);
                     const [peerPub, peerPri] = await peer.Genkey();
 
-                    m.Reset();
+                    m.Init();
                     m.Msg = msg; m.Smsg = smsg; m.SmsgInfo = sinf;
                     m.BodyAlgo = bodyalgo; m.BodySize = bodysize; m.BodyInfo = bodyinfo;
 
