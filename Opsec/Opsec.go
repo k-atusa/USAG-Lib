@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/subtle"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -245,7 +244,6 @@ type Opsec struct {
 	MsgInfo     []byte // additional info (for RSA-mode)
 	headAlgo    string // header algorithm
 	salt        []byte // salt
-	pwHash      []byte // pw hash
 	encHeadData []byte // encrypted header data
 
 	// Inner Layer
@@ -263,7 +261,6 @@ type Opsec struct {
 
 func (o *Opsec) Clear() {
 	sclear(o.salt)
-	sclear(o.pwHash)
 	sclear(o.encHeadData)
 	sclear(o.MsgInfo)
 	sclear(o.SmsgInfo)
@@ -279,7 +276,6 @@ func (o *Opsec) Init() {
 	o.MsgInfo = []byte{}
 	o.headAlgo = ""
 	o.salt = []byte{}
-	o.pwHash = []byte{}
 	o.encHeadData = []byte{}
 
 	o.Smsg = ""
@@ -450,12 +446,11 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	if err := hm.Init(method, 0, 0); err != nil {
 		return nil, err
 	}
-	pwHash, hkey, err := hm.KDF(combinedPw, o.salt)
+	_, hkey, err := hm.KDF(combinedPw, o.salt)
 	defer sclear(hkey)
 	if err != nil {
 		return nil, err
 	}
-	o.pwHash = pwHash
 
 	// Encrypt header
 	headData, err := o.wrapEncHead()
@@ -482,7 +477,6 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	}
 	cfg["hal"] = []byte(o.headAlgo)
 	cfg["salt"] = o.salt
-	cfg["pwh"] = o.pwHash
 	cfg["ehd"] = o.encHeadData
 	return EncodeCfg(cfg)
 }
@@ -506,9 +500,13 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 
 		signTgt := make([]byte, 0)
 		signTgt = append(signTgt, []byte(method)...)
+		signTgt = append(signTgt, 0)
 		signTgt = append(signTgt, peerPub...)
+		signTgt = append(signTgt, 0)
 		signTgt = append(signTgt, []byte(o.Smsg)...)
+		signTgt = append(signTgt, 0)
 		signTgt = append(signTgt, o.SmsgInfo...)
+		signTgt = append(signTgt, 0)
 		defer sclear(signTgt)
 
 		var err error
@@ -567,9 +565,6 @@ func (o *Opsec) View(data []byte) {
 	if v, ok := cfg["salt"]; ok {
 		o.salt = v
 	}
-	if v, ok := cfg["pwh"]; ok {
-		o.pwHash = v
-	}
 	if v, ok := cfg["ehd"]; ok {
 		o.encHeadData = v
 	}
@@ -578,9 +573,8 @@ func (o *Opsec) View(data []byte) {
 // Decrypt with password
 func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	if o.headAlgo == "" {
-		return errors.New("call View() first")
+		return errors.New("Opsec not initialized or invalid data")
 	}
-
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
@@ -591,18 +585,13 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	if err := hm.Init(o.headAlgo, 0, 0); err != nil {
 		return err
 	}
-	calcHash, hkey, err := hm.KDF(combinedPw, o.salt)
+	_, hkey, err := hm.KDF(combinedPw, o.salt)
 	defer sclear(hkey)
 	if err != nil {
 		return err
 	}
 
-	// Constant time comparison
-	if subtle.ConstantTimeCompare(calcHash, o.pwHash) != 1 {
-		return errors.New("incorrect password")
-	}
-
-	// Decrypt header
+	// Decrypt header (verification is handled by symmaster GCM tag checking)
 	sm := new(Bencrypt.SymMaster)
 	if err := sm.Init("gcm1", hkey); err != nil {
 		return err
@@ -618,7 +607,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 // Decrypt with private key, verify if public key is not nil
 func (o *Opsec) Decpub(myPri []byte, myPub []byte, peerPub []byte) error {
 	if o.headAlgo == "" {
-		return errors.New("call View() first")
+		return errors.New("Opsec not initialized or invalid data")
 	}
 
 	// Init AsymMaster
@@ -661,9 +650,13 @@ func (o *Opsec) Decpub(myPri []byte, myPub []byte, peerPub []byte) error {
 
 	signTgt := make([]byte, 0)
 	signTgt = append(signTgt, []byte(o.headAlgo)...)
+	signTgt = append(signTgt, 0)
 	signTgt = append(signTgt, myPub...)
+	signTgt = append(signTgt, 0)
 	signTgt = append(signTgt, []byte(o.Smsg)...)
+	signTgt = append(signTgt, 0)
 	signTgt = append(signTgt, o.SmsgInfo...)
+	signTgt = append(signTgt, 0)
 
 	if !amVerify.Verify(signTgt, o.sign) {
 		return errors.New("signature verification failed")

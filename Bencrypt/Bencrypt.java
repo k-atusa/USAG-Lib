@@ -295,7 +295,7 @@ public class Bencrypt {
                 .withSalt(salt);
         Argon2BytesGenerator gen = new Argon2BytesGenerator();
         gen.init(builder.build());
-        byte[] result = new byte[48];
+        byte[] result = new byte[64];
         gen.generateBytes(pw, result, 0, result.length);
         return result;
     }
@@ -309,7 +309,7 @@ public class Bencrypt {
                 .withSalt(salt);
         Argon2BytesGenerator gen = new Argon2BytesGenerator();
         gen.init(builder.build());
-        byte[] result = new byte[48];
+        byte[] result = new byte[64];
         gen.generateBytes(pw, result, 0, result.length);
         return result;
     }
@@ -753,19 +753,20 @@ public class Bencrypt {
 
             // 4. Pack
             byte[] ephPubRaw = ephPub.getEncoded(); // 56 bytes
-            byte[] res = new byte[1 + ephPubRaw.length + enc.length];
-            res[0] = (byte) ephPubRaw.length;
-            System.arraycopy(ephPubRaw, 0, res, 1, ephPubRaw.length);
-            System.arraycopy(enc, 0, res, 1 + ephPubRaw.length, enc.length);
+            byte[] res = new byte[ephPubRaw.length + enc.length];
+            System.arraycopy(ephPubRaw, 0, res, 0, ephPubRaw.length);
+            System.arraycopy(enc, 0, res, ephPubRaw.length, enc.length);
             return res;
         }
 
         // ECC decrypt with my private key
         public byte[] decrypt(byte[] data) throws Exception {
             // 1. Parse
-            int keyLen = data[0] & 0xFF;
-            byte[] ephPubRaw = Arrays.copyOfRange(data, 1, 1 + keyLen);
-            byte[] enc = Arrays.copyOfRange(data, 1 + keyLen, data.length);
+            if (data.length < 56) {
+                throw new IllegalArgumentException("cipher too short");
+            }
+            byte[] ephPubRaw = Arrays.copyOfRange(data, 0, 56);
+            byte[] enc = Arrays.copyOfRange(data, 56, data.length);
 
             // 2. Load Eph Public Key
             X448PublicKeyParameters ephPub = new X448PublicKeyParameters(ephPubRaw, 0);

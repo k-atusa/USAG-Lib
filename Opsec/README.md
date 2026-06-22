@@ -166,9 +166,8 @@ Following this, the first 2 bytes determine the header size. If this value is 65
 
 - hal (headAlgo): 헤더 암호화 알고리즘 Header encryption algorithm
 - msg: 공개 메세지 **누구나 변조 가능** Public message **Modifiable by anyone**
-- minf (msgInfo): 공개 보조정보 (RSA 보조 암호화 키 등) Public auxiliary information (ex. RSA auxiliary encryption keys)
+- minf (msgInfo): 공개 보조정보 Public auxiliary information
 - salt: pw-mode salt
-- pwh (pwHash): pw-mode password hash
 - ehd (encHeadData): 암호화된 헤더 정보 (다음 내용을 포함한다) Encrypted header data, which contains the following:
     - smsg (secureMsg): 비밀 메세지 Private message
     - sinf (secureInfo): 비밀 보조정보 (메세지 ID 등) Private auxiliary information (ex. Message ID)
@@ -182,12 +181,12 @@ Following this, the first 2 bytes determine the header size. If this value is 65
         - smsg: 비밀 메세지 Private message
         - sinf: 비밀 보조정보 Private auxiliary information
 
-- 헤더 노출 공개 필드 Publicly Exposed: `headAlgo, msg, msgInfo, salt, pwHash`
+- 헤더 노출 공개 필드 Publicly Exposed: `headAlgo, msg, msgInfo, salt`
 - 발신자 부인 불가 암호화 필드 Sender Non-Deniable: `secureMsg, secureInfo`
 - 발신자 부인 가능 암호화 필드 Sender Deniable: `bodyAlgo, bodyKey, bodySize, bodyInfo` (informations about body)
 
-비밀번호 모드는 발신자 검증을 지원하지 않으며, 공개키 모드는 서명을 포함하지 않는 익명 발송도 가능합니다.
-pw-mode does not support sender verification. You can transmit anonymously by omitting the signature with pub-mode.
+비밀번호 모드는 발신자 검증을 지원하지 않으며, 공개키 모드는 서명을 포함하지 않는 익명 발송도 가능합니다. 복호화 인증은 하위 Bencrypt의 AEAD가 담당합니다.
+pw-mode does not support sender verification. You can transmit anonymously by omitting the signature with pub-mode. Decryption authentication is done by AEAD in Bencrypt.
 
 #### Padding Algorithm
 

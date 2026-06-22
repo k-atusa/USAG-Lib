@@ -35,7 +35,7 @@ func Random(size int) []byte {
 	b := make([]byte, size)
 	_, err := rand.Read(b)
 	if err != nil {
-		panic(err) // Cryptographic RNG failure is usually fatal
+		panic(err) // CRNG failure is usually fatal
 	}
 	return b
 }
@@ -228,10 +228,10 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 		master = SHA3512(data)
 	case "arg2low":
 		lblStore, lblKeygen = "PWHASH_ARG2LOW", "KEYGEN_ARG2LOW"
-		master = argon2.IDKey(pw, salt, 4, 65536, 8, 48)
+		master = argon2.IDKey(pw, salt, 4, 65536, 8, 64)
 	case "arg2st":
 		lblStore, lblKeygen = "PWHASH_ARG2ST", "KEYGEN_ARG2ST"
-		master = argon2.IDKey(pw, salt, 3, 262144, 6, 48)
+		master = argon2.IDKey(pw, salt, 3, 262144, 6, 64)
 	default:
 		return nil, nil, errors.New("algorithm not set")
 	}
@@ -249,6 +249,7 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 }
 
 // ========== Hash Functions ==========
+// (no additional function needed)
 
 // ========== Master Class ==========
 type SymMaster struct {
@@ -263,7 +264,7 @@ func (sm *SymMaster) Init(algo string, key []byte) error {
 	switch algo {
 	case "gcm1", "gcmx1":
 		if len(key) != 32 {
-			return errors.New("key length must be 32 bytes")
+			return fmt.Errorf("SYM keysize must be 32: got %d", len(key))
 		}
 		sm.Algo = algo
 		var err error
@@ -853,7 +854,7 @@ func (e *ECC1) Genkey() ([]byte, []byte, error) {
 func (e *ECC1) Loadkey(public []byte, private []byte) error {
 	if public != nil {
 		if len(public) != 113 {
-			return errors.New("invalid public key length (must be 113 bytes for Curve448)")
+			return fmt.Errorf("ECC1 keysize must be 113: got %d", len(public))
 		}
 		// Load X448 Public
 		e.PubX = new(x448.Key)
@@ -866,7 +867,7 @@ func (e *ECC1) Loadkey(public []byte, private []byte) error {
 
 	if private != nil {
 		if len(private) != 113 {
-			return errors.New("invalid private key length (must be 113 bytes for Curve448)")
+			return fmt.Errorf("ECC1 keysize must be 113: got %d", len(private))
 		}
 		// Load X448 Private
 		e.PrivX = new(x448.Key)
@@ -909,27 +910,22 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// Join to make [1B Len][TempPub 56B][Enc]
-	out := make([]byte, 1+56+len(enc))
-	out[0] = 56 // X448 pub key length
-	copy(out[1:], tempPub[:])
-	copy(out[1+56:], enc)
+	// Join to make [TempPub 56B][Enc]
+	out := make([]byte, 56+len(enc))
+	copy(out[:56], tempPub[:])
+	copy(out[56:], enc)
 	return out, nil
 }
 
 // Decrypt data using private key (Hybrid: ECDH + AES-GCM)
 func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 	// 1. Parse data
-	if len(data) < 57 {
+	if len(data) < 56 {
 		return nil, errors.New("data too short")
 	}
-	keylen := int(data[0])
-	if keylen != 56 {
-		return nil, errors.New("unsupported public key length")
-	}
 	var tempPub x448.Key
-	copy(tempPub[:], data[1:1+keylen])
-	enc := data[1+keylen:]
+	copy(tempPub[:], data[:56])
+	enc := data[56:]
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
@@ -1115,7 +1111,7 @@ func (p *PQC1) Loadkey(public []byte, private []byte) error {
 
 	if public != nil {
 		if len(public) != 4273 {
-			return errors.New("invalid PQC1 public key length")
+			return fmt.Errorf("PQC1 keysize must be 4273: got %d", len(public))
 		}
 		p.PubX = new(x448.Key)
 		copy(p.PubX[:], public[:56])
@@ -1132,7 +1128,7 @@ func (p *PQC1) Loadkey(public []byte, private []byte) error {
 
 	if private != nil {
 		if len(private) != 8177 {
-			return errors.New("invalid PQC1 private key length")
+			return fmt.Errorf("PQC1 keysize must be 8177: got %d", len(private))
 		}
 		p.PrivX = new(x448.Key)
 		copy(p.PrivX[:], private[:56])

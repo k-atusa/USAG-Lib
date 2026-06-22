@@ -109,18 +109,6 @@ class Opsec:
         if hasattr(self, 'BodyKey'):
             del self.BodyKey
 
-    def Clear(self):
-        # Memory initialization in Python is not practical, but we do this to match with other codes
-        self._salt = b""
-        self._pwHash = b""
-        self._encHeadData = b""
-        self.MsgInfo = b""
-        self.SmsgInfo = b""
-        self._sign = b""
-        self.BodyKey = b""
-        self.BodyInfo = b""
-        self.Init()
-
     # set initial values
     def Init(self):
         self._headAlgo: str = ""
@@ -128,7 +116,6 @@ class Opsec:
         self.MsgInfo: bytes = b"" # additional info
 
         self._salt: bytes = b""
-        self._pwHash: bytes = b""
         self._encHeadData: bytes = b""
 
         self.Smsg: str = "" # private message
@@ -139,6 +126,17 @@ class Opsec:
         self.BodyKey: bytes = b"" # body encryption key
         self.BodySize: int = -1 # body size (-1 if not used)
         self.BodyInfo: bytes = b"" # additional info for body (packing info, etc.)
+
+    # clear all (not practical, but to match with other codes)
+    def Clear(self):
+        self._salt = b""
+        self._encHeadData = b""
+        self.MsgInfo = b""
+        self.SmsgInfo = b""
+        self._sign = b""
+        self.BodyKey = b""
+        self.BodyInfo = b""
+        self.Init()
 
     def Read(self, ins: io.IOBase, cut: int = 65535) -> bytes: # set cut to 0 to read all
         c = 0
@@ -167,7 +165,7 @@ class Opsec:
             outs.write(EncodeInt(65535, 2, False))
             outs.write(EncodeInt(size - 65535, 2, False))
         else:
-            raise ValueError(f"Data size too big: {size}")
+            raise ValueError(f"Header too big: {size}")
         outs.write(head)
 
     def _wrapEncHead(self) -> bytes:
@@ -217,9 +215,9 @@ class Opsec:
         if self.BodySize >= 0:
             self.BodyKey = Bencrypt.Random(32)
 
-        # get pwhash & header key, encrypt header
-        hm = Bencrypt.HashMaster(method) # Bencrypt will check if method is valid
-        self._pwHash, hkey = hm.KDF(pw + kf, self._salt)
+        # get header key, encrypt header
+        hm = Bencrypt.HashMaster(method)
+        _, hkey = hm.KDF(pw + kf, self._salt)
         headData = self._wrapEncHead()
         sm = Bencrypt.SymMaster("gcm1", hkey)
         del hkey
@@ -234,7 +232,6 @@ class Opsec:
             cfg["minf"] = self.MsgInfo
         cfg["hal"] = self._headAlgo.encode('utf-8')
         cfg["salt"] = self._salt
-        cfg["pwh"] = self._pwHash
         cfg["ehd"] = self._encHeadData
         return EncodeCfg(cfg)
     
@@ -248,8 +245,8 @@ class Opsec:
         if myPri != None:
             am = Bencrypt.AsymMaster(method)
             am.Loadkey(None, myPri)
-            # sign to [hal][peerPub][smsg][sinf]
-            signTgt = method.encode('utf-8') + peerPub + self.Smsg.encode('utf-8') + self.SmsgInfo
+            # sign to [hal][peerPub][smsg][sinf] with 0-byte suffix for each field
+            signTgt = method.encode('utf-8') + b'\x00' + peerPub + b'\x00' + self.Smsg.encode('utf-8') + b'\x00' + self.SmsgInfo + b'\x00'
             self._sign = am.Sign(signTgt)
 
         # encrypt header
@@ -280,21 +277,17 @@ class Opsec:
             self._headAlgo = cfg["hal"].decode('utf-8')
         if "salt" in cfg:
             self._salt = cfg["salt"]
-        if "pwh" in cfg:
-            self._pwHash = cfg["pwh"]
         if "ehd" in cfg:
             self._encHeadData = cfg["ehd"]
 
     def Decpw(self, pw: bytes, kf: bytes = b""):
         # check parameters, get header key
         if self._headAlgo == "":
-            raise ValueError("Call view() first")
+            raise ValueError("Opsec not initialized or invalid data")
         hm = Bencrypt.HashMaster(self._headAlgo)
-        pwhash, hkey = hm.KDF(pw + kf, self._salt)
+        _, hkey = hm.KDF(pw + kf, self._salt)
 
-        # check password, decrypt header
-        if pwhash != self._pwHash:
-            raise ValueError("Incorrect password")
+        # decrypt header (verification by SymMaster)
         sm = Bencrypt.SymMaster("gcm1", hkey)
         del hkey
         headData = sm.DeBin(self._encHeadData)
@@ -304,7 +297,7 @@ class Opsec:
     def Decpub(self, myPri: bytes, myPub: Union[bytes, None] = None, peerPub: Union[bytes, None] = None): # verify sign if public is not None
         # check parameters, decrypt header
         if self._headAlgo == "":
-            raise ValueError("Call view() first")
+            raise ValueError("Opsec not initialized or invalid data")
         am = Bencrypt.AsymMaster(self._headAlgo)
         am.Loadkey(None, myPri)
         headData = am.Decrypt(self._encHeadData)
@@ -318,6 +311,7 @@ class Opsec:
             raise ValueError("Both myPub and peerPub should be provided to verify sign")
         am = Bencrypt.AsymMaster(self._headAlgo)
         am.Loadkey(peerPub, None)
-        signTgt = self._headAlgo.encode('utf-8') + myPub + self.Smsg.encode('utf-8') + self.SmsgInfo
+        # verify sign [hal][myPub][smsg][sinf] with 0-byte suffix for each field
+        signTgt = self._headAlgo.encode('utf-8') + b'\x00' + myPub + b'\x00' + self.Smsg.encode('utf-8') + b'\x00' + self.SmsgInfo + b'\x00'
         if not am.Verify(signTgt, self._sign):
             raise ValueError("Sign verification failed")

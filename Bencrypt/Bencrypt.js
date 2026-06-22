@@ -99,6 +99,44 @@ function mkiv(g, c) {
     return iv;
 }
 
+function hmac_sha3_256(key, msg) {
+    const B = 136; // Block size for SHA3-256
+    let k = toU8(key);
+    const m = toU8(msg);
+
+    if (k.length > B) {
+        k = SHA3256(k);
+    }
+    if (k.length < B) {
+        const newK = new Uint8Array(B);
+        newK.set(k);
+        k = newK;
+    }
+
+    const o_key_pad = new Uint8Array(B);
+    const i_key_pad = new Uint8Array(B);
+    for (let i = 0; i < B; i++) {
+        o_key_pad[i] = k[i] ^ 0x5c;
+        i_key_pad[i] = k[i] ^ 0x36;
+    }
+
+    const innerData = new Uint8Array(B + m.length);
+    innerData.set(i_key_pad);
+    innerData.set(m, B);
+    const innerHash = SHA3256(innerData);
+
+    const outerData = new Uint8Array(B + innerHash.length);
+    outerData.set(o_key_pad);
+    outerData.set(innerHash, B);
+    const result = SHA3256(outerData);
+
+    zeroize(i_key_pad);
+    zeroize(o_key_pad);
+    zeroize(innerData);
+    zeroize(outerData);
+    return result;
+}
+
 function hmac_sha3_512(key, msg) {
     const B = 72; // Block size for SHA3-512 (rate = 576 bits = 72 bytes)
     let k = toU8(key);
@@ -139,44 +177,6 @@ function hmac_sha3_512(key, msg) {
     zeroize(innerData);
     zeroize(outerData);
     return result
-}
-
-function hmac_sha3_256(key, msg) {
-    const B = 136; // Block size for SHA3-256
-    let k = toU8(key);
-    const m = toU8(msg);
-
-    if (k.length > B) {
-        k = SHA3256(k);
-    }
-    if (k.length < B) {
-        const newK = new Uint8Array(B);
-        newK.set(k);
-        k = newK;
-    }
-
-    const o_key_pad = new Uint8Array(B);
-    const i_key_pad = new Uint8Array(B);
-    for (let i = 0; i < B; i++) {
-        o_key_pad[i] = k[i] ^ 0x5c;
-        i_key_pad[i] = k[i] ^ 0x36;
-    }
-
-    const innerData = new Uint8Array(B + m.length);
-    innerData.set(i_key_pad);
-    innerData.set(m, B);
-    const innerHash = SHA3256(innerData);
-
-    const outerData = new Uint8Array(B + innerHash.length);
-    outerData.set(o_key_pad);
-    outerData.set(innerHash, B);
-    const result = SHA3256(outerData);
-
-    zeroize(i_key_pad);
-    zeroize(o_key_pad);
-    zeroize(innerData);
-    zeroize(outerData);
-    return result;
 }
 
 /**
@@ -427,7 +427,7 @@ async function argon2low(pw, salt) {
             timeCost: 4,
             memoryCost: 65536,
             parallelism: 8,
-            hashLength: 48,
+            hashLength: 64,
             raw: true,
             salt: saltBuf
         };
@@ -441,7 +441,7 @@ async function argon2low(pw, salt) {
             time: 4,
             mem: 65536,
             parallelism: 8,
-            hashLen: 48
+            hashLen: 64
         };
         const res = await deps.argon2.hash(options);
         return new Uint8Array(res.hash);
@@ -459,7 +459,7 @@ async function argon2st(pw, salt) {
             timeCost: 3,
             memoryCost: 262144,
             parallelism: 6,
-            hashLength: 48,
+            hashLength: 64,
             raw: true,
             salt: saltBuf
         };
@@ -473,7 +473,7 @@ async function argon2st(pw, salt) {
             time: 3,
             mem: 262144,
             parallelism: 6,
-            hashLen: 48
+            hashLen: 64
         };
         const res = await deps.argon2.hash(options);
         return new Uint8Array(res.hash);
@@ -911,7 +911,6 @@ class ECC1 {
         this.priX = null; // 56 bytes
         this.pubEd = null; // 57 bytes
         this.priEd = null; // 57 bytes
-        // encryption format: [1B PubLen][PubKey][encdata][tag]
     }
 
     /**
@@ -1020,11 +1019,10 @@ class ECC1 {
         const enc = await em.EnBin(d);
         zeroize(gcmKey);
 
-        // Pack: [1B Len][EphPub][Enc]
-        const res = new Uint8Array(1 + ephPubRaw.length + enc.length);
-        res[0] = ephPubRaw.length;
-        res.set(ephPubRaw, 1);
-        res.set(enc, 1 + ephPubRaw.length);
+        // Pack: [EphPub 56B][Enc]
+        const res = new Uint8Array(ephPubRaw.length + enc.length);
+        res.set(ephPubRaw, 0);
+        res.set(enc, ephPubRaw.length);
         return res;
     }
 
@@ -1036,9 +1034,9 @@ class ECC1 {
     async decrypt(data) {
         // parse data
         const d = toU8(data);
-        const keyLen = d[0];
-        const ephPubRaw = d.slice(1, 1 + keyLen);
-        const enc = d.slice(1 + keyLen);
+        if (d.length < 56) throw new Error("cipher too short");
+        const ephPubRaw = d.slice(0, 56);
+        const enc = d.slice(56);
 
         // get shared secret
         let sharedSecret;

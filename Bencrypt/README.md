@@ -200,8 +200,8 @@ class Bencrypt {
 #### Argon2id
 
 - Modern key derivation function
-- Method `arg2low` parameter: `Time=4, Memory=65536, Parallel=8, Outsize=48B`, requires 64MiB
-- Method `arg2st` parameter: `Time=3, Memory=262144, Parallel=6, Outsize=48B`, requires 256MiB
+- Method `arg2low` parameter: `Time=4, Memory=65536, Parallel=8, Outsize=64B`, requires 64MiB
+- Method `arg2st` parameter: `Time=3, Memory=262144, Parallel=6, Outsize=64B`, requires 256MiB
 
 #### AES-GCM
 
@@ -213,7 +213,7 @@ class Bencrypt {
 
 - Modern asymmetric algorithm using Curve448, which is independent from NSA issues
 - Key format: `[X448 56B][Ed448 57B]` for both public and private key
-- Encryption: `[KeyLen 1B][TempKey][IV 12B][CipherText][Tag 16B]`
+- Encryption: `[TempKey 56B][IV 12B][CipherText][Tag 16B]`
 - Signature: raw bytes using ECDSA Ed448
 
 #### PQC1

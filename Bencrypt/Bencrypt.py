@@ -120,10 +120,10 @@ class HashMaster:
     
 # ========== Hash Functions ==========
 def argon2low(pw: bytes, salt: bytes) -> bytes:
-    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=4, memory_cost=65536, parallelism=8, hash_len=48, type=low_level.Type.ID)
+    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=4, memory_cost=65536, parallelism=8, hash_len=64, type=low_level.Type.ID)
 
 def argon2st(pw: bytes, salt: bytes) -> bytes:
-    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=3, memory_cost=262144, parallelism=6, hash_len=48, type=low_level.Type.ID)
+    return low_level.hash_secret_raw(secret=pw, salt=salt, time_cost=3, memory_cost=262144, parallelism=6, hash_len=64, type=low_level.Type.ID)
 
 # ========== Symmetric Encryption Master ==========
 class SymMaster:
@@ -133,7 +133,7 @@ class SymMaster:
         self.algo = algo
         if self.algo == 'gcm1' or self.algo == 'gcmx1':
             if len(key) != 32:
-                raise ValueError("Key length must be 32 bytes")
+                raise ValueError(f"SYM keysize must be 32: got {len(key)}")
             self.mask = Masker()
             self.key, self.worker = self.mask.XOR(key), AES1() # saved as XOR masked
 
@@ -319,7 +319,6 @@ class ECC1: # Curve448
         self.priX: Optional[x448.X448PrivateKey] = None
         self.pubEd: Optional[ed448.Ed448PublicKey] = None
         self.priEd: Optional[ed448.Ed448PrivateKey] = None
-        # encryption format: [1B PubLen][PubKey][encdata][tag]
 
     def __del__(self):
         self.pubX = None
@@ -345,11 +344,11 @@ class ECC1: # Curve448
 
     def loadkey(self, public: bytes|None, private: bytes|None): # [X448 56B][Ed448 57B] format, load if not None
         if public != None:
-            if len(public) != 113: raise ValueError("Invalid Curve448 public key length (must be 113 bytes)")
+            if len(public) != 113: raise ValueError(f"ECC1 keysize must be 113: got {len(public)}")
             self.pubX = x448.X448PublicKey.from_public_bytes(public[:56])
             self.pubEd = ed448.Ed448PublicKey.from_public_bytes(public[56:])
         if private != None:
-            if len(private) != 113: raise ValueError("Invalid Curve448 private key length (must be 113 bytes)")
+            if len(private) != 113: raise ValueError(f"ECC1 keysize must be 113: got {len(private)}")
             self.priX = x448.X448PrivateKey.from_private_bytes(private[:56])
             self.priEd = ed448.Ed448PrivateKey.from_private_bytes(private[56:])
 
@@ -363,13 +362,14 @@ class ECC1: # Curve448
         del tempKey
         del shared
         del gcmKey
-        return len(tempPub).to_bytes(1, 'big') + tempPub + enc
+        return tempPub + enc
 
     def decrypt(self, data: bytes) -> bytes:
         # 1. parse data
-        keylen = data[0]
-        tempPub = data[1 : 1 + keylen]
-        enc = data[1 + keylen :]
+        if len(data) < 56:
+            raise ValueError("cipher too short")
+        tempPub = data[:56]
+        enc = data[56:]
 
         # 2. Load key, Get shared secret (ECDH)
         tempKey = x448.X448PublicKey.from_public_bytes(tempPub)
@@ -482,6 +482,8 @@ class PQC1:
 
     def decrypt(self, data: bytes) -> bytes:
         # 1. seperate data
+        if len(data) < 1624:
+            raise ValueError("cipher too short")
         tempPub = data[:56]
         kemEnc = data[56:1624]
         enc = data[1624:]
