@@ -11,6 +11,7 @@ Summary of CLI tool usage
 - ffmpeg: 비디오 변환 Video conversion
 - yt-dlp: 유튜브 다운로드 Youtube download
 - cleaner: OS 흔적 삭제 OS artifact removor
+- compress: 자동 미디어 압축기 Auto mediafile compress
 
 ## devtool
 
