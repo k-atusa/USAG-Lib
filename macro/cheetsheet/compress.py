@@ -45,7 +45,7 @@ def convVid(path):
         cmd = [
             FFPATH, "-y", "-i", temp_path,
             "-c:v", "libsvtav1", "-crf", "32", "-preset", "6",
-            "-c:a", "aac", "-b:a", "128k", path
+            "-c:a", "libopus", "-b:a", "96k", path
         ]
         
         # print shell result
