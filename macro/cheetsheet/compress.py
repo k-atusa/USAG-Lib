@@ -111,3 +111,4 @@ def main(path):
 if __name__ == "__main__":
     tgt = input("Tgt dir: ").strip().strip('"')
     main(tgt)
+    input("press ENTER to exit...")
