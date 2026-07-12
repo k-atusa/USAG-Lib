@@ -1,16 +1,15 @@
 # test835 : media file compress
 
 import os
-import random
 import string
 import subprocess
 import time
 from PIL import Image
 
 FFPATH = "./ffmpeg.exe"
-SLEEP = 2.5
+SLEEP = 4
 IMGS = ["png", "jpg", "jpeg"]
-VIDS = ["mp4"]
+VIDS = ["mp4", "avi"]
 
 def convImg(path):
     before = os.path.getsize(path)
@@ -18,7 +17,8 @@ def convImg(path):
     out_path = base + ".webp"
     try:
         with Image.open(path) as img:
-            img.save(out_path, "WEBP", quality=80, method=5)
+            img.save(out_path, "WEBP", quality=85, method=5)
+        time.sleep(SLEEP * 0.05)
         if path != out_path and os.path.exists(out_path):
             os.remove(path)
         after = os.path.getsize(out_path)
@@ -32,20 +32,17 @@ def convVid(path):
         return
     before = os.path.getsize(path)
     dir_name = os.path.dirname(path)
-    base_name = os.path.basename(path)
-    
-    # random temp name
-    rand_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-    temp_name = f"temp_{rand_str}_{base_name}"
-    temp_path = os.path.join(dir_name, temp_name)
+    temp_path = os.path.join(dir_name, f"temp_{os.path.basename(path)}")
+    base_name, _ = os.path.splitext(os.path.basename(path))
+    output = os.path.join(dir_name, base_name + ".mp4")
     
     # change file name and convert
     try:
         os.rename(path, temp_path)
         cmd = [
             FFPATH, "-y", "-i", temp_path,
-            "-c:v", "libsvtav1", "-crf", "32", "-preset", "6",
-            "-c:a", "libopus", "-b:a", "96k", path
+            "-c:v", "libsvtav1", "-crf", "32", "-preset", "5",
+            "-c:a", "libopus", "-b:a", "96k", output
         ]
         
         # print shell result
@@ -57,16 +54,16 @@ def convVid(path):
         time.sleep(SLEEP)
         
         # delete or restore temp file
-        if os.path.exists(path) and os.path.getsize(path) > 0:
+        if os.path.exists(output) and os.path.getsize(output) > 0:
             os.remove(temp_path)
-            after = os.path.getsize(path)
-            calcRate(path, before, after)
+            after = os.path.getsize(output)
+            calcRate(output, before, after)
         else:
             os.rename(temp_path, path)
             print(f"[ERROR] {path}: Encode failed")
             
     except Exception as e:
-        if os.path.exists(temp_path) and not os.path.exists(path):
+        if os.path.exists(temp_path) and not os.path.exists(output):
             os.rename(temp_path, path)
         print(f"[ERROR] {path}: {e}")
 
