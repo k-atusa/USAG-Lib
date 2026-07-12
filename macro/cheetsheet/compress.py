@@ -8,8 +8,8 @@ from PIL import Image
 
 FFPATH = "./ffmpeg.exe"
 SLEEP = 4
-IMGS = ["png", "jpg", "jpeg"]
-VIDS = ["mp4", "avi"]
+IMGS = ["png", "jpg", "jpeg", "bmp"]
+VIDS = ["mp4", "avi", "mpg", "mts", "3gp"]
 
 def convImg(path):
     before = os.path.getsize(path)
@@ -42,6 +42,7 @@ def convVid(path):
         cmd = [
             FFPATH, "-y", "-i", temp_path,
             "-c:v", "libsvtav1", "-crf", "32", "-preset", "5",
+            "-pix_fmt", "yuv420p10le", "-svtav1-params", "tune=0:film-grain=4:scd=1",
             "-c:a", "libopus", "-b:a", "96k", output
         ]
         
