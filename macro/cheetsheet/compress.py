@@ -9,7 +9,7 @@ from PIL import Image
 FFPATH = "./ffmpeg.exe"
 SLEEP = 4
 IMGS = ["png", "jpg", "jpeg", "bmp"]
-VIDS = ["mp4", "avi", "mpg", "mts", "3gp"]
+VIDS = ["mp4", "mkv", "avi", "mov", "wmv", "mts", "m2ts", "mpg", "3gp", "flv"]
 
 def convImg(path):
     before = os.path.getsize(path)
