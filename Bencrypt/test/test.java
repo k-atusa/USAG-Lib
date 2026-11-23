@@ -44,6 +44,9 @@ public class test {
             Bencrypt bc = new Bencrypt();
             byte[] data0 = "0000".getBytes(StandardCharsets.UTF_8);
             System.out.println(Base64.getEncoder().encodeToString(bc.Random(16)));
+            byte[] shred = new byte[] { 49, 50, 51, 52, 53, 54 };
+            Bencrypt.Clear(shred);
+            System.out.println(Base64.getEncoder().encodeToString(shred));
             System.out.println(Base64.getEncoder().encodeToString(Bencrypt.SHA3256(data0))); // pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
             System.out.println(Base64.getEncoder().encodeToString(Bencrypt.SHA3512(data0))); // tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 

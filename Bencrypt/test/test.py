@@ -11,6 +11,9 @@ pos = 0
 print("testing basic functions...")
 data = b"0000"
 print( base64.b64encode(Bencrypt.Random(16)).decode('ascii') )
+shred = bytearray(b"123456")
+Bencrypt.Clear(shred)
+print( base64.b64encode(shred).decode('ascii') )
 print( base64.b64encode(Bencrypt.SHA3256(data)).decode('ascii') ) # pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
 print( base64.b64encode(Bencrypt.SHA3512(data)).decode('ascii') ) # tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 

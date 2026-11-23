@@ -39,6 +39,7 @@ class Masker:
     def XOR(data: bytes) -> bytes
 
 def Random(size: int) -> bytes
+def Clear(data: bytearray) -> None
 def SHA3256(data: bytes) -> bytes
 def HMAC3256(key: bytes, data: bytes) -> bytes
 def SHA3512(data: bytes) -> bytes
@@ -77,6 +78,7 @@ class Masker {
 }
 
 function Random(size: number): Uint8Array
+function Clear(data: Uint8Array)
 function SHA3256(data: Uint8Array | string): Uint8Array
 function HMAC3256(key: Uint8Array | string, data: Uint8Array | string): Uint8Array
 function SHA3512(data: Uint8Array | string): Uint8Array
@@ -116,6 +118,7 @@ type Masker struct {
 }
 
 func Random(size int) []byte
+func Clear(data []byte)
 func SHA3256(data []byte) []byte
 func HMAC3256(key []byte, data []byte) []byte
 func SHA3512(data []byte) []byte
@@ -158,6 +161,7 @@ class Bencrypt {
 
     // Basic Functions
     byte[] Random(int size)
+    static void Clear(byte[] data)
     static byte[] SHA3256(byte[] data)
     static byte[] HMAC3256(byte[] key, byte[] data)
     static byte[] SHA3512(byte[] data)

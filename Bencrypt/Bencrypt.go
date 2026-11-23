@@ -27,10 +27,6 @@ import (
 )
 
 // ========== Basic Functions ==========
-var SCLEAR_BACK = func(b []byte) { clear(b) }
-
-func sclear(data []byte) { SCLEAR_BACK(data); runtime.KeepAlive(data) }
-
 func Random(size int) []byte {
 	b := make([]byte, size)
 	_, err := rand.Read(b)
@@ -38,6 +34,16 @@ func Random(size int) []byte {
 		panic(err) // CRNG failure is usually fatal
 	}
 	return b
+}
+
+var DUMMY_FUNC = func(b []byte) { clear(b) }
+var DUMMY_PTR atomic.Pointer[[]byte]
+
+func Clear(data []byte) {
+	DUMMY_FUNC(data)
+	if !DUMMY_PTR.CompareAndSwap(nil, &data) {
+		DUMMY_PTR.Store(nil)
+	}
 }
 
 func SHA3256(data []byte) []byte {
@@ -149,7 +155,7 @@ func (m *Masker) XOR(data []byte) ([]byte, error) {
 	mid := L / 2
 	maxLen := L - mid
 	workBlock := make([]byte, maxLen*3)
-	defer func() { sclear(workBlock) }()
+	defer func() { Clear(workBlock) }()
 	buf1 := workBlock[0:maxLen:maxLen]
 	buf2 := workBlock[maxLen : 2*maxLen : 2*maxLen]
 	buf3 := workBlock[2*maxLen : 3*maxLen : 3*maxLen]
@@ -215,7 +221,7 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 	}
 	var lblStore, lblKeygen string
 	var master []byte
-	defer func() { sclear(master) }()
+	defer func() { Clear(master) }()
 
 	// get master secret
 	switch hm.algo {
@@ -224,7 +230,7 @@ func (hm *HashMaster) KDF(pw []byte, salt []byte) ([]byte, []byte, error) {
 		data := make([]byte, 0, len(salt)+len(pw))
 		data = append(data, salt...)
 		data = append(data, pw...)
-		defer sclear(data)
+		defer Clear(data)
 		master = SHA3512(data)
 	case "arg2low":
 		lblStore, lblKeygen = "PWHASH_ARG2LOW", "KEYGEN_ARG2LOW"
@@ -302,7 +308,7 @@ func (sm *SymMaster) Processed() int64 {
 func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer sclear(key)
+	defer Clear(key)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +332,7 @@ func (sm *SymMaster) EnBin(data []byte) ([]byte, error) {
 func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer sclear(key)
+	defer Clear(key)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +356,7 @@ func (sm *SymMaster) DeBin(data []byte) ([]byte, error) {
 func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer sclear(key)
+	defer Clear(key)
 	if err != nil {
 		return err
 	}
@@ -376,7 +382,7 @@ func (sm *SymMaster) EnFile(src io.Reader, size int64, dst io.Writer) error {
 func (sm *SymMaster) DeFile(src io.Reader, size int64, dst io.Writer) error {
 	// unmask key
 	key, err := sm.mask.XOR(sm.Key)
-	defer sclear(key)
+	defer Clear(key)
 	if err != nil {
 		return err
 	}
@@ -883,7 +889,7 @@ func (e *ECC1) Loadkey(public []byte, private []byte) error {
 func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 	// 1. Generate temp ephemeral key
 	var tempPub, tempPriv x448.Key
-	defer func() { sclear(tempPriv[:]) }()
+	defer func() { Clear(tempPriv[:]) }()
 	if _, err := io.ReadFull(rand.Reader, tempPriv[:]); err != nil {
 		return nil, err
 	}
@@ -891,7 +897,7 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	defer func() { sclear(shared[:]) }()
+	defer func() { Clear(shared[:]) }()
 	ok := x448.Shared(&shared, &tempPriv, e.PubX)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed (bad public key)")
@@ -899,7 +905,7 @@ func (e *ECC1) Encrypt(data []byte) ([]byte, error) {
 
 	// 3. Derive Key & Encrypt with AES-GCM
 	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 32)
-	defer sclear(gcmKey)
+	defer Clear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -929,7 +935,7 @@ func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 
 	// 2. Get shared secret (ECDH)
 	var shared x448.Key
-	defer func() { sclear(shared[:]) }()
+	defer func() { Clear(shared[:]) }()
 	ok := x448.Shared(&shared, e.PrivX, &tempPub)
 	if !ok {
 		return nil, errors.New("ECDH key exchange failed")
@@ -937,7 +943,7 @@ func (e *ECC1) Decrypt(data []byte) ([]byte, error) {
 
 	// 3. Decrypt with AES-GCM
 	gcmKey, err := Genkey(shared[:], "KEYGEN_ECC1_ENCRYPT", 32)
-	defer sclear(gcmKey)
+	defer Clear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1158,8 +1164,8 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	var err1, err2 error
 	var tempPub, ssvECC x448.Key
 	var kemEnc, ssvKEM []byte
-	defer func() { sclear(ssvECC[:]) }()
-	defer func() { sclear(ssvKEM) }()
+	defer func() { Clear(ssvECC[:]) }()
+	defer func() { Clear(ssvKEM) }()
 
 	// 1. Ephemeral X448 tempkey generation & ECDH
 	go func() {
@@ -1210,10 +1216,10 @@ func (p *PQC1) Encrypt(data []byte) ([]byte, error) {
 	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
 	sharedSecret = append(sharedSecret, ssvECC[:]...)
 	sharedSecret = append(sharedSecret, ssvKEM...)
-	defer sclear(sharedSecret)
+	defer Clear(sharedSecret)
 
 	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 32)
-	defer sclear(gcmKey)
+	defer Clear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1252,8 +1258,8 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	var err1, err2 error
 	var ssvECC x448.Key
 	var ssvKEM []byte
-	defer func() { sclear(ssvECC[:]) }()
-	defer func() { sclear(ssvKEM) }()
+	defer func() { Clear(ssvECC[:]) }()
+	defer func() { Clear(ssvKEM) }()
 
 	// 2-1. Shared Secret Value (ECC)
 	go func() {
@@ -1280,7 +1286,7 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 		}()
 
 		privKEM, err := p.mask.XOR(p.PrivKEM)
-		defer sclear(privKEM)
+		defer Clear(privKEM)
 		if err != nil {
 			err2 = err
 			return
@@ -1307,10 +1313,10 @@ func (p *PQC1) Decrypt(data []byte) ([]byte, error) {
 	sharedSecret := make([]byte, 0, len(ssvECC)+len(ssvKEM))
 	sharedSecret = append(sharedSecret, ssvECC[:]...)
 	sharedSecret = append(sharedSecret, ssvKEM...)
-	defer sclear(sharedSecret)
+	defer Clear(sharedSecret)
 
 	gcmKey, err := Genkey(sharedSecret, "KEYGEN_PQC1_ENCRYPT", 32)
-	defer sclear(gcmKey)
+	defer Clear(gcmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1351,7 +1357,7 @@ func (p *PQC1) Sign(data []byte) ([]byte, error) {
 		}()
 
 		privDSA, err := p.mask.XOR(p.PrivDSA)
-		defer sclear(privDSA)
+		defer Clear(privDSA)
 		if err != nil {
 			err2 = err
 			return
