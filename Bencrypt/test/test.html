@@ -57,13 +57,14 @@
 
     <script type="module">
         import {
-            TestReader, TestWriter, Random, SHA3256, SHA3512, Masker, HashMaster, SymMaster, AsymMaster
+            TestReader, TestWriter, Random, Clear, SHA3256, SHA3512, Masker, HashMaster, SymMaster, AsymMaster
         } from '../Bencrypt.js';
 
         window.Bencrypt = {
             "TestReader": TestReader,
             "TestWriter": TestWriter,
             "Random": Random,
+            "Clear": Clear,
             "SHA3256": SHA3256,
             "SHA3512": SHA3512,
             "Masker": Masker,
@@ -142,6 +143,9 @@
                 log("testing basic functions...");
                 const data = new TextEncoder().encode("0000");
                 log(toBase64(window.Bencrypt.Random(16)));
+                let shred = new Uint8Array([49, 50, 51, 52, 53, 54]);
+                window.Bencrypt.Clear(shred);
+                log(toBase64(shred));
                 log(toBase64(window.Bencrypt.SHA3256(data))); // pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
                 log(toBase64(window.Bencrypt.SHA3512(data))); // tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 

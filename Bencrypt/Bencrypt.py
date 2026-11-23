@@ -21,6 +21,13 @@ from pqcrypto.sign.ml_dsa_87 import generate_keypair as mldsa_gen, sign as mldsa
 def Random(size: int) -> bytes:
     return secrets.token_bytes(size)
 
+DUMMY = None
+def Clear(data: bytearray):
+    if isinstance(data, bytearray):
+        global DUMMY
+        memoryview(data)[:] = b"\x00" * len(data)
+        DUMMY = None if DUMMY is data else data
+
 def SHA3256(data: bytes) -> bytes:
     return hashlib.sha3_256(data).digest()
 

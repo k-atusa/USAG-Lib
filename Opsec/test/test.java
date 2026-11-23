@@ -1,4 +1,3 @@
-
 /*
 structure:
   lib/bclib.jar

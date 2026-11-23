@@ -33,6 +33,9 @@ func TestMain(m *testing.M) {
 	fmt.Println("testing basic functions...")
 	data := []byte("0000")
 	fmt.Println(base64.StdEncoding.EncodeToString(Random(16)))
+	shred := []byte("123456")
+	Clear(shred)
+	fmt.Println(base64.StdEncoding.EncodeToString(shred))
 	fmt.Println(base64.StdEncoding.EncodeToString(SHA3256(data))) // pq9wt68/QjUteD6LB1FeQzw9RWadTv7mcFFnJxk7KRs=
 	fmt.Println(base64.StdEncoding.EncodeToString(SHA3512(data))) // tnjOmGIvYntbNcoej2VvG9M1RdJCtZ8BWjHek4r6OvvmhThbjjzJ/zfYwq+G7r/TGe7WWr20vkGBzULuTzcPYQ==
 

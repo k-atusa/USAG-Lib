@@ -28,8 +28,8 @@ if (isNode) {
     } catch (e) { console.error('argon2 module not installed'); }
 
     try {
-        const { ml_kem1024 } = await import('@noble/post-quantum/ml-kem');
-        const { ml_dsa87 } = await import('@noble/post-quantum/ml-dsa');
+        const { ml_kem1024 } = await import('@noble/post-quantum/ml-kem.js');
+        const { ml_dsa87 } = await import('@noble/post-quantum/ml-dsa.js');
         deps.ml_kem1024 = ml_kem1024;
         deps.ml_dsa87 = ml_dsa87;
     } catch (e) { console.error('@noble/post-quantum module not installed'); }
@@ -40,18 +40,18 @@ if (isNode) {
     else { console.error('web crypto api not found'); }
 
     try {
-        const webSha3 = (await import('https://esm.sh/js-sha3@0.9.3')).default;
+        const webSha3 = (await import('https://esm.sh/js-sha3@0.15')).default;
         deps.sha3256 = webSha3.sha3_256;
         deps.sha3512 = webSha3.sha3_512;
     } catch (e) { console.error('sha3 module not installed'); }
 
     try {
-        const webArgon2 = (await import('https://cdn.jsdelivr.net/npm/argon2-browser@1.18.0/dist/argon2-bundled.min.js/+esm')).default;
+        const webArgon2 = (await import('https://cdn.jsdelivr.net/npm/argon2-browser@1/dist/argon2-bundled.min.js/+esm')).default;
         deps.argon2 = webArgon2;
     } catch (e) { console.error('argon2 module not installed'); }
 
     try {
-        const webNoble = await import('https://esm.sh/@noble/curves@1.4.0/ed448');
+        const webNoble = await import('https://esm.sh/@noble/curves@2/ed448.js');
         deps.noble = {
             x448: webNoble.x448,
             ed448: webNoble.ed448
@@ -59,22 +59,14 @@ if (isNode) {
     } catch (e) { console.error('@noble/curves module not installed'); }
 
     try {
-        const { ml_kem1024 } = await import('https://esm.sh/@noble/post-quantum/ml-kem');
-        const { ml_dsa87 } = await import('https://esm.sh/@noble/post-quantum/ml-dsa');
+        const { ml_kem1024 } = await import('https://esm.sh/@noble/post-quantum@0.7/ml-kem.js');
+        const { ml_dsa87 } = await import('https://esm.sh/@noble/post-quantum@0.7/ml-dsa.js');
         deps.ml_kem1024 = ml_kem1024;
         deps.ml_dsa87 = ml_dsa87;
     } catch (e) { console.error('@noble/post-quantum module not installed via CDN'); }
 }
 
 // ========== Helpers ==========
-export let DUMMY = null;
-function zeroize(arr) {
-    if (arr && arr.byteLength > 0 && typeof arr.fill === 'function') {
-        arr.fill(0);
-        globalThis.DUMMY_CRYPTO_VOLATILE = arr;
-    }
-}
-
 function toU8(data) {
     if (typeof data === 'string') return new TextEncoder().encode(data);
     if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -130,10 +122,10 @@ function hmac_sha3_256(key, msg) {
     outerData.set(innerHash, B);
     const result = SHA3256(outerData);
 
-    zeroize(i_key_pad);
-    zeroize(o_key_pad);
-    zeroize(innerData);
-    zeroize(outerData);
+    Clear(i_key_pad);
+    Clear(o_key_pad);
+    Clear(innerData);
+    Clear(outerData);
     return result;
 }
 
@@ -172,10 +164,10 @@ function hmac_sha3_512(key, msg) {
     outerData.set(innerHash, B);
     const result = SHA3512(outerData);
 
-    zeroize(i_key_pad);
-    zeroize(o_key_pad);
-    zeroize(innerData);
-    zeroize(outerData);
+    Clear(i_key_pad);
+    Clear(o_key_pad);
+    Clear(innerData);
+    Clear(outerData);
     return result
 }
 
@@ -248,6 +240,19 @@ export function Random(size) {
         return buf;
     }
 }
+
+/**
+ * clear: Zeroize memory buffer
+ * @param {Uint8Array} data
+ */
+export function Clear(data) {
+    if (data && data.byteLength > 0 && typeof data.fill === 'function') {
+        data.fill(0);
+        DUMMY = DUMMY === data ? null : data;
+        globalThis.BENCRYPT_DUMMY = DUMMY;
+    }
+}
+export let DUMMY = null;
 
 /**
  * sha3256
@@ -392,7 +397,7 @@ export class HashMaster {
             combined.set(saltBuf, 0);
             combined.set(pwBuf, saltBuf.length);
             master = SHA3512(combined);
-            zeroize(combined);
+            Clear(combined);
 
         } else if (this.algo === "arg2low") {
             lblStore = "PWHASH_ARG2LOW";
@@ -410,7 +415,7 @@ export class HashMaster {
 
         const storeKey = genkey(master, lblStore, this.hashSize);
         const userKey = genkey(master, lblKeygen, this.keySize);
-        zeroize(master);
+        Clear(master);
         return [storeKey, userKey];
     }
 }
@@ -533,13 +538,13 @@ export class SymMaster {
         const key = this.mask.XOR(this.key);
         if (this.algo === "gcm1") {
             const res = await this.worker.enAESGCM(key, d);
-            zeroize(key);
+            Clear(key);
             return res;
         } else if (this.algo === "gcmx1") {
             const reader = new TestReader(d);
             const writer = new TestWriter();
             await this.worker.enAESGCMx(key, reader, d.length, writer, 1048576);
-            zeroize(key);
+            Clear(key);
             return writer.getValue();
         }
     }
@@ -554,13 +559,13 @@ export class SymMaster {
         const key = this.mask.XOR(this.key);
         if (this.algo === "gcm1") {
             const res = await this.worker.deAESGCM(key, d);
-            zeroize(key);
+            Clear(key);
             return res;
         } else if (this.algo === "gcmx1") {
             const reader = new TestReader(d);
             const writer = new TestWriter();
             await this.worker.deAESGCMx(key, reader, d.length, writer, 1048576);
-            zeroize(key);
+            Clear(key);
             return writer.getValue();
         }
     }
@@ -580,7 +585,7 @@ export class SymMaster {
         } else if (this.algo === "gcmx1") {
             await this.worker.enAESGCMx(key, src, size, dst, 1048576);
         }
-        zeroize(key);
+        Clear(key);
     }
 
     /**
@@ -598,7 +603,7 @@ export class SymMaster {
         } else if (this.algo === "gcmx1") {
             await this.worker.deAESGCMx(key, src, size, dst, 1048576);
         }
-        zeroize(key);
+        Clear(key);
     }
 }
 
@@ -649,7 +654,7 @@ class AES1 {
             }
 
         } finally {
-            zeroize(aesKey);
+            Clear(aesKey);
         }
     }
 
@@ -694,7 +699,7 @@ class AES1 {
             }
 
         } finally {
-            zeroize(aesKey);
+            Clear(aesKey);
         }
     }
 
@@ -766,7 +771,7 @@ class AES1 {
 
         // G. Finalize: Wait for all pending writes to finish
         await writeChain;
-        zeroize(aesKeyBytes);
+        Clear(aesKeyBytes);
     }
 
     /**
@@ -850,7 +855,7 @@ class AES1 {
 
         // F. Finalize
         await writeChain;
-        zeroize(aesKeyBytes);
+        Clear(aesKeyBytes);
     }
 }
 
@@ -944,9 +949,9 @@ class ECC1 {
 
         } else {
             // Generate keys
-            const priX = deps.noble.x448.utils.randomPrivateKey();
+            const priX = deps.noble.x448.utils.randomSecretKey();
             const pubX = deps.noble.x448.getPublicKey(priX);
-            const priEd = deps.noble.ed448.utils.randomPrivateKey();
+            const priEd = deps.noble.ed448.utils.randomSecretKey();
             const pubEd = deps.noble.ed448.getPublicKey(priEd);
 
             // Concat
@@ -1007,17 +1012,17 @@ class ECC1 {
             ephPubRaw = new Uint8Array(ephPubRaw); // ensure Uint8Array
         } else {
             // make temp key, get shared secret
-            const ephPri = deps.noble.x448.utils.randomPrivateKey();
+            const ephPri = deps.noble.x448.utils.randomSecretKey();
             ephPubRaw = deps.noble.x448.getPublicKey(ephPri);
             sharedSecret = deps.noble.x448.getSharedSecret(ephPri, this.pubX);
         }
 
         // encrypt
         const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 32);
-        zeroize(sharedSecret);
+        Clear(sharedSecret);
         let em = new SymMaster("gcm1", gcmKey);
         const enc = await em.EnBin(d);
-        zeroize(gcmKey);
+        Clear(gcmKey);
 
         // Pack: [EphPub 56B][Enc]
         const res = new Uint8Array(ephPubRaw.length + enc.length);
@@ -1053,12 +1058,12 @@ class ECC1 {
 
         // decrypt
         const gcmKey = genkey(new Uint8Array(sharedSecret), "KEYGEN_ECC1_ENCRYPT", 32);
-        zeroize(sharedSecret);
+        Clear(sharedSecret);
         let em = new SymMaster("gcm1", gcmKey);
         try {
             return await em.DeBin(enc);
         } finally {
-            zeroize(gcmKey);
+            Clear(gcmKey);
         }
     }
 
@@ -1130,9 +1135,9 @@ class PQC1 {
             pri1 = new Uint8Array(edKp.privateKey.export({ format: 'raw', type: 'pkcs8' }));
 
         } else {
-            pri0 = deps.noble.x448.utils.randomPrivateKey();
+            pri0 = deps.noble.x448.utils.randomSecretKey();
             pub0 = deps.noble.x448.getPublicKey(pri0);
-            pri1 = deps.noble.ed448.utils.randomPrivateKey();
+            pri1 = deps.noble.ed448.utils.randomSecretKey();
             pub1 = deps.noble.ed448.getPublicKey(pri1);
         }
 
@@ -1211,7 +1216,7 @@ class PQC1 {
             });
             ssvECC = new Uint8Array(sharedSecret);
         } else {
-            const tempPri = deps.noble.x448.utils.randomPrivateKey();
+            const tempPri = deps.noble.x448.utils.randomSecretKey();
             tempPub = deps.noble.x448.getPublicKey(tempPri);
             ssvECC = deps.noble.x448.getSharedSecret(tempPri, this.pubX);
         }
@@ -1223,14 +1228,14 @@ class PQC1 {
         const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
         combinedSecret.set(ssvECC, 0);
         combinedSecret.set(ssvKEM, ssvECC.length);
-        zeroize(ssvECC);
-        zeroize(ssvKEM);
+        Clear(ssvECC);
+        Clear(ssvKEM);
 
         const gcmKey = genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 32);
-        zeroize(combinedSecret);
+        Clear(combinedSecret);
         let em = new SymMaster("gcm1", gcmKey);
         const enc = await em.EnBin(d);
-        zeroize(gcmKey);
+        Clear(gcmKey);
 
         // [Temp X448 56B][Temp KEM 1568B][CipherText][Tag 16B]
         const res = new Uint8Array(56 + 1568 + enc.length);
@@ -1269,22 +1274,22 @@ class PQC1 {
 
         const priKEMt = this.mask.XOR(this.priKEM);
         const ssvKEM = deps.ml_kem1024.decapsulate(kemEnc, priKEMt);
-        zeroize(priKEMt);
+        Clear(priKEMt);
 
         // 3. Hybrid KDF & Decryption
         const combinedSecret = new Uint8Array(ssvECC.length + ssvKEM.length);
         combinedSecret.set(ssvECC, 0);
         combinedSecret.set(ssvKEM, ssvECC.length);
-        zeroize(ssvECC);
-        zeroize(ssvKEM);
+        Clear(ssvECC);
+        Clear(ssvKEM);
 
         const gcmKey = genkey(combinedSecret, "KEYGEN_PQC1_ENCRYPT", 32);
-        zeroize(combinedSecret);
+        Clear(combinedSecret);
         let em = new SymMaster("gcm1", gcmKey);
         try {
             return await em.DeBin(enc);
         } finally {
-            zeroize(gcmKey);
+            Clear(gcmKey);
         }
     }
 
@@ -1307,7 +1312,7 @@ class PQC1 {
         // ML-DSA-87 (4627B)
         const priDSAt = this.mask.XOR(this.priDSA);
         const mlSgn = deps.ml_dsa87.sign(d, priDSAt);
-        zeroize(priDSAt);
+        Clear(priDSAt);
 
         // Join: 114 + 4627 = 4741
         const res = new Uint8Array(edSgn.length + mlSgn.length);
