@@ -21,10 +21,6 @@ import (
 )
 
 // ========== Helper Functions ==========
-var SCLEAR_BACK = func(b []byte) { clear(b) }
-
-func sclear(data []byte) { SCLEAR_BACK(data); runtime.KeepAlive(data) }
-
 func Crc32(data []byte) string {
 	checksum := crc32.ChecksumIEEE(data)
 	buf := make([]byte, 4)
@@ -260,13 +256,13 @@ type Opsec struct {
 }
 
 func (o *Opsec) Clear() {
-	sclear(o.salt)
-	sclear(o.encHeadData)
-	sclear(o.MsgInfo)
-	sclear(o.SmsgInfo)
-	sclear(o.sign)
-	sclear(o.BodyKey)
-	sclear(o.BodyInfo)
+	Bencrypt.Clear(o.salt)
+	Bencrypt.Clear(o.encHeadData)
+	Bencrypt.Clear(o.MsgInfo)
+	Bencrypt.Clear(o.SmsgInfo)
+	Bencrypt.Clear(o.sign)
+	Bencrypt.Clear(o.BodyKey)
+	Bencrypt.Clear(o.BodyInfo)
 	o.Init()
 }
 
@@ -439,7 +435,7 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
-	defer sclear(combinedPw)
+	defer Bencrypt.Clear(combinedPw)
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
@@ -447,14 +443,14 @@ func (o *Opsec) Encpw(method string, pw []byte, kf []byte) ([]byte, error) {
 		return nil, err
 	}
 	_, hkey, err := hm.KDF(combinedPw, o.salt)
-	defer sclear(hkey)
+	defer Bencrypt.Clear(hkey)
 	if err != nil {
 		return nil, err
 	}
 
 	// Encrypt header
 	headData, err := o.wrapEncHead()
-	defer sclear(headData)
+	defer Bencrypt.Clear(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +503,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 		signTgt = append(signTgt, 0)
 		signTgt = append(signTgt, o.SmsgInfo...)
 		signTgt = append(signTgt, 0)
-		defer sclear(signTgt)
+		defer Bencrypt.Clear(signTgt)
 
 		var err error
 		o.sign, err = amSign.Sign(signTgt)
@@ -526,7 +522,7 @@ func (o *Opsec) Encpub(method string, peerPub []byte, myPri []byte) ([]byte, err
 	}
 
 	headData, err := o.wrapEncHead()
-	defer sclear(headData)
+	defer Bencrypt.Clear(headData)
 	if err != nil {
 		return nil, err
 	}
@@ -557,16 +553,16 @@ func (o *Opsec) View(data []byte) {
 		o.Msg = string(v)
 	}
 	if v, ok := cfg["minf"]; ok {
-		o.MsgInfo = v
+		o.MsgInfo = bytes.Clone(v)
 	}
 	if v, ok := cfg["hal"]; ok {
 		o.headAlgo = string(v)
 	}
 	if v, ok := cfg["salt"]; ok {
-		o.salt = v
+		o.salt = bytes.Clone(v)
 	}
 	if v, ok := cfg["ehd"]; ok {
-		o.encHeadData = v
+		o.encHeadData = bytes.Clone(v)
 	}
 }
 
@@ -578,7 +574,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 	combinedPw := make([]byte, 0, len(pw)+len(kf))
 	combinedPw = append(combinedPw, pw...)
 	combinedPw = append(combinedPw, kf...)
-	defer sclear(combinedPw)
+	defer Bencrypt.Clear(combinedPw)
 
 	// KDF via HashMaster
 	hm := new(Bencrypt.HashMaster)
@@ -586,7 +582,7 @@ func (o *Opsec) Decpw(pw []byte, kf []byte) error {
 		return err
 	}
 	_, hkey, err := hm.KDF(combinedPw, o.salt)
-	defer sclear(hkey)
+	defer Bencrypt.Clear(hkey)
 	if err != nil {
 		return err
 	}

@@ -1,14 +1,6 @@
 // test794b : USAG-Lib opsec
-const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib/Bencrypt/Bencrypt.js';
-const { Random, HashMaster, SymMaster, AsymMaster } = await import(BencryptURL);
-
-// Helper: Fill zeros to buffer
-function zeroize(arr) {
-    if (arr && arr.byteLength > 0 && typeof arr.fill === 'function') {
-        arr.fill(0);
-        globalThis.DUMMY_CRYPTO_VOLATILE = arr;
-    }
-}
+const BencryptURL = 'https://cdn.jsdelivr.net/gh/k-atusa/USAG-Lib@main/Bencrypt/Bencrypt.js';
+const { Random, Clear, HashMaster, SymMaster, AsymMaster } = await import(BencryptURL);
 
 // Helper: Concatenate Uint8Arrays
 function concat(arrays) {
@@ -223,13 +215,13 @@ export class Opsec {
     }
 
     Clear() {
-        zeroize(this._salt);
-        zeroize(this._encHeadData);
-        zeroize(this.MsgInfo);
-        zeroize(this.SmsgInfo);
-        zeroize(this._sign);
-        zeroize(this.BodyKey);
-        zeroize(this.BodyInfo);
+        Clear(this._salt);
+        Clear(this._encHeadData);
+        Clear(this.MsgInfo);
+        Clear(this.SmsgInfo);
+        Clear(this._sign);
+        Clear(this.BodyKey);
+        Clear(this.BodyInfo);
         this.Init();
     }
 
@@ -350,13 +342,13 @@ export class Opsec {
         // get header key, encrypt header
         const hm = new HashMaster(method);
         const [, hkey] = await hm.KDF(combinedPw, this._salt);
-        zeroize(combinedPw);
+        Clear(combinedPw);
 
         const headData = this._wrapEncHead();
         const sm = new SymMaster("gcm1", hkey);
         this._encHeadData = await sm.EnBin(headData);
-        zeroize(headData);
-        zeroize(hkey);
+        Clear(headData);
+        Clear(hkey);
 
         // wrap header
         const cfg = {};
@@ -400,7 +392,7 @@ export class Opsec {
                 new Uint8Array([0])
             ]);
             this._sign = await am.Sign(signTgt);
-            zeroize(signTgt);
+            Clear(signTgt);
         }
 
         // encrypt header
@@ -408,7 +400,7 @@ export class Opsec {
         await am.Loadkey(peerPubBytes, null);
         const headData = this._wrapEncHead();
         this._encHeadData = await am.Encrypt(headData);
-        zeroize(headData);
+        Clear(headData);
 
         // wrap header
         const cfg = {};
@@ -447,14 +439,14 @@ export class Opsec {
         // check parameters, get header key
         const hm = new HashMaster(this._headAlgo);
         const [, hkey] = await hm.KDF(combinedPw, this._salt);
-        zeroize(combinedPw);
+        Clear(combinedPw);
 
         // decrypt header (verification by SymMaster)
         const sm = new SymMaster("gcm1", hkey);
         const headData = await sm.DeBin(this._encHeadData);
-        zeroize(hkey);
+        Clear(hkey);
         this._unwrapEncHead(headData);
-        zeroize(headData);
+        Clear(headData);
     }
 
     /**
@@ -471,7 +463,7 @@ export class Opsec {
 
         let headData = await am.Decrypt(this._encHeadData);
         this._unwrapEncHead(headData);
-        zeroize(headData);
+        Clear(headData);
 
         // verify sign
         if (myPub === null && peerPub === null) return;
