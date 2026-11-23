@@ -2,7 +2,7 @@
 // !!! JS version is  not designed for big data !!!
 const isNode = (typeof window === 'undefined');
 const fs = isNode ? (await import('fs')).default : null;
-const JSZip = isNode ? (await import('jszip')).default : (await import('https://cdn.skypack.dev/jszip')).default;
+const JSZip = isNode ? (await import('jszip')).default : (await import('https://cdn.skypack.dev/jszip@3')).default;
 
 export class ZipWriter { // Zip64 Writer
     /**

@@ -40,18 +40,18 @@ if (isNode) {
     else { console.error('web crypto api not found'); }
 
     try {
-        const webSha3 = (await import('https://esm.sh/js-sha3')).default;
+        const webSha3 = (await import('https://esm.sh/js-sha3@0.15')).default;
         deps.sha3256 = webSha3.sha3_256;
         deps.sha3512 = webSha3.sha3_512;
     } catch (e) { console.error('sha3 module not installed'); }
 
     try {
-        const webArgon2 = (await import('https://cdn.jsdelivr.net/npm/argon2-browser/dist/argon2-bundled.min.js/+esm')).default;
+        const webArgon2 = (await import('https://cdn.jsdelivr.net/npm/argon2-browser@1/dist/argon2-bundled.min.js/+esm')).default;
         deps.argon2 = webArgon2;
     } catch (e) { console.error('argon2 module not installed'); }
 
     try {
-        const webNoble = await import('https://esm.sh/@noble/curves/ed448.js');
+        const webNoble = await import('https://esm.sh/@noble/curves@2/ed448.js');
         deps.noble = {
             x448: webNoble.x448,
             ed448: webNoble.ed448
@@ -59,8 +59,8 @@ if (isNode) {
     } catch (e) { console.error('@noble/curves module not installed'); }
 
     try {
-        const { ml_kem1024 } = await import('https://esm.sh/@noble/post-quantum/ml-kem.js');
-        const { ml_dsa87 } = await import('https://esm.sh/@noble/post-quantum/ml-dsa.js');
+        const { ml_kem1024 } = await import('https://esm.sh/@noble/post-quantum@0.7/ml-kem.js');
+        const { ml_dsa87 } = await import('https://esm.sh/@noble/post-quantum@0.7/ml-dsa.js');
         deps.ml_kem1024 = ml_kem1024;
         deps.ml_dsa87 = ml_dsa87;
     } catch (e) { console.error('@noble/post-quantum module not installed via CDN'); }
